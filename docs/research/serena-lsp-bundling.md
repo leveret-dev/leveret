@@ -26,9 +26,10 @@ different groups:
 Redistribution policy is not a runtime prohibition. An operator may own a license,
 toolchain, private package source, or right to download a server that Leveret cannot
 publish. Leveret must support both packaged/offline operation and explicit
-operator-controlled Serena downloads into a persistent, host-owned `SERENA_HOME`.
-Neither mode may expose GitHub/model credentials or write package state into the
-reviewed checkout.
+operator-controlled Serena downloads into a persistent, host-owned
+`LEVERET_SERENA_BUNDLE`. Each review receives a fresh temporary `SERENA_HOME` built
+from that bundle. Neither mode may expose GitHub/model credentials or write package
+state into the reviewed checkout.
 
 The pull-request checkout is input data only. It is never an authority for Leveret
 or Serena configuration, executable discovery, plugins, extensions, hooks,
@@ -229,8 +230,8 @@ appropriate for the first bundle merely because Serena can fetch them.
 7. Make runtime network behavior explicit operator policy. Recommended/default
    packaged mode is offline: missing layers degrade visibly. An operator may enable
    Serena package/download access through trusted YAML, environment, or CLI; those
-   downloads persist under host-owned `SERENA_HOME`, never the checkout. Host policy
-   can force offline, and neither mode exposes GitHub/model credentials.
+   downloads persist under host-owned `LEVERET_SERENA_BUNDLE`, never the checkout.
+   Host policy can force offline, and neither mode exposes GitHub/model credentials.
 
 ## Primary Serena references
 

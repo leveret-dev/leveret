@@ -44,13 +44,12 @@ Optionally stage the curated Serena LSP bundle during installation. This command
 performs downloads now; reviews refuse runtime LSP downloads:
 
 ```sh
-SERENA_HOME=/opt/leveret/serena-home \
-node dist/runner/prefetch-serena.js --home /opt/leveret/serena-home
+node dist/runner/prefetch-serena.js --bundle /opt/leveret/serena-bundle
 ```
 
 The initial self-contained bundle covers TypeScript/JavaScript, PHP (including
 project-scoped `.inc`), Bash, YAML, and JSON. The manifest pins each absolute
-server executable under `SERENA_HOME`; prefetch fails instead of advertising a
+server executable under `LEVERET_SERENA_BUNDLE`; prefetch fails instead of advertising a
 language backed only by a host toolchain or uvx cache. Python, C/C++, Go, Rust, and
 Java remain explicitly unavailable until their executables/runtimes are packaged.
 
@@ -79,7 +78,7 @@ cloudflared tunnel --url http://127.0.0.1:8090
 ```sh
 LEVERET_PUBLIC_URL=https://YOUR-PUBLIC-URL \
 LEVERET_RUNNER="node $PWD/dist/runner/pi.js" \
-SERENA_HOME=/opt/leveret/serena-home \
+LEVERET_SERENA_BUNDLE=/opt/leveret/serena-bundle \
 node dist/app/server.js
 ```
 
@@ -198,7 +197,7 @@ LEVERET_APP_ID=12345 \
 LEVERET_PRIVATE_KEY_PATH=/path/to/app.pem \
 LEVERET_WEBHOOK_SECRET=... \
 LEVERET_RUNNER="node $PWD/dist/runner/pi.js" \
-SERENA_HOME=/opt/leveret/serena-home \
+LEVERET_SERENA_BUNDLE=/opt/leveret/serena-bundle \
 node dist/app/server.js
 ```
 
@@ -232,10 +231,11 @@ verdicts are retained in the run artifact, while versioned repo memory and human
 replies through the learn feed remain the durable write paths. A reviewed checkout
 therefore cannot teach future reviews through prompt injection.
 
-Serena starts only when `SERENA_HOME` contains `leveret-lsp-manifest.json`, created
-by the prefetch command. Its dashboard, HTTP stats endpoint, GUI, tray process, and
-anonymous usage reporting are disabled. Metrics are captured durably by the Pi
-adapter.
+Serena starts only when `LEVERET_SERENA_BUNDLE` contains
+`leveret-lsp-manifest.json`, created by the prefetch command. Leveret creates and
+sets a fresh `SERENA_HOME` inside the per-review temporary runtime directory. Its
+dashboard, HTTP stats endpoint, GUI, tray process, and anonymous usage reporting
+are disabled. Metrics are captured durably by the Pi adapter.
 
 Without any runner configured, reviews are deterministic-only: engine findings
 post directly and the walkthrough says the agent lenses did not run.

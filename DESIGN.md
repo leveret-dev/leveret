@@ -270,8 +270,9 @@ suppress its own findings.
 Leveret registers its scan/context/AST/memory functions directly, invokes CodeGraph
 through fixed adapters, and proxies a small read-only Serena toolset. Serena reads a
 disposable shadow tree of file symlinks and writes configuration/cache only outside
-the checkout. It starts only from a pre-staged `SERENA_HOME` manifest; runtime LSP
-downloads are refused.
+the checkout. It starts only from a pre-staged `LEVERET_SERENA_BUNDLE` manifest;
+Leveret creates a fresh `SERENA_HOME` inside each review's temporary runtime
+directory, and runtime LSP downloads are refused.
 Its dashboard HTTP server, GUI, tray manager and anonymous usage report are disabled.
 The Pi adapter records durable tool metrics because Serena's dashboard-free counters
 otherwise remain process-local.

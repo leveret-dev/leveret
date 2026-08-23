@@ -296,29 +296,28 @@ describe("Serena headless and offline staging", () => {
       "--open-web-dashboard",
       "false",
     ]);
-    const env = safeToolEnvironment({
+    const env = safeToolEnvironment("/tmp/leveret-review/serena-home", {
       PATH: "/usr/bin",
       HOME: "/home/test",
       OPENAI_API_KEY: "secret",
       GITHUB_TOKEN: "secret",
-      SERENA_HOME: "/opt/serena",
     });
     expect(env).toMatchObject({
       PATH: "/usr/bin",
       HOME: "/home/test",
-      SERENA_HOME: "/opt/serena",
+      SERENA_HOME: "/tmp/leveret-review/serena-home",
       SERENA_USAGE_REPORTING: "false",
     });
     expect(env.OPENAI_API_KEY).toBeUndefined();
     expect(env.GITHUB_TOKEN).toBeUndefined();
     expect(env.UV_OFFLINE).toBe("1");
 
-    const prefetch = prefetchEnvironment({
+    const prefetch = prefetchEnvironment("/opt/leveret/serena-bundle", {
       PATH: "/usr/bin",
-      SERENA_HOME: "/opt/serena",
       HTTPS_PROXY: "http://proxy.test",
       OPENAI_API_KEY: "secret",
     });
+    expect(prefetch.SERENA_HOME).toBe("/opt/leveret/serena-bundle");
     expect(prefetch.HTTPS_PROXY).toBe("http://proxy.test");
     expect(prefetch.UV_OFFLINE).toBeUndefined();
     expect(prefetch.npm_config_offline).toBeUndefined();
@@ -340,9 +339,9 @@ describe("Serena headless and offline staging", () => {
   });
 
   it("refuses dynamic downloads without treating checkout .serena as runtime configuration", async () => {
-    expect(serenaBundleProblem({})).toMatch(/SERENA_HOME/);
-    expect(serenaBundleProblem({ SERENA_HOME: "/missing" })).toMatch(/manifest/);
-    expect(serenaBundleProblem({ LEVERET_ALLOW_UNPACKAGED_SERENA: "1" })).toBeNull();
+    expect(serenaBundleProblem({})).toMatch(/LEVERET_SERENA_BUNDLE/);
+    expect(serenaBundleProblem({ SERENA_HOME: "/ignored" })).toMatch(/LEVERET_SERENA_BUNDLE/);
+    expect(serenaBundleProblem({ LEVERET_SERENA_BUNDLE: "/missing" })).toMatch(/manifest/);
 
     const { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
@@ -356,21 +355,6 @@ describe("Serena headless and offline staging", () => {
     } finally {
       rmSync(repo, { recursive: true, force: true });
       rmSync(shadow, { recursive: true, force: true });
-    }
-  });
-
-  it("refuses a Serena home inside the reviewed checkout", async () => {
-    const { mkdtempSync, mkdirSync, rmSync, writeFileSync } = await import("node:fs");
-    const { tmpdir } = await import("node:os");
-    const { join } = await import("node:path");
-    const repo = mkdtempSync(join(tmpdir(), "leveret-serena-home-"));
-    const home = join(repo, "serena-home");
-    mkdirSync(join(home, "language_servers", "static"), { recursive: true });
-    writeFileSync(join(home, "leveret-lsp-manifest.json"), "{}\n");
-    try {
-      expect(serenaBundleProblem({ SERENA_HOME: home }, repo)).toMatch(/reviewed checkout/);
-    } finally {
-      rmSync(repo, { recursive: true, force: true });
     }
   });
 
@@ -407,21 +391,21 @@ describe("Serena headless and offline staging", () => {
     }
   });
 
-  it("stages fixtures into a fixed Serena home without retaining project registrations", async () => {
+  it("stages fixtures into a fixed Serena bundle without retaining project registrations", async () => {
     const { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
     const root = mkdtempSync(join(tmpdir(), "leveret-prefetch-test-"));
-    const home = join(root, "serena-home");
+    const bundle = join(root, "serena-bundle");
     const fake = join(root, "serena-fake");
     writeFileSync(fake, '#!/bin/sh\nmkdir -p "$SERENA_HOME/language_servers/static/TypeScriptLanguageServer/ts-lsp/node_modules/.bin"\n: > "$SERENA_HOME/language_servers/static/TypeScriptLanguageServer/ts-lsp/node_modules/.bin/typescript-language-server"\n');
     chmodSync(fake, 0o755);
     try {
-      await prefetchSerena({ home, languages: ["typescript"], serenaBin: fake });
-      const manifest = JSON.parse(readFileSync(join(home, "leveret-lsp-manifest.json"), "utf8"));
+      await prefetchSerena({ bundle, languages: ["typescript"], serenaBin: fake });
+      const manifest = JSON.parse(readFileSync(join(bundle, "leveret-lsp-manifest.json"), "utf8"));
       expect(manifest.languages).toEqual(["typescript"]);
       expect(manifest.ls_paths.typescript).toContain("TypeScriptLanguageServer");
-      const config = readFileSync(join(home, "serena_config.yml"), "utf8");
+      const config = readFileSync(join(bundle, "serena_config.yml"), "utf8");
       expect(config).toContain("web_dashboard: false");
       expect(config).toMatch(/projects:\s*\[\]/);
     } finally {
@@ -433,19 +417,23 @@ describe("Serena headless and offline staging", () => {
     const { lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
-    const staged = mkdtempSync(join(tmpdir(), "leveret-serena-stage-"));
-    mkdirSync(join(staged, "language_servers"));
-    writeFileSync(join(staged, "serena_config.yml"), "projects:\n  - /stale/project\nls_specific_settings:\n  php:\n    ls_path: /opt/php-lsp\n");
-    const runtime = await createSerenaRuntimeHome(staged);
+    const root = mkdtempSync(join(tmpdir(), "leveret-serena-review-"));
+    const bundle = join(root, "bundle");
+    const reviewRuntime = join(root, "runtime");
+    mkdirSync(join(bundle, "language_servers"), { recursive: true });
+    mkdirSync(reviewRuntime);
+    writeFileSync(join(bundle, "serena_config.yml"), "projects:\n  - /stale/project\nls_specific_settings:\n  php:\n    ls_path: /opt/php-lsp\n");
+    const runtime = await createSerenaRuntimeHome(bundle, reviewRuntime);
     try {
+      expect(runtime).toBe(join(reviewRuntime, "serena-home"));
       expect(lstatSync(join(runtime, "language_servers")).isSymbolicLink()).toBe(true);
       const config = readFileSync(join(runtime, "serena_config.yml"), "utf8");
       expect(config).toMatch(/projects:\s*\[\]/);
       expect(config).toContain("ls_path: /opt/php-lsp");
-      expect(readFileSync(join(staged, "serena_config.yml"), "utf8")).toContain("/stale/project");
+      expect(readFileSync(join(bundle, "serena_config.yml"), "utf8")).toContain("/stale/project");
+      expect(safeToolEnvironment(runtime, { SERENA_HOME: "/ignored" }).SERENA_HOME).toBe(runtime);
     } finally {
-      rmSync(runtime, { recursive: true, force: true });
-      rmSync(staged, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

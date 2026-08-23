@@ -2,10 +2,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { TSchema } from "typebox";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, extname, isAbsolute, join, relative, sep } from "node:path";
+import { basename, extname, join } from "node:path";
 import { parse, stringify } from "yaml";
 import { safeChildEnvironment } from "../exec.js";
 
@@ -71,10 +71,10 @@ export function buildSerenaArgs(repo: string): string[] {
   ];
 }
 
-export function safeToolEnvironment(source: NodeJS.ProcessEnv = process.env): Record<string, string> {
+export function safeToolEnvironment(runtimeHome: string, source: NodeJS.ProcessEnv = process.env): Record<string, string> {
   return Object.fromEntries(Object.entries({
     ...safeChildEnvironment(source),
-    ...(source.SERENA_HOME ? { SERENA_HOME: source.SERENA_HOME } : {}),
+    SERENA_HOME: runtimeHome,
     SERENA_USAGE_REPORTING: "false",
     UV_OFFLINE: "1",
     PIP_NO_INDEX: "1",
@@ -86,11 +86,11 @@ export function safeToolEnvironment(source: NodeJS.ProcessEnv = process.env): Re
   }).filter((entry): entry is [string, string] => entry[1] !== undefined));
 }
 
-export function prefetchEnvironment(source: NodeJS.ProcessEnv = process.env): Record<string, string> {
+export function prefetchEnvironment(bundle: string, source: NodeJS.ProcessEnv = process.env): Record<string, string> {
   const env: Record<string, string> = Object.fromEntries(
     Object.entries({
       ...safeChildEnvironment(source),
-      ...(source.SERENA_HOME ? { SERENA_HOME: source.SERENA_HOME } : {}),
+      SERENA_HOME: bundle,
       SERENA_USAGE_REPORTING: "false",
     }).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
@@ -100,26 +100,14 @@ export function prefetchEnvironment(source: NodeJS.ProcessEnv = process.env): Re
   return env;
 }
 
-function serenaHomeProblem(repo: string | undefined, home: string | undefined): string | null {
-  if (repo && home && existsSync(home)) {
-    const rel = relative(realpathSync(repo), realpathSync(home));
-    if (rel === "" || (!rel.startsWith(`..${sep}`) && rel !== ".." && !isAbsolute(rel))) {
-      return "SERENA_HOME resolves inside the reviewed checkout";
-    }
+export function serenaBundleProblem(env: NodeJS.ProcessEnv = process.env): string | null {
+  const bundle = env.LEVERET_SERENA_BUNDLE;
+  if (!bundle) return "LEVERET_SERENA_BUNDLE is unset; no packaged LSP bundle is available";
+  if (!existsSync(join(bundle, "leveret-lsp-manifest.json"))) {
+    return `no staged Leveret LSP manifest in ${bundle}`;
   }
-  return null;
-}
-
-export function serenaBundleProblem(env: NodeJS.ProcessEnv = process.env, repo?: string): string | null {
-  const homeProblem = serenaHomeProblem(repo, env.SERENA_HOME);
-  if (homeProblem) return homeProblem;
-  if (env.LEVERET_ALLOW_UNPACKAGED_SERENA === "1") return null;
-  if (!env.SERENA_HOME) return "SERENA_HOME is unset; no packaged LSP bundle is available";
-  if (!existsSync(join(env.SERENA_HOME, "leveret-lsp-manifest.json"))) {
-    return `no staged Leveret LSP manifest in ${env.SERENA_HOME}`;
-  }
-  if (!existsSync(join(env.SERENA_HOME, "language_servers", "static"))) {
-    return `no staged Serena language_servers/static directory in ${env.SERENA_HOME}`;
+  if (!existsSync(join(bundle, "language_servers", "static"))) {
+    return `no staged Serena language_servers/static directory in ${bundle}`;
   }
   return null;
 }
@@ -230,13 +218,14 @@ export async function prepareSerenaProject(repo: string, projectRoot: string, ho
   return languages;
 }
 
-export async function createSerenaRuntimeHome(stagedHome: string): Promise<string> {
-  const runtimeHome = await mkdtemp(join(tmpdir(), "leveret-serena-runtime-"));
-  const stagedConfigPath = join(stagedHome, "serena_config.yml");
+export async function createSerenaRuntimeHome(bundle: string, runtimeRoot: string): Promise<string> {
+  const runtimeHome = join(runtimeRoot, "serena-home");
+  await mkdir(runtimeHome);
+  const stagedConfigPath = join(bundle, "serena_config.yml");
   const stagedConfig = existsSync(stagedConfigPath)
     ? (parse(await readFile(stagedConfigPath, "utf8")) as Record<string, unknown>)
     : {};
-  await symlink(join(stagedHome, "language_servers"), join(runtimeHome, "language_servers"), "dir");
+  await symlink(join(bundle, "language_servers"), join(runtimeHome, "language_servers"), "dir");
   await writeFile(
     join(runtimeHome, "serena_config.yml"),
     stringify({
@@ -280,17 +269,16 @@ export interface SerenaBridge {
   pid?: number;
 }
 
-export async function connectSerena(repo: string, command = "serena", timeoutMs = 120_000): Promise<SerenaBridge> {
-  const stagedHome = process.env.SERENA_HOME;
-  if (!stagedHome) throw new Error("SERENA_HOME is required for packaged Serena");
-  const homeProblem = serenaHomeProblem(repo, stagedHome);
-  if (homeProblem) throw new Error(homeProblem);
+export async function connectSerena(repo: string, runtimeRoot: string, command = "serena", timeoutMs = 120_000): Promise<SerenaBridge> {
+  const bundleProblem = serenaBundleProblem();
+  if (bundleProblem) throw new Error(bundleProblem);
+  const bundle = process.env.LEVERET_SERENA_BUNDLE!;
   const shadow = await createSerenaShadowProject(repo);
   let runtimeHome: string | undefined;
   let transport: StdioClientTransport | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const languages = await prepareSerenaProject(repo, shadow, stagedHome);
+    const languages = await prepareSerenaProject(repo, shadow, bundle);
     if (languages.length === 0) {
       return {
         tools: [],
@@ -299,12 +287,12 @@ export async function connectSerena(repo: string, command = "serena", timeoutMs 
         },
       };
     }
-    runtimeHome = await createSerenaRuntimeHome(stagedHome);
+    runtimeHome = await createSerenaRuntimeHome(bundle, runtimeRoot);
     transport = new StdioClientTransport({
       command,
       args: buildSerenaArgs(shadow),
       cwd: shadow,
-      env: safeToolEnvironment({ ...process.env, SERENA_HOME: runtimeHome }),
+      env: safeToolEnvironment(runtimeHome),
       stderr: "pipe",
       maxBufferSize: 16 * 1024 * 1024,
     });
