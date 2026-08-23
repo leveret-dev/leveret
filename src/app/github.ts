@@ -20,14 +20,13 @@ export interface GitHubAccess {
 }
 
 export function appAccess(app: App, installationId: number): GitHubAccess {
-  let token: Promise<string> | undefined;
   return {
     octokit: () => app.getInstallationOctokit(installationId),
     botLogin: async () => {
       const { data } = await app.octokit.request("GET /app");
       return `${(data as { slug: string }).slug}[bot]`;
     },
-    token: () => token ??= app.octokit.rest.apps.createInstallationAccessToken({ installation_id: installationId }).then((response) => response.data.token),
+    token: () => app.octokit.rest.apps.createInstallationAccessToken({ installation_id: installationId }).then((response) => response.data.token),
   };
 }
 
