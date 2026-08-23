@@ -12,7 +12,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadContract } from "../prompts.js";
 import { which } from "../exec.js";
@@ -149,10 +150,15 @@ export async function withDeadline<T>(promise: Promise<T>, deadlineMs: number, a
   }
 }
 
+export function createPiRuntimeDirectory(): Promise<string> {
+  return mkdtemp(join(tmpdir(), "leveret-pi-"));
+}
+
 async function runPhase(options: {
   phase: "review" | "verify";
   prompt: string;
   repo: string;
+  runtimeDir: string;
   runtime: PiRuntimeConfig;
   modelRuntime: ModelRuntime;
   model: NonNullable<ReturnType<ModelRuntime["getModel"]>>;
@@ -174,7 +180,7 @@ async function runPhase(options: {
     const resourceLoader = buildPiResourceLoader(options.systemPrompt);
     const toolNames = options.tools.map((tool) => tool.name);
     const { session } = await createAgentSession({
-      cwd: options.repo,
+      cwd: options.runtimeDir,
       agentDir: process.env.LEVERET_PI_AGENT_DIR ?? getAgentDir(),
       modelRuntime: options.modelRuntime,
       model: options.model,
@@ -182,7 +188,7 @@ async function runPhase(options: {
       tools: toolNames,
       customTools: options.tools,
       resourceLoader,
-      sessionManager: SessionManager.inMemory(options.repo),
+      sessionManager: SessionManager.inMemory(options.runtimeDir),
       settingsManager,
     });
     let assistantText = "";
@@ -264,7 +270,7 @@ function cliParams(argv: string[]): PiRunnerParams {
   return params;
 }
 
-export async function main(): Promise<void> {
+async function runMain(runtimeDir: string): Promise<void> {
   const repo = process.env.LEVERET_REPO;
   const base = process.env.LEVERET_BASE;
   if (!repo || !base) throw new Error("LEVERET_REPO and LEVERET_BASE are required");
@@ -292,7 +298,7 @@ export async function main(): Promise<void> {
   let lspError: string | undefined;
   const serenaCommand = process.env.LEVERET_SERENA_BIN ?? "serena";
   const serenaExists = serenaCommand.includes("/") ? existsSync(serenaCommand) : await which(serenaCommand);
-  const bundleProblem = serenaBundleProblem();
+  const bundleProblem = serenaBundleProblem(process.env, repo);
   if (bundleProblem) {
     lspError = bundleProblem;
   } else if (serenaExists) {
@@ -333,6 +339,7 @@ export async function main(): Promise<void> {
       phase: "review",
       prompt: reviewPrompt,
       repo,
+      runtimeDir,
       runtime,
       modelRuntime,
       model: resolved.model,
@@ -355,6 +362,7 @@ export async function main(): Promise<void> {
       phase: "verify",
       prompt: verifyPrompt,
       repo,
+      runtimeDir,
       runtime,
       modelRuntime,
       model: resolved.model,
@@ -368,6 +376,7 @@ export async function main(): Promise<void> {
         phase: "verify",
         prompt: `${verifyPrompt}\n\n## Schema correction\nYour previous answer was missing or empty: ${gaps.join(", ")}. Re-emit the full object required by the contract.`,
         repo,
+        runtimeDir,
         runtime,
         modelRuntime,
         model: resolved.model,
@@ -397,6 +406,18 @@ export async function main(): Promise<void> {
     if (bundle) await bundle.close();
     else await serena?.close();
     await trusted.close();
+  }
+}
+
+export async function main(): Promise<void> {
+  const previousCwd = process.cwd();
+  const runtimeDir = await createPiRuntimeDirectory();
+  process.chdir(runtimeDir);
+  try {
+    await runMain(runtimeDir);
+  } finally {
+    process.chdir(previousCwd);
+    await rm(runtimeDir, { recursive: true, force: true });
   }
 }
 

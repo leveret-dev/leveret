@@ -255,9 +255,11 @@ reviewer**. The standardized client is `leveret-runner-pi`, built on upstream Pi
 OAuth, model calls and the agent loop. Leveret owns the system prompt, tools,
 deadlines, metrics and output contract.
 
-The client uses in-memory settings and sessions plus a resource loader that returns
-no project settings, prompts, context files, extensions, skills or themes. The
-reviewed checkout cannot extend the toolset or replace the system prompt. Built-in
+The client runs from a host-owned temporary directory and uses in-memory settings
+and sessions plus a resource loader that returns no project settings, prompts,
+context files, extensions, skills or themes. The reviewed checkout is named only as
+the evaluation target in the phase contract and tools; it cannot extend the toolset
+or replace the system prompt. Built-in
 filesystem, mutation, and shell tools are absent. Leveret supplies canonical-path,
 symlink-safe read/search/list tools that cannot leave the checkout. A bounded probe
 tool is exposed only when the host explicitly declares an isolated review sandbox.

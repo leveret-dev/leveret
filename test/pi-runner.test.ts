@@ -5,6 +5,7 @@ import { prefetchSerena } from "../src/runner/prefetch-serena.js";
 import { buildPiSystemPrompt } from "../src/runner/pi-system.js";
 import {
   buildPiResourceLoader,
+  createPiRuntimeDirectory,
   parseAssistantJson,
   parseDuration,
   piRuntimeConfig,
@@ -21,7 +22,6 @@ import {
   safeToolEnvironment,
   serenaBundleProblem,
   serenaPrefetchFixtures,
-  serenaProjectConfigProblem,
 } from "../src/runner/serena.js";
 import { buildPiTools } from "../src/runner/pi-tools.js";
 
@@ -166,6 +166,7 @@ describe("Pi runtime isolation", () => {
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
     const repo = mkdtempSync(join(tmpdir(), "leveret-hostile-pi-"));
+    const runtimeDir = await createPiRuntimeDirectory();
     mkdirSync(join(repo, ".pi", "extensions"), { recursive: true });
     mkdirSync(join(repo, "node_modules", ".bin"), { recursive: true });
     writeFileSync(join(repo, ".pi", "SYSTEM.md"), "HOSTILE_SYSTEM_PROMPT\n");
@@ -179,23 +180,24 @@ describe("Pi runtime isolation", () => {
     const model = runtime.getModel("openai", "gpt-5.6-sol")!;
     const prompt = buildPiSystemPrompt(bundle.tools.map((tool) => tool.name));
     const session = await createAgentSession({
-      cwd: repo,
+      cwd: runtimeDir,
       modelRuntime: runtime,
       model,
       customTools: bundle.tools,
       tools: bundle.tools.map((tool) => tool.name),
       resourceLoader: buildPiResourceLoader(prompt),
-      sessionManager: SessionManager.inMemory(repo),
+      sessionManager: SessionManager.inMemory(runtimeDir),
       settingsManager: SettingsManager.inMemory({ defaultProjectTrust: "never" }, { projectTrusted: false }),
     });
     try {
-      expect(session.session.systemPrompt).toBe(`${prompt}\nCurrent working directory: ${repo}\n`);
+      expect(session.session.systemPrompt).toBe(`${prompt}\nCurrent working directory: ${runtimeDir}\n`);
       expect(session.session.systemPrompt).not.toMatch(/HOSTILE_/);
       expect(session.session.getActiveToolNames().sort()).toEqual(bundle.tools.map((tool) => tool.name).sort());
     } finally {
       session.session.dispose();
       await bundle.close();
       rmSync(repo, { recursive: true, force: true });
+      rmSync(runtimeDir, { recursive: true, force: true });
     }
   });
 
@@ -337,19 +339,39 @@ describe("Serena headless and offline staging", () => {
     }
   });
 
-  it("refuses dynamic downloads and project-controlled Serena settings", async () => {
+  it("refuses dynamic downloads without treating checkout .serena as runtime configuration", async () => {
     expect(serenaBundleProblem({})).toMatch(/SERENA_HOME/);
     expect(serenaBundleProblem({ SERENA_HOME: "/missing" })).toMatch(/manifest/);
     expect(serenaBundleProblem({ LEVERET_ALLOW_UNPACKAGED_SERENA: "1" })).toBeNull();
 
-    const { mkdtempSync, mkdirSync, rmSync } = await import("node:fs");
+    const { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
     const repo = mkdtempSync(join(tmpdir(), "leveret-hostile-serena-"));
-    expect(serenaProjectConfigProblem(repo)).toBeNull();
     mkdirSync(join(repo, ".serena"));
-    expect(serenaProjectConfigProblem(repo)).toMatch(/project-controlled/);
-    rmSync(repo, { recursive: true, force: true });
+    writeFileSync(join(repo, ".serena", "project.yml"), "activation_command: hostile\n");
+    const shadow = await createSerenaShadowProject(repo);
+    try {
+      expect(existsSync(join(shadow, ".serena"))).toBe(false);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(shadow, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a Serena home inside the reviewed checkout", async () => {
+    const { mkdtempSync, mkdirSync, rmSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const repo = mkdtempSync(join(tmpdir(), "leveret-serena-home-"));
+    const home = join(repo, "serena-home");
+    mkdirSync(join(home, "language_servers", "static"), { recursive: true });
+    writeFileSync(join(home, "leveret-lsp-manifest.json"), "{}\n");
+    try {
+      expect(serenaBundleProblem({ SERENA_HOME: home }, repo)).toMatch(/reviewed checkout/);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 
   it("generates read-only Serena config only for staged languages present in the checkout", async () => {

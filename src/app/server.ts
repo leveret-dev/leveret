@@ -77,6 +77,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
   const app = job.installationId ? makeApp({ appId: creds.appId, privateKey: creds.privateKey }) : null;
   let ackId: number | undefined;
   const work = await mkdtemp(join(tmpdir(), "leveret-app-"));
+  const runnerWork = await mkdtemp(join(tmpdir(), "leveret-runner-"));
   let trusted: TrustedReviewState | undefined;
   try {
     await exec("git", ["clone", "--quiet", job.cloneUrl, work], { timeout: APP_CHILD_TIMEOUT_MS });
@@ -127,7 +128,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
         const threads = await fetchReviewThreads(app, job.installationId, job.repo, job.pr);
         prior = parsePriorThreads(threads as Parameters<typeof parsePriorThreads>[0], await botLogin(app));
         if (prior.length > 0) {
-          await writeFile(join(work, ".leveret-prior.json"), JSON.stringify(prior, null, 1));
+          await writeFile(join(runnerWork, "prior.json"), JSON.stringify(prior, null, 1));
         }
       } catch (err) {
         log.warn("prior-thread fetch failed; reviewing without incremental context", { err });
@@ -136,7 +137,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
 
     let verify: VerifyOutput;
     if (process.env.LEVERET_RUNNER) {
-      const leadsPath = join(work, ".leveret-leads.json");
+      const leadsPath = join(runnerWork, "leads.json");
       await writeFile(leadsPath, JSON.stringify(result, null, 1));
       const [cmd, ...args] = process.env.LEVERET_RUNNER.split(" ") as [string, ...string[]];
       // Default Pi budget: review + verify + one schema-correction phase, each 30m,
@@ -146,7 +147,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
         throw new Error("LEVERET_RUNNER_TIMEOUT_MS must be a positive number");
       }
       const r = await exec(cmd, args, {
-        cwd: work,
+        cwd: runnerWork,
         maxBuffer: 64 * 1024 * 1024,
         timeout: runnerTimeout,
         env: {
@@ -155,7 +156,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
           LEVERET_BASE: base,
           LEVERET_LEADS: leadsPath,
           LEVERET_GRAPH: graph.ok ? "1" : "0",
-          ...(prior.length > 0 ? { LEVERET_PRIOR: join(work, ".leveret-prior.json") } : {}),
+          ...(prior.length > 0 ? { LEVERET_PRIOR: join(runnerWork, "prior.json") } : {}),
         },
       });
       verify = JSON.parse(r.stdout) as VerifyOutput;
@@ -211,6 +212,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
   } finally {
     await trusted?.close().catch(() => {});
     await rm(work, { recursive: true, force: true }).catch(() => {});
+    await rm(runnerWork, { recursive: true, force: true }).catch(() => {});
   }
 }
 
