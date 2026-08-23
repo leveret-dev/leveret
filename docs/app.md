@@ -103,6 +103,41 @@ App on your repositories.
 **5. Open a pull request.** Done — the review arrives as inline comments plus a
 walkthrough summary.
 
+### Shared Leveret App relay
+
+The shared App sends GitHub webhooks to `https://proxy.leveret-dev.io/hook`; the
+proxy forwards a signed delivery and a repository-scoped installation token to
+your box. Your endpoint remains encrypted in the repository.
+
+Generate the repository configuration at `https://proxy.leveret-dev.io/setup` and
+commit the downloaded `.leveret.yml` to the default branch:
+
+```yaml
+relay:
+  endpoint_jwe: "eyJ...compact-jwe"
+```
+
+Start the box without local GitHub App credentials. `LEVERET_SERVES` is the final
+destination-side authority and accepts comma-separated repository globs:
+
+```sh
+LEVERET_SERVES='your-owner/*' \
+LEVERET_RELAY_SIGNING_KEYS='{"sig-2026-08-23":{"crv":"Ed25519","x":"ZLaaVKTCLVOUvxt5fmqshnMdkbo_l3m7RsGS181_L0A","kty":"OKP"}}' \
+LEVERET_RELAY_BOT_LOGIN='leveret[bot]' \
+LEVERET_RUNNER="node $PWD/dist/runner/pi.js" \
+LEVERET_SERENA_BUNDLE=/opt/leveret/serena-bundle \
+node dist/app/server.js
+```
+
+The box answers `/.well-known/leveret?repo=…&iid=…` only for served repositories.
+For deliveries it verifies the proxy key, five-minute timestamp window, raw body,
+repository, installation, event, GitHub delivery ID, and sealed-configuration hash
+before using the bearer token. Tokens and webhook bodies are never persisted.
+
+Keep the signing-key JSON host-owned. When the proxy announces a rotating key,
+install the new public key before its `kid` becomes current; retain old keys only
+for the published overlap window.
+
 Optional runner tuning (details in [How it works](#how-it-works)):
 
 ```sh

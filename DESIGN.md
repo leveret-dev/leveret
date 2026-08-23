@@ -214,10 +214,12 @@ Deployment modes, same code:
 1. **Fully self-hosted** (default, the privacy pitch): the user deploys both halves
    from this repo — App via GitHub's app-manifest one-click flow, runner wherever
    they like. Nothing leaves their perimeter.
-2. **Hosted App, customer runner** (optional later): a shared hosted App handles
-   webhooks and comment posting, but dispatches review jobs to the customer's
-   registered runner. The hosted half sees PR metadata, never model keys; review
-   content is produced and signed on the customer side.
+2. **Hosted App, customer runner**: the shared App proxy verifies GitHub, reads a
+   client-encrypted endpoint from trusted default-branch configuration, mints a
+   repository-scoped installation token, and signs the raw delivery to the user's
+   box. The box verifies the proxy key and its own `serves:` allowlist before it
+   reviews or posts directly with that token. The hosted half sees webhook metadata
+   and the transient destination, never source checkouts or model credentials.
 
 Either way the MCP surface stays the local/interactive interface; the App is a
 second consumer of the same engine + agent-contract code, not a fork of it.

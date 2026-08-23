@@ -1,4 +1,4 @@
-import { App } from "octokit";
+import { App, Octokit } from "octokit";
 import type { InlineComment } from "./render.js";
 
 // Thin GitHub App client: everything interesting happens in render/webhook/runner;
@@ -13,20 +13,42 @@ export function makeApp(auth: AppAuth): App {
   return new App({ appId: auth.appId, privateKey: auth.privateKey });
 }
 
+export interface GitHubAccess {
+  octokit(): Promise<Octokit>;
+  botLogin(): Promise<string>;
+  token(): Promise<string>;
+}
+
+export function appAccess(app: App, installationId: number): GitHubAccess {
+  let token: Promise<string> | undefined;
+  return {
+    octokit: () => app.getInstallationOctokit(installationId),
+    botLogin: async () => {
+      const { data } = await app.octokit.request("GET /app");
+      return `${(data as { slug: string }).slug}[bot]`;
+    },
+    token: () => token ??= app.octokit.rest.apps.createInstallationAccessToken({ installation_id: installationId }).then((response) => response.data.token),
+  };
+}
+
+export function tokenAccess(token: string, login = "leveret[bot]"): GitHubAccess {
+  const octokit = new Octokit({ auth: token });
+  return { octokit: async () => octokit, botLogin: async () => login, token: async () => token };
+}
+
 /** One review submission: walkthrough as the review body, findings as inline
  * comments. Inline anchors can fail (file renamed since head, line outside the
  * diff); GitHub rejects the whole review then, so retry once without inline
  * comments rather than losing the walkthrough. */
 export async function postReview(
-  app: App,
-  installationId: number,
+  access: GitHubAccess,
   repo: string,
   pr: number,
   headSha: string,
   walkthrough: string,
   inline: InlineComment[],
 ): Promise<void> {
-  const octokit = await app.getInstallationOctokit(installationId);
+  const octokit = await access.octokit();
   const [owner, name] = repo.split("/") as [string, string];
   const base = {
     owner,
@@ -47,38 +69,35 @@ export async function postReview(
 }
 
 export async function postComment(
-  app: App,
-  installationId: number,
+  access: GitHubAccess,
   repo: string,
   issue: number,
   body: string,
 ): Promise<number> {
-  const octokit = await app.getInstallationOctokit(installationId);
+  const octokit = await access.octokit();
   const [owner, name] = repo.split("/") as [string, string];
   const r = await octokit.rest.issues.createComment({ owner, repo: name, issue_number: issue, body });
   return r.data.id;
 }
 
 export async function updateComment(
-  app: App,
-  installationId: number,
+  access: GitHubAccess,
   repo: string,
   commentId: number,
   body: string,
 ): Promise<void> {
-  const octokit = await app.getInstallationOctokit(installationId);
+  const octokit = await access.octokit();
   const [owner, name] = repo.split("/") as [string, string];
   await octokit.rest.issues.updateComment({ owner, repo: name, comment_id: commentId, body });
 }
 
 /** The bot's review threads on a PR, for incremental re-review. */
 export async function fetchReviewThreads(
-  app: App,
-  installationId: number,
+  access: GitHubAccess,
   repo: string,
   pr: number,
 ): Promise<unknown> {
-  const octokit = await app.getInstallationOctokit(installationId);
+  const octokit = await access.octokit();
   const [owner, name] = repo.split("/") as [string, string];
   return octokit.graphql(
     `query($owner: String!, $name: String!, $pr: Int!) {
@@ -101,11 +120,10 @@ export async function fetchReviewThreads(
 }
 
 export async function resolveThread(
-  app: App,
-  installationId: number,
+  access: GitHubAccess,
   threadId: string,
 ): Promise<void> {
-  const octokit = await app.getInstallationOctokit(installationId);
+  const octokit = await access.octokit();
   await octokit.graphql(
     `mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { id } } }`,
     { id: threadId },
@@ -113,14 +131,13 @@ export async function resolveThread(
 }
 
 export async function replyInThread(
-  app: App,
-  installationId: number,
+  access: GitHubAccess,
   repo: string,
   pr: number,
   commentId: number,
   body: string,
 ): Promise<void> {
-  const octokit = await app.getInstallationOctokit(installationId);
+  const octokit = await access.octokit();
   const [owner, name] = repo.split("/") as [string, string];
   await octokit.rest.pulls.createReplyForReviewComment({
     owner,
@@ -129,10 +146,4 @@ export async function replyInThread(
     comment_id: commentId,
     body,
   });
-}
-
-/** the App's own bot login, e.g. "my-app[bot]" */
-export async function botLogin(app: App): Promise<string> {
-  const { data } = await app.octokit.request("GET /app");
-  return `${(data as { slug: string }).slug}[bot]`;
 }
