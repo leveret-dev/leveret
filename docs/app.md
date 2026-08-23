@@ -122,7 +122,7 @@ destination-side authority and accepts comma-separated repository globs:
 
 ```sh
 LEVERET_SERVES='your-owner/*' \
-LEVERET_RELAY_SIGNING_KEYS='{"sig-2026-08-23":{"crv":"Ed25519","x":"ZLaaVKTCLVOUvxt5fmqshnMdkbo_l3m7RsGS181_L0A","kty":"OKP"}}' \
+LEVERET_RELAY_SIGNING_KEYS='{"sig-2026-08-23":{"crv":"Ed25519","x":"0O-SD4D0p7MSoKL3njPV4rvkJXDM9DAKC7sKPXlwGnc","kty":"OKP"}}' \
 LEVERET_RELAY_BOT_LOGIN='leveret[bot]' \
 LEVERET_RUNNER="node $PWD/dist/runner/pi.js" \
 LEVERET_SERENA_BUNDLE=/opt/leveret/serena-bundle \
