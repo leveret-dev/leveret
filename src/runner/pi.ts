@@ -298,12 +298,12 @@ async function runMain(runtimeDir: string): Promise<void> {
   let lspError: string | undefined;
   const serenaCommand = process.env.LEVERET_SERENA_BIN ?? "serena";
   const serenaExists = serenaCommand.includes("/") ? existsSync(serenaCommand) : await which(serenaCommand);
-  const bundleProblem = serenaBundleProblem(process.env, repo);
+  const bundleProblem = serenaBundleProblem();
   if (bundleProblem) {
     lspError = bundleProblem;
   } else if (serenaExists) {
     try {
-      serena = await connectSerena(repo, serenaCommand);
+      serena = await connectSerena(repo, runtimeDir, serenaCommand);
     } catch (error) {
       lspError = String(error).slice(0, 500);
     }

@@ -105,8 +105,8 @@ repository: install them beside Leveret. Full belt: `codegraph`, `semgrep`,
 `gitleaks`, `shellcheck`, `ruff`, `actionlint`, `zizmor`, `osv-scanner`, `typos`,
 `jscpd`, `ast-grep`, `lizard`, and a pre-staged Serena LSP bundle for semantic
 navigation. From a clone, build one with
-`node dist/runner/prefetch-serena.js --home /opt/leveret/serena-home` and run with
-the same `SERENA_HOME` (the installed package also exposes
+`node dist/runner/prefetch-serena.js --bundle /opt/leveret/serena-bundle` and run
+with `LEVERET_SERENA_BUNDLE` set to that path (the installed package also exposes
 `leveret-prefetch-serena`). Runtime downloads are refused. A missing tool degrades
 loudly — the walkthrough reports which surfaces were live.
 

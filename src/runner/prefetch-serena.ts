@@ -7,7 +7,7 @@ import { run } from "../exec.js";
 import { packagedLanguageServer, prefetchEnvironment, serenaPrefetchFixtures } from "./serena.js";
 
 export interface PrefetchOptions {
-  home: string;
+  bundle: string;
   languages?: string[];
   serenaBin?: string;
 }
@@ -18,8 +18,8 @@ export async function prefetchSerena(options: PrefetchOptions): Promise<void> {
   const selected = fixtures.filter((fixture) => requested.has(fixture.language));
   const missing = [...requested].filter((language) => !fixtures.some((fixture) => fixture.language === language));
   if (missing.length) throw new Error(`unsupported prefetch fixtures: ${missing.join(", ")}`);
-  await mkdir(options.home, { recursive: true });
-  const configPath = join(options.home, "serena_config.yml");
+  await mkdir(options.bundle, { recursive: true });
+  const configPath = join(options.bundle, "serena_config.yml");
   const config = {
     language_backend: "LSP",
     web_dashboard: false,
@@ -33,7 +33,7 @@ export async function prefetchSerena(options: PrefetchOptions): Promise<void> {
   };
   await writeFile(configPath, stringify(config));
   const root = await mkdtemp(join(tmpdir(), "leveret-serena-prefetch-"));
-  const env = prefetchEnvironment({ ...process.env, SERENA_HOME: options.home });
+  const env = prefetchEnvironment(options.bundle);
   const lsPaths: Record<string, string> = {};
   try {
     for (const fixture of selected) {
@@ -65,14 +65,14 @@ export async function prefetchSerena(options: PrefetchOptions): Promise<void> {
       if (result.code !== 0) {
         throw new Error(`Serena ${fixture.language} prefetch rc=${result.code}: ${result.stderr.slice(0, 1000)}`);
       }
-      const packaged = await packagedLanguageServer(options.home, fixture.language);
+      const packaged = await packagedLanguageServer(options.bundle, fixture.language);
       if (!packaged) throw new Error(`Serena ${fixture.language} did not stage a self-contained language server`);
       lsPaths[fixture.language] = packaged;
     }
     // Fixture registrations are build-time scaffolding, not runtime projects.
     await writeFile(configPath, stringify(config));
     await writeFile(
-      join(options.home, "leveret-lsp-manifest.json"),
+      join(options.bundle, "leveret-lsp-manifest.json"),
       `${JSON.stringify({ languages: selected.map((fixture) => fixture.language), ls_paths: lsPaths, generated_at: new Date().toISOString() }, null, 2)}\n`,
     );
   } finally {
@@ -81,19 +81,19 @@ export async function prefetchSerena(options: PrefetchOptions): Promise<void> {
 }
 
 function cli(argv: string[]): PrefetchOptions {
-  let home = process.env.SERENA_HOME;
+  let bundle = process.env.LEVERET_SERENA_BUNDLE;
   let serenaBin = process.env.LEVERET_SERENA_BIN;
   const languages: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     const value = () => (arg.includes("=") ? arg.split("=").slice(1).join("=") : argv[++i]!);
-    if (arg === "--home" || arg.startsWith("--home=")) home = value();
+    if (arg === "--bundle" || arg.startsWith("--bundle=")) bundle = value();
     else if (arg === "--serena-bin" || arg.startsWith("--serena-bin=")) serenaBin = value();
     else if (arg === "--language" || arg.startsWith("--language=")) languages.push(value());
     else throw new Error(`unknown prefetch argument: ${arg}`);
   }
-  if (!home) throw new Error("--home or SERENA_HOME is required");
-  return { home, serenaBin, languages };
+  if (!bundle) throw new Error("--bundle or LEVERET_SERENA_BUNDLE is required");
+  return { bundle, serenaBin, languages };
 }
 
 if (process.argv[1]?.endsWith("prefetch-serena.js")) {
