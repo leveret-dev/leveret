@@ -2,10 +2,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { TSchema } from "typebox";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, extname, join } from "node:path";
+import { basename, extname, isAbsolute, join, relative, sep } from "node:path";
 import { parse, stringify } from "yaml";
 import { safeChildEnvironment } from "../exec.js";
 
@@ -100,7 +100,19 @@ export function prefetchEnvironment(source: NodeJS.ProcessEnv = process.env): Re
   return env;
 }
 
-export function serenaBundleProblem(env: NodeJS.ProcessEnv = process.env): string | null {
+function serenaHomeProblem(repo: string | undefined, home: string | undefined): string | null {
+  if (repo && home && existsSync(home)) {
+    const rel = relative(realpathSync(repo), realpathSync(home));
+    if (rel === "" || (!rel.startsWith(`..${sep}`) && rel !== ".." && !isAbsolute(rel))) {
+      return "SERENA_HOME resolves inside the reviewed checkout";
+    }
+  }
+  return null;
+}
+
+export function serenaBundleProblem(env: NodeJS.ProcessEnv = process.env, repo?: string): string | null {
+  const homeProblem = serenaHomeProblem(repo, env.SERENA_HOME);
+  if (homeProblem) return homeProblem;
   if (env.LEVERET_ALLOW_UNPACKAGED_SERENA === "1") return null;
   if (!env.SERENA_HOME) return "SERENA_HOME is unset; no packaged LSP bundle is available";
   if (!existsSync(join(env.SERENA_HOME, "leveret-lsp-manifest.json"))) {
@@ -110,12 +122,6 @@ export function serenaBundleProblem(env: NodeJS.ProcessEnv = process.env): strin
     return `no staged Serena language_servers/static directory in ${env.SERENA_HOME}`;
   }
   return null;
-}
-
-export function serenaProjectConfigProblem(repo: string): string | null {
-  return existsSync(join(repo, ".serena"))
-    ? "reviewed checkout contains .serena configuration; refusing project-controlled Serena settings"
-    : null;
 }
 
 const LANGUAGE_EXTENSIONS: Record<string, Set<string>> = {
@@ -165,8 +171,6 @@ async function detectedLanguages(repo: string, staged: Set<string>): Promise<str
 }
 
 export async function createSerenaShadowProject(repo: string): Promise<string> {
-  const configProblem = serenaProjectConfigProblem(repo);
-  if (configProblem) throw new Error(configProblem);
   const shadow = await mkdtemp(join(tmpdir(), "leveret-serena-project-"));
   try {
     const stack = [{ source: repo, target: shadow }];
@@ -279,6 +283,8 @@ export interface SerenaBridge {
 export async function connectSerena(repo: string, command = "serena", timeoutMs = 120_000): Promise<SerenaBridge> {
   const stagedHome = process.env.SERENA_HOME;
   if (!stagedHome) throw new Error("SERENA_HOME is required for packaged Serena");
+  const homeProblem = serenaHomeProblem(repo, stagedHome);
+  if (homeProblem) throw new Error(homeProblem);
   const shadow = await createSerenaShadowProject(repo);
   let runtimeHome: string | undefined;
   let transport: StdioClientTransport | undefined;
