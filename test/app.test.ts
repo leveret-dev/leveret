@@ -4,6 +4,7 @@ import { renderInline, renderWalkthrough } from "../src/app/render.js";
 import { MAX_BODY_BYTES, preBodyReject, readCappedBody, routeEvent, verifySignature } from "../src/app/webhook.js";
 import type { ScanResult } from "../src/findings.js";
 import type { VerifyOutput } from "../src/app/render.js";
+import { appAccess } from "../src/app/github.js";
 
 // App layer: GitHub plumbing only. The pure parts — signature check, event
 // routing, report rendering — are what these tests pin; API calls stay thin.
@@ -11,6 +12,19 @@ import type { VerifyOutput } from "../src/app/render.js";
 const SECRET = "test-secret";
 const sign = (body: string) =>
   `sha256=${createHmac("sha256", SECRET).update(body).digest("hex")}`;
+
+it("retries installation-token minting after a failure", async () => {
+  let calls = 0;
+  const app = {
+    octokit: { rest: { apps: { createInstallationAccessToken: async () => {
+      if (++calls === 1) throw new Error("temporary failure");
+      return { data: { token: "fresh-token" } };
+    } } } },
+  } as never;
+  const access = appAccess(app, 42);
+  await expect(access.token()).rejects.toThrow("temporary failure");
+  await expect(access.token()).resolves.toBe("fresh-token");
+});
 
 describe("webhook signature", () => {
   it("accepts a correctly signed payload and rejects tampering", () => {

@@ -10,7 +10,7 @@ import { loadProfile } from "../profile.js";
 import { scan } from "../scan.js";
 import type { Finding, ScanResult } from "../findings.js";
 import { ensureGraph } from "./graph.js";
-import { botLogin, fetchReviewThreads, makeApp, postComment, postReview, replyInThread, resolveThread, updateComment } from "./github.js";
+import { appAccess, fetchReviewThreads, makeApp, postComment, postReview, replyInThread, resolveThread, tokenAccess, updateComment, type GitHubAccess } from "./github.js";
 import { parsePriorThreads, resolvedReply, type PriorFinding } from "./incremental.js";
 import {
   convertManifestCode,
@@ -27,6 +27,8 @@ import { ackMessage, doneMessage, failMessage, renderInline, renderWalkthrough, 
 import { makeLogger } from "./log.js";
 import { materializeTrustedReviewState, type TrustedReviewState } from "../trusted-state.js";
 import { preBodyReject, readCappedBody, routeEvent, verifySignature, type Job } from "./webhook.js";
+import { relayChallengeAllowed, relayConfigFromEnv, verifyRelayDelivery } from "./relay.js";
+import { safeChildEnvironment } from "../exec.js";
 
 // The App layer: GitHub plumbing only. It holds the App key and webhook secret —
 // never a model credential. The BYOAI seam is LEVERET_RUNNER: a user-supplied
@@ -70,18 +72,26 @@ function reportFromScan(result: ScanResult): VerifyOutput {
   };
 }
 
-async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCredentials): Promise<void> {
+async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubAccess): Promise<void> {
   const runId = randomUUID();
   const log = makeLogger({ runId, prUrl: `https://github.com/${job.repo}/pull/${job.pr}` });
   log.info("review job started", { headSha: job.headSha, action: job.action });
-  const app = job.installationId ? makeApp({ appId: creds.appId, privateKey: creds.privateKey }) : null;
   let ackId: number | undefined;
   const work = await mkdtemp(join(tmpdir(), "leveret-app-"));
   const runnerWork = await mkdtemp(join(tmpdir(), "leveret-runner-"));
   let trusted: TrustedReviewState | undefined;
   try {
-    await exec("git", ["clone", "--quiet", job.cloneUrl, work], { timeout: APP_CHILD_TIMEOUT_MS });
-    await exec("git", ["fetch", "--quiet", "origin", `pull/${job.pr}/head`], { cwd: work, timeout: APP_CHILD_TIMEOUT_MS });
+    const token = await access?.token();
+    const gitEnv = {
+      ...safeChildEnvironment(process.env),
+      ...(token ? {
+        GIT_CONFIG_COUNT: "1",
+        GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+        GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`,
+      } : {}),
+    };
+    await exec("git", ["clone", "--quiet", job.cloneUrl, work], { env: gitEnv, timeout: APP_CHILD_TIMEOUT_MS });
+    await exec("git", ["fetch", "--quiet", "origin", `pull/${job.pr}/head`], { cwd: work, env: gitEnv, timeout: APP_CHILD_TIMEOUT_MS });
     await exec("git", ["checkout", "--quiet", job.headSha], { cwd: work, timeout: APP_CHILD_TIMEOUT_MS });
     const base = `origin/${job.baseRef}`;
     trusted = await materializeTrustedReviewState(work, base);
@@ -94,17 +104,17 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
       skipReason = `the PR title matches \`review.skipTitle\` (\`${profile.review.skipTitle}\`)`;
     }
     if (skipReason) {
-      if (app && job.installationId && job.action === "opened") {
-        await postComment(app, job.installationId, job.repo, job.pr, skipMessage(skipReason)).catch(() => {});
+      if (access && job.action === "opened") {
+        await postComment(access, job.repo, job.pr, skipMessage(skipReason)).catch(() => {});
       }
       return;
     }
 
     // the friendly heads-up, EDITED to the outcome when the job ends — a PR should
     // never show a silent bot or an eternal "working on it"
-    if (app && job.installationId) {
+    if (access) {
       const model = process.env.LEVERET_RUNNER_MODEL ?? "gpt-5.6-sol";
-      ackId = await postComment(app, job.installationId, job.repo, job.pr, ackMessage(job.headSha, model)).catch(
+      ackId = await postComment(access, job.repo, job.pr, ackMessage(job.headSha, model)).catch(
         () => undefined,
       );
     }
@@ -123,10 +133,10 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
 
     // incremental re-review: hand the runner the bot's own unresolved threads
     let prior: PriorFinding[] = [];
-    if (app && job.installationId && job.action !== "opened") {
+    if (access && job.action !== "opened") {
       try {
-        const threads = await fetchReviewThreads(app, job.installationId, job.repo, job.pr);
-        prior = parsePriorThreads(threads as Parameters<typeof parsePriorThreads>[0], await botLogin(app));
+        const threads = await fetchReviewThreads(access, job.repo, job.pr);
+        prior = parsePriorThreads(threads as Parameters<typeof parsePriorThreads>[0], await access.botLogin());
         if (prior.length > 0) {
           await writeFile(join(runnerWork, "prior.json"), JSON.stringify(prior, null, 1));
         }
@@ -167,10 +177,9 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
       verify = reportFromScan(result);
     }
 
-    if (app && job.installationId) {
+    if (access) {
       await postReview(
-        app,
-        job.installationId,
+        access,
         job.repo,
         job.pr,
         job.headSha,
@@ -178,7 +187,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
         renderInline(verify),
       );
       if (ackId) {
-        await updateComment(app, job.installationId, job.repo, ackId, doneMessage(verify)).catch(() => {});
+        await updateComment(access, job.repo, ackId, doneMessage(verify)).catch(() => {});
       }
       // act on the verifier's resolutions: short reply + resolve the thread
       for (const res of verify.resolutions ?? []) {
@@ -186,9 +195,9 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
         const pf = prior.find((p) => p.threadId === res.threadId);
         try {
           if (pf?.commentId) {
-            await replyInThread(app, job.installationId, job.repo, job.pr, pf.commentId, resolvedReply(res.note, job.headSha));
+            await replyInThread(access, job.repo, job.pr, pf.commentId, resolvedReply(res.note, job.headSha));
           }
-          await resolveThread(app, job.installationId, res.threadId);
+          await resolveThread(access, res.threadId);
         } catch (err) {
           log.warn("thread resolution failed", { threadId: res.threadId, err });
         }
@@ -203,10 +212,10 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
   } catch (err) {
     log.error("review job failed", { err });
     // the crash report reaches the PR with the run id even when the ack never posted
-    if (app && job.installationId) {
+    if (access) {
       const body = failMessage(err, runId);
-      if (ackId) await updateComment(app, job.installationId, job.repo, ackId, body).catch(() => {});
-      else await postComment(app, job.installationId, job.repo, job.pr, body).catch(() => {});
+      if (ackId) await updateComment(access, job.repo, ackId, body).catch(() => {});
+      else await postComment(access, job.repo, job.pr, body).catch(() => {});
     }
     throw err;
   } finally {
@@ -249,6 +258,7 @@ function html(res: ServerResponse, code: number, body: string): void {
 
 export async function main(): Promise<void> {
   let creds = await loadCredentials(DATA_DIR, process.env);
+  const relayConfig = relayConfigFromEnv(process.env);
   const port = Number(process.env.PORT ?? 8090);
   // state token -> the org the setup page was opened for (undefined = personal
   // account); the callback needs it to link at the right App settings page
@@ -261,6 +271,13 @@ export async function main(): Promise<void> {
       readFile(new URL(`../..${url.pathname}`, import.meta.url))
         .then((buf) => res.writeHead(200, { "content-type": ASSETS[url.pathname]! }).end(buf))
         .catch(() => res.writeHead(404).end());
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/.well-known/leveret") {
+      const repository = url.searchParams.get("repo") ?? "";
+      const installationId = url.searchParams.get("iid") ?? "";
+      res.writeHead(relayConfig && relayChallengeAllowed(repository, installationId, relayConfig) ? 204 : 404).end();
       return;
     }
 
@@ -303,14 +320,49 @@ export async function main(): Promise<void> {
     if (req.method !== "POST") {
       html(
         res,
-        creds ? 200 : 503,
+        creds || relayConfig ? 200 : 503,
         page(
           "Leveret",
-          creds
+          creds || relayConfig
             ? '<p class="card">Running — waiting on pull request webhooks.</p>'
             : '<p class="card">Unconfigured. <a href="/setup">Create your GitHub App</a> to get started.</p>',
         ),
       );
+      return;
+    }
+
+    if (req.headers["x-leveret-signature"]) {
+      if (!relayConfig) {
+        res.writeHead(503).end();
+        return;
+      }
+      void readCappedBody(req).then((body) => {
+        if (body === null) {
+          res.writeHead(413).end();
+          return;
+        }
+        const verified = verifyRelayDelivery(req.headers, Buffer.from(body), relayConfig);
+        if (!verified) {
+          res.writeHead(401).end();
+          return;
+        }
+        let job: Job | null = null;
+        try {
+          const payload = JSON.parse(body) as { repository?: { full_name?: string }; installation?: { id?: number } };
+          if (payload.repository?.full_name !== verified.repository || payload.installation?.id !== verified.installationId) {
+            throw new Error("signed relay fields do not match payload");
+          }
+          job = routeEvent(verified.event, payload as never);
+        } catch {
+          res.writeHead(400).end();
+          return;
+        }
+        res.writeHead(202).end();
+        if (!job) return;
+        const access = tokenAccess(verified.token, process.env.LEVERET_RELAY_BOT_LOGIN ?? "leveret[bot]");
+        const run = job.kind === "review" ? reviewJob(job, access) : learnFeedJob(job);
+        run.catch(() => {});
+      });
       return;
     }
 
@@ -343,14 +395,17 @@ export async function main(): Promise<void> {
       }
       res.writeHead(202).end(); // ack fast; work happens after
       if (!job) return;
-      const run = job.kind === "review" ? reviewJob(job, activeCreds) : learnFeedJob(job);
+      const access = job.installationId
+        ? appAccess(makeApp({ appId: activeCreds.appId, privateKey: activeCreds.privateKey }), job.installationId)
+        : undefined;
+      const run = job.kind === "review" ? reviewJob(job, access) : learnFeedJob(job);
       run.catch(() => {}); // job-level loggers already reported with the run id
     });
   });
   server.listen(port, () =>
     console.log(
-      creds
-        ? `Leveret listening on :${port} (credentials in ${DATA_DIR})`
+      creds || relayConfig
+        ? `Leveret listening on :${port}${creds ? ` (credentials in ${DATA_DIR})` : " (relay mode)"}`
         : `Leveret UNCONFIGURED — open http://127.0.0.1:${port}/setup to create your GitHub App (credentials will be written to ${DATA_DIR})`,
     ),
   );
