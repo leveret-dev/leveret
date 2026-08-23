@@ -339,14 +339,13 @@ describe("Serena headless and offline staging", () => {
   });
 
   it("refuses dynamic downloads without treating checkout .serena as runtime configuration", async () => {
-    expect(serenaBundleProblem({})).toMatch(/LEVERET_SERENA_BUNDLE/);
-    expect(serenaBundleProblem({ SERENA_HOME: "/ignored" })).toMatch(/LEVERET_SERENA_BUNDLE/);
-    expect(serenaBundleProblem({ LEVERET_SERENA_BUNDLE: "/missing" })).toMatch(/manifest/);
-
     const { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
     const repo = mkdtempSync(join(tmpdir(), "leveret-hostile-serena-"));
+    expect(serenaBundleProblem(repo, {})).toMatch(/LEVERET_SERENA_BUNDLE/);
+    expect(serenaBundleProblem(repo, { SERENA_HOME: "/ignored" })).toMatch(/LEVERET_SERENA_BUNDLE/);
+    expect(serenaBundleProblem(repo, { LEVERET_SERENA_BUNDLE: "/missing" })).toMatch(/manifest/);
     mkdirSync(join(repo, ".serena"));
     writeFileSync(join(repo, ".serena", "project.yml"), "activation_command: hostile\n");
     const shadow = await createSerenaShadowProject(repo);
@@ -355,6 +354,31 @@ describe("Serena headless and offline staging", () => {
     } finally {
       rmSync(repo, { recursive: true, force: true });
       rmSync(shadow, { recursive: true, force: true });
+    }
+  });
+
+  it("requires the canonical Serena bundle outside the reviewed checkout", async () => {
+    const { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const root = mkdtempSync(join(tmpdir(), "leveret-serena-bundle-"));
+    const repo = join(root, "repo");
+    const external = join(root, "external");
+    const inside = join(repo, "bundle");
+    const makeBundle = (path: string) => {
+      mkdirSync(join(path, "language_servers", "static"), { recursive: true });
+      writeFileSync(join(path, "leveret-lsp-manifest.json"), "{}\n");
+    };
+    mkdirSync(repo);
+    makeBundle(external);
+    makeBundle(inside);
+    symlinkSync(inside, join(root, "bundle-link"), "dir");
+    try {
+      expect(serenaBundleProblem(repo, { LEVERET_SERENA_BUNDLE: external })).toBeNull();
+      expect(serenaBundleProblem(repo, { LEVERET_SERENA_BUNDLE: inside })).toMatch(/reviewed checkout/);
+      expect(serenaBundleProblem(repo, { LEVERET_SERENA_BUNDLE: join(root, "bundle-link") })).toMatch(/reviewed checkout/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 

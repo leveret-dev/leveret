@@ -2,10 +2,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { TSchema } from "typebox";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, extname, join } from "node:path";
+import { basename, extname, isAbsolute, join, relative, sep } from "node:path";
 import { parse, stringify } from "yaml";
 import { safeChildEnvironment } from "../exec.js";
 
@@ -100,7 +100,7 @@ export function prefetchEnvironment(bundle: string, source: NodeJS.ProcessEnv = 
   return env;
 }
 
-export function serenaBundleProblem(env: NodeJS.ProcessEnv = process.env): string | null {
+export function serenaBundleProblem(repo: string, env: NodeJS.ProcessEnv = process.env): string | null {
   const bundle = env.LEVERET_SERENA_BUNDLE;
   if (!bundle) return "LEVERET_SERENA_BUNDLE is unset; no packaged LSP bundle is available";
   if (!existsSync(join(bundle, "leveret-lsp-manifest.json"))) {
@@ -108,6 +108,10 @@ export function serenaBundleProblem(env: NodeJS.ProcessEnv = process.env): strin
   }
   if (!existsSync(join(bundle, "language_servers", "static"))) {
     return `no staged Serena language_servers/static directory in ${bundle}`;
+  }
+  const rel = relative(realpathSync(repo), realpathSync(bundle));
+  if (rel === "" || (!rel.startsWith(`..${sep}`) && rel !== ".." && !isAbsolute(rel))) {
+    return "LEVERET_SERENA_BUNDLE resolves inside the reviewed checkout";
   }
   return null;
 }
@@ -270,7 +274,7 @@ export interface SerenaBridge {
 }
 
 export async function connectSerena(repo: string, runtimeRoot: string, command = "serena", timeoutMs = 120_000): Promise<SerenaBridge> {
-  const bundleProblem = serenaBundleProblem();
+  const bundleProblem = serenaBundleProblem(repo);
   if (bundleProblem) throw new Error(bundleProblem);
   const bundle = process.env.LEVERET_SERENA_BUNDLE!;
   const shadow = await createSerenaShadowProject(repo);
