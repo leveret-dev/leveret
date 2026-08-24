@@ -1,6 +1,7 @@
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { createHash } from "node:crypto";
+import { isAbsolute, relative, resolve } from "node:path";
 import { readFile, readdir, realpath } from "node:fs/promises";
 import { astSearch } from "../astsearch.js";
 import { context } from "../context.js";
@@ -9,6 +10,7 @@ import { memoryList } from "../memory.js";
 import { scan } from "../scan.js";
 import { ENGINES } from "../engines/registry.js";
 import type { SerenaBridge } from "./serena.js";
+import { pathIsInside } from "../path.js";
 
 function json(value: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(value, null, 1) }], details: {} };
@@ -24,33 +26,44 @@ async function codegraph(repo: string, args: string[]): Promise<ReturnType<typeo
     env: safeChildEnvironment(),
     maxBuffer: 8 * 1024 * 1024,
   });
-  if (result.code !== 0) throw new Error(`codegraph ${args[0]} rc=${result.code}: ${result.stderr.slice(0, 500)}`);
+  if (result.code !== 0) throw new ToolExecutionError(`codegraph ${args[0]} rc=${result.code}: ${result.stderr.slice(0, 500)}`, result.timedOut);
   return text(result.stdout, { command: args[0] });
-}
-
-function inside(root: string, candidate: string): boolean {
-  const rel = relative(root, candidate);
-  return rel === "" || (!rel.startsWith(`..${sep}`) && rel !== ".." && !isAbsolute(rel));
 }
 
 async function jailedPath(root: string, requested = "."): Promise<string> {
   if (isAbsolute(requested)) throw new Error("tool paths must be relative to the reviewed checkout");
   const canonicalRoot = await realpath(root);
   const canonical = await realpath(resolve(root, requested));
-  if (!inside(canonicalRoot, canonical)) throw new Error("tool path escapes the reviewed checkout");
+  if (!pathIsInside(canonicalRoot, canonical)) throw new Error("tool path escapes the reviewed checkout");
   return canonical;
 }
 
-function annotateEvidence(tool: ToolDefinition): ToolDefinition {
+export interface PiToolOutcome {
+  timedOut: boolean;
+}
+
+class ToolExecutionError extends Error {
+  constructor(message: string, readonly timedOut = false) {
+    super(message);
+  }
+}
+
+function annotateEvidence(tool: ToolDefinition, onOutcome?: (toolCallId: string, outcome: PiToolOutcome) => void): ToolDefinition {
   const execute = tool.execute.bind(tool);
   return {
     ...tool,
     async execute(toolCallId, params, signal, onUpdate, context) {
-      const result = await execute(toolCallId, params as never, signal, onUpdate, context);
-      return {
-        ...result,
-        content: [{ type: "text" as const, text: `evidence_id: ${toolCallId}` }, ...result.content],
-      };
+      try {
+        const result = await execute(toolCallId, params as never, signal, onUpdate, context);
+        onOutcome?.(toolCallId, { timedOut: false });
+        return {
+          ...result,
+          content: [{ type: "text" as const, text: `evidence_id: ${toolCallId}` }, ...result.content],
+        };
+      } catch (error) {
+        onOutcome?.(toolCallId, { timedOut: error instanceof ToolExecutionError && error.timedOut });
+        throw error;
+      }
     },
   };
 }
@@ -64,12 +77,23 @@ export interface PiToolsOptions {
   rulesRoot: string;
   memoryRepo: string;
   base: string;
+  serenaBundleSha256?: string;
+  onToolOutcome?: (toolCallId: string, outcome: PiToolOutcome) => void;
 }
 
 export interface PiToolsBundle {
   tools: ToolDefinition[];
   close(): Promise<void>;
-  capabilities: { graph: boolean; lsp: boolean; probe: boolean; serena_version?: string };
+  capabilities: {
+    graph: boolean;
+    lsp: boolean;
+    probe: boolean;
+    serena_version?: string;
+    serena_bundle_sha256?: string;
+    tool_schema_sha256: string;
+    tool_source_sha256: string;
+    tool_inventory: string[];
+  };
 }
 
 export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBundle> {
@@ -108,7 +132,7 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
           env: safeChildEnvironment(),
           maxBuffer: 2 * 1024 * 1024,
         });
-        if (result.code !== 0 && result.code !== 1) throw new Error(`rg rc=${result.code}: ${result.stderr.slice(0, 500)}`);
+        if (result.code !== 0 && result.code !== 1) throw new ToolExecutionError(`rg rc=${result.code}: ${result.stderr.slice(0, 500)}`, result.timedOut);
         return text(result.stdout.replaceAll(`${repo}/`, ""), { matches: result.stdout ? result.stdout.split("\n").length - 1 : 0 });
       },
     }),
@@ -124,7 +148,7 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
           env: safeChildEnvironment(),
           maxBuffer: 2 * 1024 * 1024,
         });
-        if (result.code !== 0 && result.code !== 1) throw new Error(`rg --files rc=${result.code}: ${result.stderr.slice(0, 500)}`);
+        if (result.code !== 0 && result.code !== 1) throw new ToolExecutionError(`rg --files rc=${result.code}: ${result.stderr.slice(0, 500)}`, result.timedOut);
         return text(result.stdout.replaceAll(`${repo}/`, ""));
       },
     }),
@@ -185,7 +209,7 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
           maxBuffer: 16 * 1024 * 1024,
         });
         if (changed.code !== 0 || diff.code !== 0) {
-          throw new Error(`git diff failed: ${(changed.stderr || diff.stderr).slice(0, 500)}`);
+          throw new ToolExecutionError(`git diff failed: ${(changed.stderr || diff.stderr).slice(0, 500)}`, changed.timedOut || diff.timedOut);
         }
         return text(`changed_files:\n${changed.stdout.split("\0").filter(Boolean).join("\n")}\n\nunified_diff:\n${diff.stdout}`);
       },
@@ -283,30 +307,37 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
       }),
       async execute(_id, params) {
         const cwd = resolve(repo, params.cwd ?? ".");
-        if (!inside(repo, cwd)) throw new Error("probe cwd must stay inside the reviewed checkout");
+        if (!pathIsInside(repo, cwd)) throw new Error("probe cwd must stay inside the reviewed checkout");
         let command = params.command;
         if (command.includes("/") || command.includes("\\")) {
           command = resolve(cwd, command);
-          if (!inside(repo, command)) throw new Error("probe command path must stay inside the reviewed checkout");
+          if (!pathIsInside(repo, command)) throw new Error("probe command path must stay inside the reviewed checkout");
         }
         const result = await run(command, params.args ?? [], cwd, {
           timeoutMs: params.timeout_ms ?? 30_000,
           env: safeChildEnvironment(),
           maxBuffer: 1024 * 1024,
         });
-        if (result.code !== 0) throw new Error(`probe rc=${result.code}: ${result.stderr.slice(0, 1000)}`);
+        if (result.code !== 0) throw new ToolExecutionError(`probe rc=${result.code}: ${result.stderr.slice(0, 1000)}`, result.timedOut);
         return text(result.stdout, { code: result.code, signal: result.signal });
       },
     }));
   }
 
+  const annotatedTools = tools.map((tool) => annotateEvidence(tool, options.onToolOutcome));
+  const toolSchemaSha256 = createHash("sha256").update(JSON.stringify(annotatedTools.map((tool) => ({ name: tool.name, description: tool.description, parameters: tool.parameters })))).digest("hex");
+  const toolSourceSha256 = createHash("sha256").update(await readFile(new URL(import.meta.url))).digest("hex");
   return {
-    tools: tools.map(annotateEvidence),
+    tools: annotatedTools,
     capabilities: {
       graph: options.graphLive,
       lsp: Boolean(options.serena?.tools.length),
       probe: options.sandboxed,
       ...(options.serena?.version ? { serena_version: options.serena.version } : {}),
+      ...(options.serenaBundleSha256 ? { serena_bundle_sha256: options.serenaBundleSha256 } : {}),
+      tool_schema_sha256: toolSchemaSha256,
+      tool_source_sha256: toolSourceSha256,
+      tool_inventory: annotatedTools.map((tool) => tool.name).sort(),
     },
     close: async () => {
       await options.serena?.close();

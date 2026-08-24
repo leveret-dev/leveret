@@ -1,3 +1,5 @@
+import { redactAuditText } from "../audit.js";
+
 // Cloud-ready structured logging: one JSON object per line. Every review run gets
 // a UUID bound into its logger; app-mode runs also bind the PR URL — any
 // aggregator slices by run without parsing prose.
@@ -5,7 +7,7 @@
 export type Level = "info" | "warn" | "error";
 
 function plain(v: unknown): unknown {
-  return v instanceof Error ? (v.stack ?? String(v)) : v;
+  return v instanceof Error ? redactAuditText(v.stack ?? String(v)) : typeof v === "string" ? redactAuditText(v) : v;
 }
 
 export function formatLine(
@@ -28,10 +30,14 @@ export interface Logger {
 export function makeLogger(
   bound: Record<string, unknown>,
   sink: (line: string) => void = (l) => process.stdout.write(`${l}\n`),
+  capture?: (record: Record<string, unknown>) => void,
 ): Logger {
   const at =
     (level: Level) =>
-    (msg: string, extra?: Record<string, unknown>): void =>
-      sink(formatLine(level, msg, bound, extra));
+    (msg: string, extra?: Record<string, unknown>): void => {
+      const line = formatLine(level, msg, bound, extra);
+      sink(line);
+      capture?.(JSON.parse(line) as Record<string, unknown>);
+    };
   return { info: at("info"), warn: at("warn"), error: at("error") };
 }

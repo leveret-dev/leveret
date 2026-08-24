@@ -1,7 +1,9 @@
-import { execFile } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { execFile, spawn } from "node:child_process";
+import { createHash, randomBytes } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { currentAuditTrace } from "./audit.js";
 
 export interface ExecResult {
   code: number;
@@ -9,6 +11,16 @@ export interface ExecResult {
   stderr: string;
   /** set when the child died on a signal (OOM kill, timeout, segfault) */
   signal?: string;
+  timedOut?: boolean;
+  truncated?: boolean;
+}
+
+export interface ExecutableIdentity {
+  command: string;
+  available: boolean;
+  path?: string;
+  version?: string;
+  sha256?: string;
 }
 
 // No shell: file names from a diff must never hit string interpolation.
@@ -49,6 +61,21 @@ const SAFE_ENV_KEYS = [
 
 const DEFAULT_TIMEOUT_MS = 15 * 60_000;
 
+function captureSubprocess(
+  cmd: string,
+  args: string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv | undefined,
+  timeoutMs: number,
+  startedAt: number,
+  result: ExecResult,
+): Promise<void> | undefined {
+  return currentAuditTrace()?.record("subprocess", "completed", {
+    argv: [cmd, ...args], cwd, environment_names: Object.keys(env ?? process.env).sort(),
+    ...result, duration_ms: Date.now() - startedAt, timeout_ms: timeoutMs,
+  }, { completeness: result.truncated ? "truncated" : "complete" });
+}
+
 /** Environment for untrusted checkout tools: runtime basics, never provider/GitHub credentials. */
 export function safeChildEnvironment(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
@@ -60,12 +87,18 @@ export function safeChildEnvironment(source: NodeJS.ProcessEnv = process.env): N
 
 export function run(cmd: string, args: string[], cwd: string, opts?: RunOpts): Promise<ExecResult> {
   return new Promise((resolve) => {
+    const startedAt = Date.now();
     const env = opts?.env ?? (process.env.LEVERET_SANITIZE_CHILD_ENV === "1" ? safeChildEnvironment() : undefined);
-    execFile(cmd, args, { cwd, env, maxBuffer: opts?.maxBuffer ?? 64 * 1024 * 1024, timeout: opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS }, (err, stdout, stderr) => {
+    const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    execFile(cmd, args, { cwd, env, maxBuffer: opts?.maxBuffer ?? 64 * 1024 * 1024, timeout: timeoutMs }, (err, stdout, stderr) => {
       let code = 0;
       let signal: string | undefined;
+      let timedOut = false;
+      let truncated = false;
       if (err) {
-        const e = err as NodeJS.ErrnoException & { code?: unknown; signal?: string };
+        const e = err as NodeJS.ErrnoException & { code?: unknown; signal?: string; killed?: boolean };
+        timedOut = e.killed === true && Boolean(e.signal);
+        truncated = e.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER";
         if (typeof e.signal === "string" && e.signal) {
           // A signal death reports err.code null; `?? 0` would read as success
           // and callers would trust partial stdout from a killed tool.
@@ -77,7 +110,67 @@ export function run(cmd: string, args: string[], cwd: string, opts?: RunOpts): P
           code = -1; // spawn failure (ENOENT etc.), not a tool verdict
         }
       }
-      resolve({ code, stdout: stdout ?? "", stderr: stderr ?? "", ...(signal ? { signal } : {}) });
+      const result = { code, stdout: stdout ?? "", stderr: stderr ?? "", ...(signal ? { signal } : {}), ...(timedOut ? { timedOut } : {}), ...(truncated ? { truncated } : {}) };
+      const captured = captureSubprocess(cmd, args, cwd, env, timeoutMs, startedAt, result);
+      if (captured) void captured.then(() => resolve(result), () => resolve(result));
+      else resolve(result);
+    });
+  });
+}
+
+export interface StreamRunOpts extends RunOpts {
+  onStdout?(chunk: Buffer): void;
+  onStderr?(chunk: Buffer): void;
+}
+
+/** Streaming child execution for long-running harnesses; preserves the result protocol on stdout. */
+export function runStreaming(cmd: string, args: string[], cwd: string, opts?: StreamRunOpts): Promise<ExecResult> {
+  return new Promise((resolveResult) => {
+    const startedAt = Date.now();
+    const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const maxBuffer = opts?.maxBuffer ?? 64 * 1024 * 1024;
+    const env = opts?.env ?? (process.env.LEVERET_SANITIZE_CHILD_ENV === "1" ? safeChildEnvironment() : undefined);
+    const child = spawn(cmd, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    let timedOut = false;
+    let truncated = false;
+    let spawnError: Error | undefined;
+    let forceTimer: ReturnType<typeof setTimeout> | undefined;
+    const terminate = (): void => {
+      child.kill("SIGTERM");
+      forceTimer ??= setTimeout(() => child.kill("SIGKILL"), 5000);
+    };
+    const keep = (chunks: Buffer[], chunk: Buffer, used: number): number => {
+      const remaining = Math.max(0, maxBuffer - used);
+      if (remaining > 0) chunks.push(chunk.subarray(0, remaining));
+      if (chunk.length > remaining) {
+        truncated = true;
+        terminate();
+      }
+      return used + Math.min(chunk.length, remaining);
+    };
+    child.stdout.on("data", (chunk: Buffer) => { stdoutBytes = keep(stdout, chunk, stdoutBytes); opts?.onStdout?.(chunk); });
+    child.stderr.on("data", (chunk: Buffer) => { stderrBytes = keep(stderr, chunk, stderrBytes); opts?.onStderr?.(chunk); });
+    child.on("error", (error) => { spawnError = error; });
+    const timer = setTimeout(() => { timedOut = true; terminate(); }, timeoutMs);
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      if (forceTimer) clearTimeout(forceTimer);
+      const result: ExecResult = {
+        code: code ?? -1,
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8"),
+        ...(signal ? { signal } : {}),
+        ...(timedOut ? { timedOut } : {}),
+        ...(truncated ? { truncated } : {}),
+      };
+      if (spawnError) result.stderr = `${result.stderr}${result.stderr ? "\n" : ""}${spawnError.message}`;
+      const captured = captureSubprocess(cmd, args, cwd, env, timeoutMs, startedAt, result);
+      if (captured) void captured.then(() => resolveResult(result), () => resolveResult(result));
+      else resolveResult(result);
     });
   });
 }
@@ -90,4 +183,21 @@ export function scratchPath(prefix: string): string {
 
 export function which(cmd: string): Promise<boolean> {
   return run("/usr/bin/which", [cmd], "/").then((r) => r.code === 0);
+}
+
+export async function executableIdentity(command: string, cwd = "/"): Promise<ExecutableIdentity> {
+  const located = await run("/usr/bin/which", [command], "/");
+  if (located.code !== 0) return { command, available: false };
+  const path = located.stdout.trim();
+  const versionResult = await run(command, ["--version"], cwd);
+  let sha256: string | undefined;
+  try {
+    const hash = createHash("sha256");
+    for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
+    sha256 = hash.digest("hex");
+  } catch {
+    // Version/path still identify wrappers whose target cannot be read.
+  }
+  const version = (versionResult.stdout || versionResult.stderr).trim().split("\n")[0];
+  return { command, available: true, path, ...(version ? { version } : {}), ...(sha256 ? { sha256 } : {}) };
 }

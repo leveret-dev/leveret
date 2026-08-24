@@ -16,6 +16,7 @@ describe("ensureGraph", () => {
     writeFileSync(join(repo, "a.py"), "def f():\n    return g()\n\ndef g():\n    return 1\n");
     const status = await ensureGraph(repo);
     expect(status.ok).toBe(true);
+    expect(status.binarySha256).toMatch(/^[a-f0-9]{64}$/);
     expect(existsSync(join(repo, ".codegraph"))).toBe(true);
   });
 

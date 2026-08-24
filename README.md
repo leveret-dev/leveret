@@ -83,6 +83,13 @@ sessions are not discovered. You choose provider, model, and effort (`--model` /
 model, prompt hash, capabilities, and tool metrics. A custom `LEVERET_RUNNER`
 remains the bring-your-own-harness escape hatch.
 
+Autonomous reviews retain a private, owner-controlled audit trace by default:
+Pi's native per-attempt sessions, normalized harness events, App/scanner/subprocess
+activity, exact failed output, checksums, and a verified zstd-or-gzip archive under
+`LEVERET_DATA`. Raw content never enters default stdout. See
+[Private audit traces](docs/app.md#private-audit-traces) for policy, retention,
+export, security, and inspection controls.
+
 **Interactive (MCP).** Register the server in any MCP-capable client and drive
 reviews yourself — the served `review`/`verify` prompts arrive with your repo's
 accumulated rulings substituted in (getting started + diagram:

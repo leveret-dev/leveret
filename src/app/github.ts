@@ -46,7 +46,7 @@ export async function postReview(
   headSha: string,
   walkthrough: string,
   inline: InlineComment[],
-): Promise<void> {
+): Promise<{ id?: number; inline: boolean; inlineFailure?: unknown }> {
   const octokit = await access.octokit();
   const [owner, name] = repo.split("/") as [string, string];
   const base = {
@@ -58,12 +58,14 @@ export async function postReview(
     body: walkthrough,
   };
   try {
-    await octokit.rest.pulls.createReview({
+    const response = await octokit.rest.pulls.createReview({
       ...base,
       comments: inline.map((c) => ({ path: c.path, line: c.line, side: "RIGHT" as const, body: c.body })),
     });
-  } catch {
-    await octokit.rest.pulls.createReview(base);
+    return { id: response.data.id, inline: true };
+  } catch (inlineFailure) {
+    const response = await octokit.rest.pulls.createReview(base);
+    return { id: response.data.id, inline: false, inlineFailure };
   }
 }
 
