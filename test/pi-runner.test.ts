@@ -1,10 +1,11 @@
 import { createAgentSession, ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
-import { run } from "../src/exec.js";
+import { run, runStreaming } from "../src/exec.js";
 import { prefetchSerena } from "../src/runner/prefetch-serena.js";
 import { buildPiSystemPrompt } from "../src/runner/pi-system.js";
 import {
   buildPiResourceLoader,
+  classifyAuth,
   createPiRuntimeDirectory,
   parseAssistantJson,
   parseDuration,
@@ -40,6 +41,7 @@ describe("Pi runtime isolation", () => {
     const { readFileSync } = await import("node:fs");
     const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
     expect(manifest.bin).toMatchObject({
+      "leveret-audit": "dist/audit-inspect.js",
       "leveret-runner-pi": "dist/runner/pi.js",
       "leveret-prefetch-serena": "dist/runner/prefetch-serena.js",
     });
@@ -88,6 +90,9 @@ describe("Pi runtime isolation", () => {
     expect(names).not.toContain("leveret_probe");
     expect(names).not.toContain("leveret_remember");
     expect(names).not.toContain("leveret_learn");
+    expect(tools.capabilities.tool_schema_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(tools.capabilities.tool_source_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(tools.capabilities.tool_inventory).toEqual([...names].sort());
     await tools.close();
   });
 
@@ -234,6 +239,12 @@ describe("Pi result and metrics parsing", () => {
     expect(parseDuration("bogus")).toBeNull();
   });
 
+  it("classifies live provider auth instead of the stale runtime snapshot", () => {
+    expect(classifyAuth("oauth", true)).toBe("subscription-oauth");
+    expect(classifyAuth("oauth", false)).toBe("oauth");
+    expect(classifyAuth("api_key", false)).toBe("api-key-or-local");
+  });
+
   it("names every missing verify-output section", () => {
     const bare = { report: [] };
     expect(verifySchemaGaps(bare, false)).toEqual(["verdicts", "coverage"]);
@@ -252,6 +263,13 @@ describe("Pi result and metrics parsing", () => {
     const result = await run("sleep", ["30"], "/tmp", { timeoutMs: 300 });
     expect(Date.now() - started).toBeLessThan(5000);
     expect(result.code).not.toBe(0);
+    expect(result.signal).toBeTruthy();
+  });
+
+  it("streams and marks a harness timeout from process metadata", async () => {
+    const result = await runStreaming("sleep", ["30"], "/tmp", { timeoutMs: 100 });
+    expect(result.code).not.toBe(0);
+    expect(result.timedOut).toBe(true);
     expect(result.signal).toBeTruthy();
   });
 

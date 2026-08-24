@@ -18,6 +18,12 @@ describe("formatLine", () => {
     expect(d.err).toContain("boom");
     expect(d.runId).toBe("r-2");
   });
+
+  it("redacts authorization material before operational stdout", () => {
+    const line = formatLine("error", "job failed", { runId: "r" }, { err: new Error("Authorization: Bearer ghp_abcdefghijklmnopqrstuvwxyz") });
+    expect(line).toContain("[REDACTED]");
+    expect(line).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz");
+  });
 });
 
 describe("makeLogger", () => {

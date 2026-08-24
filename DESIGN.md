@@ -156,13 +156,13 @@ no exposed port. Both are thin entries over the same
 scan/runner/renderer internals. Known shared wart: fork PRs get a read-only token —
 punted for MVP.
 
-**Threads become conversational after session persistence ships.** The standardized
-Pi client currently uses an in-memory session for each phase: no transcript is
-written or discovered. The planned per-PR conversation store remains Actions cache
-with artifact fallback or `LEVERET_DATA` in webhook mode. A reply would restore only
-that trusted store, re-verify, then route a human ruling into `learn`. Cache eviction
-must still degrade to a fresh review. Build order remains Actions review workflow,
-then an explicit Pi session store + reply resume, then App-server parity.
+**Audit sessions are evidence, not resumable conversation state.** The standardized
+Pi client persists a fresh native session for every phase and attempt beneath the
+host-owned audit run. It never discovers sessions from the reviewed checkout. A
+future per-PR conversation store may restore only trusted owner storage, re-verify,
+then route a human ruling into `learn`; audit artifacts remain untrusted evidence and
+are never automatic learning input. Cache eviction must still degrade to a fresh
+review.
 
 ## Reporting (product decision, 2026-08-21)
 

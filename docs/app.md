@@ -247,13 +247,15 @@ node dist/app/server.js
 | `--provider` | `LEVERET_RUNNER_PROVIDER` | `openai` |
 | `--max-time` | `LEVERET_RUNNER_MAX_TIME` | `30m` per phase |
 
-Pi runs from in-memory settings/session with a Leveret-owned resource loader and
-an exact tool allowlist. No project-local settings, extensions, skills, templates,
+Pi runs from in-memory settings and a host-owned, per-attempt session store with a
+Leveret-owned resource loader and an exact tool allowlist. No project-local
+settings, extensions, skills, templates,
 themes, context files, MCP configuration, system prompts, or executable discovery
 can extend it. `PI_OFFLINE=1`, `PI_TELEMETRY=0`, and
 `PI_SKIP_VERSION_CHECK=1` are enforced by the runner. A custom `LEVERET_RUNNER`
 command is the escape hatch for other harnesses; it receives
-`LEVERET_REPO`, `LEVERET_BASE`, `LEVERET_LEADS`, `LEVERET_GRAPH` and must print
+`LEVERET_REPO`, `LEVERET_BASE`, `LEVERET_LEADS`, `LEVERET_GRAPH`,
+`LEVERET_TRACE_DIR`, and `LEVERET_RUN_ID`, and must print
 the verify-output JSON (see `agents/verify.md`).
 
 For autonomous reviews, `.leveret.yml` and `.leveret/memory.jsonl` are read from
@@ -274,3 +276,111 @@ are disabled. Metrics are captured durably by the Pi adapter.
 
 Without any runner configured, reviews are deterministic-only: engine findings
 post directly and the walkthrough says the agent lenses did not run.
+
+### Private audit traces
+
+Audit capture is enabled by default. The App creates each run beneath the host-owned
+`LEVERET_DATA` directory, never in the reviewed checkout:
+
+```text
+runs/YYYY/MM/DD/<run-id>/
+  manifest.json
+  app.ndjson
+  runner.ndjson
+  operational.ndjson
+  sessions/<phase>-attempt-<n>.jsonl
+  blobs/sha256/<digest>
+  checksums.sha256
+```
+
+The directory remains `<run-id>.partial` until final checksums validate. A crash
+therefore leaves inspectable partial evidence instead of erasing the attempt. Run
+directories are mode `0700`; files and verified archives are mode `0600`.
+
+Pi's native session JSONL preserves canonical prompts, returned reasoning blocks,
+messages, tool calls/results, usage, stop reasons, model changes, and any compaction
+entries. Leveret also records normalized streaming deltas, App/scanner/publication
+events, subprocess metadata and full output, parse failures, and exact malformed
+assistant text. Large payloads are stored once as SHA-256 blobs. Automatic Pi retry
+and compaction remain disabled; any observed retry or compaction event is visible in
+the trace.
+
+Credential fields, authorization headers, private keys, known token formats, and
+secret-bearing command arguments are redacted before persistence. Environment
+values are never captured; subprocess records contain only environment variable
+names. Raw trace content is never written to operational stdout. The default stdout
+stream contains structured metadata keyed by run ID.
+
+All controls below are host environment settings. Repository and pull-request-head
+configuration cannot change them.
+
+| setting | default | purpose |
+| --- | --- | --- |
+| `LEVERET_TRACE_ENABLED` | `true` | Enable or explicitly disable capture. |
+| `LEVERET_TRACE_ROOT` | `$LEVERET_DATA/runs` | Canonical private trace root. |
+| `LEVERET_TRACE_POLICY` | all `full`, operational `metadata` | JSON object mapping stable categories to `full`, `metadata`, `hash`, or `off`. |
+| `LEVERET_TRACE_SINKS` | `private,operational,archive` | Route capture to the private store, metadata logs, a verified archive, and/or the export handoff (`export`). |
+| `LEVERET_TRACE_CATEGORY_SINKS` | unset | JSON object overriding sinks for individual categories; differing Pi transcript sinks disable unfiltered native sessions. |
+| `LEVERET_TRACE_CATEGORY_RETENTION_DAYS` | unset | JSON object setting finite retention for private category payloads. Finite categories cannot use immutable archive/export sinks. |
+| `LEVERET_TRACE_FAILURE` | `fail` | `fail` aborts rather than silently losing evidence; `continue` emits a structured gap. |
+| `LEVERET_TRACE_ARCHIVE_CODEC` | `auto` | `zstd`, `gzip`, or `auto` (`.tar.zst` when zstd exists, otherwise `.tar.gz`). |
+| `LEVERET_TRACE_COMPRESSION_LEVEL` | `6` | Archive compression level. |
+| `LEVERET_TRACE_KEEP_UNPACKED` | `true` | Retain the verified run directory after archiving. |
+| `LEVERET_TRACE_ARCHIVE_INCOMPLETE` | `true` | Archive failed and incomplete finalized runs. |
+| `LEVERET_TRACE_RETENTION_DAYS` | `0` | Archive age limit; zero disables this limit. |
+| `LEVERET_TRACE_RETENTION_COUNT` | `0` | Archive count limit; zero disables this limit. |
+| `LEVERET_TRACE_RETENTION_BYTES` | `0` | Archive byte limit; zero disables this limit. |
+| `LEVERET_TRACE_MIN_FREE_BYTES` | `0` | Refuse capture below this free-space floor. |
+| `LEVERET_TRACE_BLOB_BYTES` | `65536` | Content-address payloads at or above this size. |
+
+Stable categories are `app`, `repository`, `prompts`, `assistant`, `tools`,
+`subprocess`, `provider`, `lifecycle`, `operational`, and `result`. Narrowing any of
+the Pi transcript categories disables unfiltered native session JSONL and retains
+only policy-filtered normalized events; the manifest records that distinction.
+The capability ledger records the CodeGraph version and binary hash, Serena server
+version and bundle-manifest hash, and the effective Pi tool-schema and source
+hashes. Its provider-keyed visibility matrix states which prompt, response,
+reasoning, and assembled-request surfaces were captured or unavailable.
+Finite-retention payloads are isolated under `categories/<category>/`; their stable
+stream entries retain hashes and sizes after expiry, while raw sidecars and
+unreferenced blobs are deleted, the manifest is marked `expired`, and checksums are
+rebuilt. Run-level age/count/byte retention applies independently to unpacked runs
+and archives, with a retention event written before every deletion.
+
+Every finalized archive is listed and verified before it is reported. The final
+structured stdout event contains the run ID, completeness, archive path, SHA-256,
+media type, and size. Containers and GitHub Actions can hand that path to their
+native artifact step; Leveret does not embed a provider-specific uploader or invent
+encryption. Use operator-owned filesystem/storage encryption for raw traces.
+
+Inspect a run without the repository or provider:
+
+```sh
+leveret-audit list "$LEVERET_DATA/runs"
+leveret-audit validate "$LEVERET_DATA/runs/YYYY/MM/DD/RUN_ID"
+leveret-audit summary "$LEVERET_DATA/runs/YYYY/MM/DD/RUN_ID"
+leveret-audit extract "$LEVERET_DATA/runs/YYYY/MM/DD/RUN_ID" review
+leveret-audit extract "$LEVERET_DATA/runs/YYYY/MM/DD/RUN_ID" TOOL_CALL_OR_BLOB_ID
+```
+
+Back up and restore the trace root as private data, preserving modes and archive
+checksums. Upgrades preserve the versioned schema. Uninstalling Leveret must not
+remove the trace root; delete it only as a separate, explicit owner action.
+
+The manifest's capability ledger distinguishes captured, owner-disabled,
+provider/harness-unavailable, security-redacted, and incomplete surfaces. Pi 0.84.2
+does not expose hidden provider chain-of-thought, internal reads performed inside an
+opaque provider tool, or the exact assembled provider request through its public
+SDK; Leveret marks those surfaces unavailable. A custom runner is fully traced only
+when it emits the versioned Leveret protocol into `LEVERET_TRACE_DIR`; otherwise the
+App can capture only its inputs, argv, sanitized environment names, stdout/stderr,
+exit state, timing, and final result.
+
+A custom harness opts into the protocol by appending complete JSON lines to
+`$LEVERET_TRACE_DIR/runner.ndjson`. Each envelope uses schema `1` and carries
+`run_id`, `producer: "runner"`, a producer-local `sequence`, ISO `wall_time`,
+monotonic milliseconds, `category`, `event`, `completeness`, `content_policy`, and
+either `payload`, `payload_ref`, or hash/size `metadata`; phase, attempt, session,
+turn, tool-call, and evidence IDs are included when applicable. It may also write
+`runner-capabilities.json`. The App validates and checksums these files during
+finalization; malformed lines make the trace incomplete rather than disappearing.

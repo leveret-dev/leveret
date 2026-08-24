@@ -13,8 +13,9 @@ import {
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, hostname, tmpdir } from "node:os";
 import { join } from "node:path";
+import { auditConfig, openRunnerAudit, withAuditTrace, type AuditWriter } from "../audit.js";
 import { loadContract } from "../prompts.js";
 import { which } from "../exec.js";
 import { buildPiSystemPrompt, PI_SYSTEM_PROMPT_VERSION } from "./pi-system.js";
@@ -98,7 +99,7 @@ export function parseAssistantJson(value: string): unknown {
 }
 
 export interface ToolMetric {
-  phase: "review" | "verify";
+  phase: "review" | "verify" | "verify-correction";
   toolCallId: string;
   toolName: string;
   startedAt: number;
@@ -112,6 +113,14 @@ export interface ToolMetric {
   args_sha256: string;
   server: "leveret" | "codegraph" | "serena" | "probe";
   cache: "unknown" | "n/a";
+}
+
+export function classifyToolOutcome(isError: boolean, timedOut: boolean): ToolMetric["outcome"] {
+  return timedOut ? "timeout" : isError ? "error" : "success";
+}
+
+export function classifyAuth(type: "api_key" | "oauth" | undefined, subscription: boolean): "subscription-oauth" | "oauth" | "api-key-or-local" {
+  return type === "oauth" ? subscription ? "subscription-oauth" : "oauth" : "api-key-or-local";
 }
 
 export function toolMetricsSummary(metrics: ToolMetric[]): Record<string, Record<string, { calls: number; errors: number; duration_ms: number }>> {
@@ -154,8 +163,12 @@ export function createPiRuntimeDirectory(): Promise<string> {
   return mkdtemp(join(tmpdir(), "leveret-pi-"));
 }
 
-async function runPhase(options: {
-  phase: "review" | "verify";
+function backgroundAudit(record: Promise<void> | undefined): void {
+  void record?.catch(() => {}); // flush() surfaces the queued failure at the phase boundary
+}
+
+export interface RunPhaseOptions {
+  phase: "review" | "verify" | "verify-correction";
   prompt: string;
   repo: string;
   runtimeDir: string;
@@ -165,7 +178,12 @@ async function runPhase(options: {
   systemPrompt: string;
   tools: Awaited<ReturnType<typeof buildPiTools>>["tools"];
   metrics: ToolMetric[];
-}): Promise<unknown> {
+  toolOutcomes: Map<string, { timedOut: boolean }>;
+  audit?: AuditWriter;
+  createSession?: typeof createAgentSession;
+}
+
+export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
   const phaseDeadline = Date.now() + options.runtime.deadlineMs;
   for (let attempt = 1; attempt <= 2; attempt++) {
     const settingsManager = SettingsManager.inMemory(
@@ -179,7 +197,27 @@ async function runPhase(options: {
     );
     const resourceLoader = buildPiResourceLoader(options.systemPrompt);
     const toolNames = options.tools.map((tool) => tool.name);
-    const { session } = await createAgentSession({
+    const persistNativeSession = options.audit?.nativeSessionsEnabled() === true;
+    const sessionManager = SessionManager.inMemory(options.runtimeDir);
+    await options.audit?.record("prompts", "attempt_started", {
+      prompt: options.prompt,
+      prompt_sha256: createHash("sha256").update(options.prompt).digest("hex"),
+      system_prompt: options.systemPrompt,
+      system_prompt_sha256: createHash("sha256").update(options.systemPrompt).digest("hex"),
+      system_prompt_insertion_count: 1,
+      system_prompt_reinsertion_count: 0,
+      tools: options.tools.map((tool) => ({ name: tool.name, description: tool.description, parameters: tool.parameters })),
+      resources: { extensions: [], skills: [], prompts: [], themes: [], agents_files: [] },
+    }, { phase: options.phase, attempt });
+    await options.audit?.record("provider", "request_metadata", {
+      provider: options.model.provider,
+      model: options.model.id,
+      api: options.model.api,
+      thinking: options.runtime.thinking,
+      prompt_sha256: createHash("sha256").update(options.prompt).digest("hex"),
+      system_prompt_sha256: createHash("sha256").update(options.systemPrompt).digest("hex"),
+    }, { phase: options.phase, attempt });
+    const { session } = await (options.createSession ?? createAgentSession)({
       cwd: options.runtimeDir,
       agentDir: process.env.LEVERET_PI_AGENT_DIR ?? getAgentDir(),
       modelRuntime: options.modelRuntime,
@@ -188,11 +226,13 @@ async function runPhase(options: {
       tools: toolNames,
       customTools: options.tools,
       resourceLoader,
-      sessionManager: SessionManager.inMemory(options.runtimeDir),
+      sessionManager,
       settingsManager,
     });
     let assistantText = "";
+    let turn = 0;
     const starts = new Map<string, { name: string; at: number; inputBytes: number; argsSha256: string }>();
+    const partials = new Map<string, string>();
     const unsubscribe = session.subscribe((event) => {
       if (event.type === "tool_execution_start") {
         const encoded = JSON.stringify(event.args ?? {});
@@ -202,6 +242,15 @@ async function runPhase(options: {
           inputBytes: Buffer.byteLength(encoded),
           argsSha256: createHash("sha256").update(encoded).digest("hex"),
         });
+        backgroundAudit(options.audit?.record("tools", "execution_start", { tool: event.toolName, args: event.args }, { phase: options.phase, attempt, sessionId: session.sessionId, turn, toolCallId: event.toolCallId, evidenceId: event.toolCallId }));
+      } else if (event.type === "tool_execution_update") {
+        const current = JSON.stringify(event.partialResult ?? {});
+        const previous = partials.get(event.toolCallId) ?? "";
+        partials.set(event.toolCallId, current);
+        backgroundAudit(options.audit?.record("tools", "execution_update", current.startsWith(previous)
+          ? { tool: event.toolName, encoding: "prefix-delta", delta: current.slice(previous.length) }
+          : { tool: event.toolName, encoding: "snapshot", result: event.partialResult },
+        { phase: options.phase, attempt, sessionId: session.sessionId, turn, toolCallId: event.toolCallId, evidenceId: event.toolCallId }));
       } else if (event.type === "tool_execution_end") {
         const start = starts.get(event.toolCallId);
         const output = JSON.stringify(event.result ?? {});
@@ -213,7 +262,7 @@ async function runPhase(options: {
               ? "probe"
               : "leveret";
         const endedAt = Date.now();
-        const timedOut = /timed? ?out|timeout|deadline|aborted|exceeded .*ms/i.test(output);
+        const timedOut = options.toolOutcomes.get(event.toolCallId)?.timedOut === true;
         options.metrics.push({
           phase: options.phase,
           toolCallId: event.toolCallId,
@@ -222,7 +271,7 @@ async function runPhase(options: {
           endedAt,
           duration_ms: Math.max(0, endedAt - (start?.at ?? endedAt)),
           isError: event.isError,
-          outcome: timedOut ? "timeout" : event.isError ? "error" : "success",
+          outcome: classifyToolOutcome(event.isError, timedOut),
           input_bytes: start?.inputBytes ?? 0,
           output_bytes: Buffer.byteLength(output),
           output_tokens_estimate: Math.ceil(Buffer.byteLength(output) / 4),
@@ -230,11 +279,28 @@ async function runPhase(options: {
           server,
           cache: server === "serena" || server === "codegraph" ? "unknown" : "n/a",
         });
+        backgroundAudit(options.audit?.record("tools", "execution_end", { tool: event.toolName, result: event.result, is_error: event.isError, timed_out: timedOut }, { phase: options.phase, attempt, sessionId: session.sessionId, turn, toolCallId: event.toolCallId, evidenceId: event.toolCallId }));
       } else if (event.type === "message_end" && event.message.role === "assistant") {
         assistantText = event.message.content
           .filter((item) => item.type === "text")
           .map((item) => item.text)
           .join("");
+        backgroundAudit(options.audit?.record("assistant", "message_end", { message: event.message }, { phase: options.phase, attempt, sessionId: session.sessionId, turn }));
+        backgroundAudit(options.audit?.record("provider", "response_metadata", {
+          provider: event.message.provider,
+          model: event.message.model,
+          api: event.message.api,
+          usage: event.message.usage,
+          stop_reason: event.message.stopReason,
+          error: event.message.errorMessage,
+        }, { phase: options.phase, attempt, sessionId: session.sessionId, turn }));
+      } else if (event.type === "message_update") {
+        backgroundAudit(options.audit?.record("assistant", "message_delta", { update: event.assistantMessageEvent }, { phase: options.phase, attempt, sessionId: session.sessionId, turn }));
+      } else if (event.type === "turn_start") {
+        turn++;
+        backgroundAudit(options.audit?.record("lifecycle", event.type, {}, { phase: options.phase, attempt, sessionId: session.sessionId, turn }));
+      } else if (event.type !== "entry_appended") {
+        backgroundAudit(options.audit?.record("lifecycle", event.type, event, { phase: options.phase, attempt, sessionId: session.sessionId, turn }));
       }
     });
     try {
@@ -245,12 +311,33 @@ async function runPhase(options: {
         remainingMs,
         () => session.abort(),
       );
-      return parseAssistantJson(assistantText);
+      try {
+        const parsed = parseAssistantJson(assistantText);
+        await options.audit?.record("result", "attempt_parsed", { assistant_text: assistantText }, { phase: options.phase, attempt, sessionId: session.sessionId });
+        return parsed;
+      } catch (error) {
+        await options.audit?.record("result", "attempt_parse_failed", { assistant_text: assistantText, error }, { phase: options.phase, attempt, sessionId: session.sessionId });
+        throw error;
+      }
     } catch (error) {
+      await options.audit?.record("lifecycle", "attempt_failed", { error, assistant_text: assistantText }, { phase: options.phase, attempt, sessionId: session.sessionId });
       if (/exceeded .*ms/.test(String(error)) || attempt === 2) throw error;
     } finally {
       unsubscribe();
       session.dispose();
+      if (persistNativeSession) {
+        try {
+          const header = sessionManager.getHeader();
+          const entries = [...(header ? [header] : []), ...sessionManager.getEntries()];
+          if (entries.length < 2) throw new Error("Pi emitted no persistent session entries");
+          await options.audit!.persistNativeSession(entries, `${options.phase}-attempt-${attempt}.jsonl`);
+          await options.audit?.record("lifecycle", "native_session_persisted", { path: `sessions/${options.phase}-attempt-${attempt}.jsonl` }, { phase: options.phase, attempt, sessionId: session.sessionId });
+        } catch (error) {
+          options.audit?.gap(`native session unavailable for ${options.phase} attempt ${attempt}: ${String(error)}`);
+          if (options.audit?.config.failurePolicy === "fail") throw error;
+        }
+      }
+      await options.audit?.flush();
     }
   }
   throw new Error("Pi phase failed without an error");
@@ -270,7 +357,7 @@ function cliParams(argv: string[]): PiRunnerParams {
   return params;
 }
 
-async function runMain(runtimeDir: string): Promise<void> {
+async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
   const repo = process.env.LEVERET_REPO;
   const base = process.env.LEVERET_BASE;
   if (!repo || !base) throw new Error("LEVERET_REPO and LEVERET_BASE are required");
@@ -320,6 +407,13 @@ async function runMain(runtimeDir: string): Promise<void> {
   }
   let bundle: Awaited<ReturnType<typeof buildPiTools>> | undefined;
   try {
+    const toolOutcomes = new Map<string, { timedOut: boolean }>();
+    const serenaManifest = process.env.LEVERET_SERENA_BUNDLE
+      ? join(process.env.LEVERET_SERENA_BUNDLE, "leveret-lsp-manifest.json")
+      : undefined;
+    const serenaBundleSha256 = serenaManifest && existsSync(serenaManifest)
+      ? createHash("sha256").update(await readFile(serenaManifest)).digest("hex")
+      : undefined;
     bundle = await buildPiTools({
       repo,
       graphLive: process.env.LEVERET_GRAPH === "1",
@@ -329,10 +423,26 @@ async function runMain(runtimeDir: string): Promise<void> {
       rulesRoot: trusted.root,
       memoryRepo: trusted.root,
       base,
+      serenaBundleSha256,
+      onToolOutcome: (toolCallId, outcome) => toolOutcomes.set(toolCallId, outcome),
     });
     const toolNames = bundle.tools.map((tool) => tool.name);
     const systemPrompt = buildPiSystemPrompt(toolNames);
     const systemPromptSha = createHash("sha256").update(systemPrompt).digest("hex");
+    await audit?.writeCapabilities({
+      provider_visibility: {
+        [resolved.model.provider]: {
+          assembled_request_payload: "unavailable-from-pinned-sdk",
+          effective_system_prompt: "captured",
+          phase_prompts: "captured",
+          response_metadata: "captured",
+          returned_text_and_reasoning: "captured",
+          hidden_provider_reasoning: "unavailable",
+        },
+      },
+      model: `${resolved.model.provider}/${resolved.model.id}`,
+      tool_capabilities: bundle.capabilities,
+    });
     const metrics: ToolMetric[] = [];
     const reviewPrompt = piContract(await loadContract("review", { repo, base, rulingsRepo: trusted.root }));
     const review = await runPhase({
@@ -346,6 +456,8 @@ async function runMain(runtimeDir: string): Promise<void> {
       systemPrompt,
       tools: bundle.tools,
       metrics,
+      toolOutcomes,
+      audit,
     });
     const concerns = JSON.stringify((review as { concerns?: unknown[] }).concerns ?? [], null, 1);
     const leads = process.env.LEVERET_LEADS ? await readFile(process.env.LEVERET_LEADS, "utf8") : "(scan leads unavailable)";
@@ -369,11 +481,13 @@ async function runMain(runtimeDir: string): Promise<void> {
       systemPrompt,
       tools: bundle.tools,
       metrics,
+      toolOutcomes,
+      audit,
     });
     const gaps = verifySchemaGaps(verify, Boolean(prior));
     if (gaps.length > 0) {
       verify = await runPhase({
-        phase: "verify",
+        phase: "verify-correction",
         prompt: `${verifyPrompt}\n\n## Schema correction\nYour previous answer was missing or empty: ${gaps.join(", ")}. Re-emit the full object required by the contract.`,
         repo,
         runtimeDir,
@@ -383,24 +497,28 @@ async function runMain(runtimeDir: string): Promise<void> {
         systemPrompt,
         tools: bundle.tools,
         metrics,
+        toolOutcomes,
+        audit,
       });
     }
+    const authCheck = await modelRuntime.checkAuth(resolved.model.provider).catch(() => undefined);
+    const subscriptionOAuth = authCheck?.type === "oauth"
+      && modelRuntime.getProvider(resolved.model.provider)?.auth.oauth?.isSubscription === true;
     const out = verify as Record<string, unknown>;
     out.run_configuration = {
       harness: `pi/${PI_VERSION}`,
+      process: { pid: process.pid, hostname: hostname(), wall_time: new Date().toISOString(), monotonic_time_origin_ms: performance.timeOrigin },
       client: "leveret-runner-pi",
       model: `${resolved.model.provider}/${resolved.model.id}`,
       thinking: runtime.thinking,
-      auth: modelRuntime.isUsingSubscription(resolved.model.provider)
-        ? "subscription-oauth"
-        : modelRuntime.isUsingOAuth(resolved.model.provider)
-          ? "oauth"
-          : "api-key-or-local",
+      auth: classifyAuth(authCheck?.type, subscriptionOAuth),
+      auth_source: authCheck?.source,
       system_prompt: { version: PI_SYSTEM_PROMPT_VERSION, sha256: systemPromptSha },
       capabilities: { ...bundle.capabilities, ...(lspError ? { lsp_error: lspError } : {}) },
       tools: toolMetricsSummary(metrics),
       tool_calls: metrics,
     };
+    await audit?.record("result", "runner_result", out);
     process.stdout.write(JSON.stringify(out, null, 1));
   } finally {
     if (bundle) await bundle.close();
@@ -412,10 +530,23 @@ async function runMain(runtimeDir: string): Promise<void> {
 export async function main(): Promise<void> {
   const previousCwd = process.cwd();
   const runtimeDir = await createPiRuntimeDirectory();
+  const repo = process.env.LEVERET_REPO;
+  if (!repo) throw new Error("LEVERET_REPO and LEVERET_BASE are required");
+  const audit = await openRunnerAudit(auditConfig(process.env.LEVERET_DATA ?? join(homedir(), ".leveret-app")), process.env, repo);
   process.chdir(runtimeDir);
   try {
-    await runMain(runtimeDir);
+    await withAuditTrace(audit, () => runMain(runtimeDir, audit));
   } finally {
+    await audit?.writeCapabilities({
+      harness: `pi/${PI_VERSION}`,
+      native_sessions: audit.nativeSessionsEnabled() ? "captured" : "disabled-by-policy",
+      normalized_events: "captured",
+      provider_request_payload: "unavailable-from-pinned-sdk",
+      hidden_provider_reasoning: "unavailable",
+      checkout_internal_reads: "unavailable",
+      resources: { extensions: [], skills: [], prompts: [], hooks: [] },
+    });
+    await audit?.flush();
     process.chdir(previousCwd);
     await rm(runtimeDir, { recursive: true, force: true });
   }

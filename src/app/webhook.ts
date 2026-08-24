@@ -70,6 +70,8 @@ export type Job =
       cloneUrl: string;
       action: string;
       title: string;
+      event: "pull_request";
+      deliveryId?: string;
       installationId?: number;
     }
   | {
@@ -79,6 +81,8 @@ export type Job =
       author: string;
       body: string;
       inReplyTo: number;
+      event: "pull_request_review_comment";
+      deliveryId?: string;
       installationId?: number;
     };
 
@@ -101,7 +105,7 @@ interface PullPayload {
   installation?: { id: number };
 }
 
-export function routeEvent(event: string, payload: PullPayload): Job | null {
+export function routeEvent(event: string, payload: PullPayload, deliveryId?: string): Job | null {
   if (event === "pull_request" && payload.action && REVIEW_ACTIONS.has(payload.action)) {
     const pr = payload.pull_request;
     if (!pr) return null;
@@ -114,6 +118,8 @@ export function routeEvent(event: string, payload: PullPayload): Job | null {
       cloneUrl: pr.base.repo.clone_url,
       action: payload.action,
       title: pr.title ?? "",
+      event: "pull_request",
+      ...(deliveryId ? { deliveryId } : {}),
       ...(payload.installation ? { installationId: payload.installation.id } : {}),
     };
   }
@@ -129,6 +135,8 @@ export function routeEvent(event: string, payload: PullPayload): Job | null {
       author: c.user?.login ?? "unknown",
       body: c.body ?? "",
       inReplyTo: c.in_reply_to_id,
+      event: "pull_request_review_comment",
+      ...(deliveryId ? { deliveryId } : {}),
       ...(payload.installation ? { installationId: payload.installation.id } : {}),
     };
   }
