@@ -60,13 +60,13 @@ describe("delta scan", () => {
     expect(result.findings).toEqual([]);
     expect(result.preExisting).toBe(2);
     expect(result.engines).toEqual([
-      { engine: "ruff", status: "filtered", found: 2, kept: 0 },
+      expect.objectContaining({ engine: "ruff", status: "filtered", found: 2, kept: 0, selectedFiles: ["app.py"], durationMs: expect.any(Number) }),
     ]);
   });
 
   it("kept/found counts surface on engines that keep findings", async () => {
     const result = await scan({ repo, base: "base", engines: ["ruff"] });
-    expect(result.engines).toEqual([{ engine: "ruff", status: "findings", found: 2, kept: 1 }]);
+    expect(result.engines).toEqual([expect.objectContaining({ engine: "ruff", status: "findings", found: 2, kept: 1, selectedFiles: ["app.py"], durationMs: expect.any(Number) })]);
   });
 
   it("files-mode scans have no base to compare against: everything is introduced", async () => {

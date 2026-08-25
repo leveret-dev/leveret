@@ -29,6 +29,10 @@ export interface EngineReport {
   found?: number;
   /** findings surviving delta + profile + memory — what the result actually shows */
   kept?: number;
+  /** exact profile-filtered input selected for the head execution */
+  selectedFiles?: string[];
+  /** wall time observed around selection, availability probing, and execution */
+  durationMs?: number;
 }
 
 export interface ScanResult {

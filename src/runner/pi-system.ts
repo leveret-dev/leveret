@@ -1,4 +1,4 @@
-export const PI_SYSTEM_PROMPT_VERSION = "4";
+export const PI_SYSTEM_PROMPT_VERSION = "5";
 
 export function buildPiSystemPrompt(toolNames: string[]): string {
   const available = toolNames.sort().map((name) => `- ${name}`).join("\n");
@@ -14,6 +14,7 @@ Evidence rules:
 - Do not infer callers, dependencies, or impact from textual or AST similarity.
 - A missing or failed capability is visible evidence, never permission to pretend it ran.
 - Static-analyzer output is a lead, not a verdict.
+- The supplied evidence pack is the pinned, bounded scope/applicability/facts/lead handoff. Respect every omission, degradation, and file/analyzer disposition; never reinterpret static cleanliness as semantic coverage.
 
 Tool routing:
 - leveret_diff: compact exact-base/head change manifest or bounded patches for explicit manifest paths. Never request an unscoped whole diff; follow nextCursor until the selected evidence is complete and account for every omitted item.

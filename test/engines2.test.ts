@@ -28,7 +28,7 @@ describe("typos engine", () => {
 describe("jscpd engine", () => {
   it("is profile-gated: without a corpus it is not applicable", async () => {
     const result = await scan({ repo, files: ["dup1.py"], engines: ["jscpd"] });
-    expect(result.engines).toEqual([{ engine: "jscpd", status: "not-applicable" }]);
+    expect(result.engines).toEqual([expect.objectContaining({ engine: "jscpd", status: "not-applicable", selectedFiles: [], durationMs: expect.any(Number) })]);
   });
 
   it("reports duplication touching a changed file, naming the other end", async () => {

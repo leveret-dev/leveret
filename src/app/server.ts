@@ -6,10 +6,12 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { auditConfig, createAuditRun, redactAuditText, withAuditTrace } from "../audit.js";
 import { materializeChangeEvidence } from "../change-evidence.js";
+import { createEvidencePack, writeEvidencePack } from "../evidence-pack.js";
 import { loadProfile } from "../profile.js";
 import { scan } from "../scan.js";
 import type { Finding, ScanResult } from "../findings.js";
 import { ENGINES } from "../engines/registry.js";
+import { projectFacts } from "../project-facts.js";
 import { ensureGraph } from "./graph.js";
 import { appAccess, fetchReviewThreads, makeApp, postComment, postReview, replyInThread, resolveThread, tokenAccess, updateComment, type GitHubAccess } from "./github.js";
 import { parsePriorThreads, resolvedReply, type PriorFinding } from "./incremental.js";
@@ -29,13 +31,13 @@ import { formatLine, makeLogger } from "./log.js";
 import { materializeTrustedReviewState, type TrustedReviewState } from "../trusted-state.js";
 import { preBodyReject, readCappedBody, routeEvent, verifySignature, type Job } from "./webhook.js";
 import { relayChallengeAllowed, relayConfigFromEnv, verifyRelayDelivery } from "./relay.js";
-import { executableIdentity, run, runStreaming, safeChildEnvironment, type RunOpts } from "../exec.js";
+import { run, runStreaming, safeChildEnvironment, type RunOpts } from "../exec.js";
 import { writeWorkItem } from "../work-item.js";
 
 // The App layer: GitHub plumbing only. It holds the App key and webhook secret —
 // never a model credential. The BYOAI seam is LEVERET_RUNNER: a user-supplied
-// command (their agent, their provider, their hardware) that turns scan leads into
-// a verified report. Without one, reviews run deterministic-only.
+// command (their agent, their provider, their hardware) that turns the bounded
+// evidence pack into a verified report. Without one, reviews run deterministic-only.
 //
 // Unconfigured servers boot into SETUP MODE: /setup drives GitHub's App Manifest
 // flow, creating an App the USER owns (webhook pre-pointed here) and storing the
@@ -187,13 +189,33 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
         allowCustomEngines: false,
       });
       await audit?.record("repository", "scan_completed", { base_ref: baseRef, base_sha: base, head_sha: job.headSha, graph, scan: result });
-      const engineCapabilities = Object.fromEntries(await Promise.all(result.engines.map(async (report) => {
-        const engine = ENGINES.find((candidate) => candidate.id === report.engine);
-        return [report.engine, { status: report.status, ...(engine ? await executableIdentity(engine.bin, work) : { available: false }) }];
-      })));
+      const facts = await projectFacts(work);
+      const evidencePackPath = join(runnerWork, "evidence-pack.v1.json");
+      const evidencePack = await createEvidencePack({
+        repo: work,
+        manifest: evidence.manifest,
+        profile,
+        profilePath: trusted.profilePath,
+        rulesRoot: trusted.root,
+        project: facts,
+        scan: result,
+        engines: ENGINES,
+      });
+      const evidencePackFile = await writeEvidencePack(work, evidencePackPath, evidencePack);
+      await audit?.record("repository", "evidence_pack", {
+        pack: evidencePack,
+        schema: evidencePack.schema,
+        sha256: evidencePackFile.sha256,
+        bytes: evidencePackFile.bytes,
+      });
+      const engineCapabilities = Object.fromEntries(evidencePack.analyzers.map((analyzer) => [
+        analyzer.id,
+        { status: analyzer.staticResult, lifecycle: analyzer.lifecycle, ...(analyzer.executable ?? { available: false }) },
+      ]));
       await audit?.writeCapabilities({
         graph,
         scanner: { engines: engineCapabilities },
+        evidence_pack: { schema: evidencePack.schema, sha256: evidencePackFile.sha256, bytes: evidencePackFile.bytes },
         node: process.version,
       });
 
@@ -214,8 +236,6 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
       await audit?.record("repository", "prior_findings", prior);
       let verify: VerifyOutput;
       if (process.env.LEVERET_RUNNER) {
-        const leadsPath = join(runnerWork, "leads.json");
-        await writeFile(leadsPath, JSON.stringify(result, null, 1));
         const workItemFile = await writeWorkItem(runnerWork, job.workItem);
         await audit?.record("app", "work_item_materialized", {
           schema: job.workItem.schema,
@@ -234,9 +254,10 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
           ...process.env,
           LEVERET_REPO: work,
           LEVERET_BASE: base,
-          LEVERET_LEADS: leadsPath,
           LEVERET_WORK_ITEM: workItemFile.path,
           LEVERET_CHANGE_MANIFEST: evidencePath,
+          LEVERET_EVIDENCE_PACK: evidencePackFile.path,
+          LEVERET_EVIDENCE_PACK_SHA256: evidencePackFile.sha256,
           LEVERET_GRAPH: graph.ok ? "1" : "0",
           ...(prior.length > 0 ? { LEVERET_PRIOR: join(runnerWork, "prior.json") } : {}),
           ...(audit ? { LEVERET_TRACE_DIR: audit.partialDir, LEVERET_RUN_ID: runId, LEVERET_DATA: DATA_DIR } : {}),

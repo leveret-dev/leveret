@@ -74,6 +74,8 @@ describe("scan", () => {
     // nothing to select on a plain text file.
     for (const r of result.engines) {
       expect(r.status).toBe(r.engine === "typos" ? "clean" : "not-applicable");
+      expect(r.selectedFiles).toEqual(r.engine === "typos" ? ["base.txt"] : []);
+      expect(r.durationMs).toEqual(expect.any(Number));
     }
     expect(result.findings).toEqual([]);
   });
@@ -270,7 +272,7 @@ describe("P4 engines", () => {
   it("without a rule pack the ast-grep engine is not applicable", async () => {
     writeFileSync(join(repo, ".leveret.yml"), "# empty profile\n");
     const result = await scan({ repo, files: ["bad2.py"], engines: ["ast-grep"] });
-    expect(result.engines).toEqual([{ engine: "ast-grep", status: "not-applicable" }]);
+    expect(result.engines).toEqual([expect.objectContaining({ engine: "ast-grep", status: "not-applicable", selectedFiles: [], durationMs: expect.any(Number) })]);
   });
 });
 

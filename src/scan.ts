@@ -70,20 +70,21 @@ async function runEngines(
   const findings: Finding[] = [];
   await Promise.all(
     wanted.map(async (engine) => {
+      const startedAt = Date.now();
       // Rule packs resolve against the HEAD repo, never ctx.repo: during the delta
       // base pass ctx.repo is the base worktree, where a pack added by the change
       // under review does not exist yet.
       const engineProfile = profile.engines[engine.id];
       const rules = engineProfile?.rules?.map((r) => resolve(headRepo, r));
       const ectx: ScanContext = { ...ctx, rules, engineProfile };
-      const selected = scopeFiles(profile, engine.id, engine.select(ectx));
+      const selected = scopeFiles(profile, engine.id, engine.select(ectx)).sort();
       if (selected.length === 0) {
-        reports?.push({ engine: engine.id, status: "not-applicable" });
+        reports?.push({ engine: engine.id, status: "not-applicable", selectedFiles: [], durationMs: Date.now() - startedAt });
         return;
       }
       // custom engines may name a repo-local script rather than a PATH binary
       if (!(await which(engine.bin)) && !existsSync(join(ctx.repo, engine.bin))) {
-        reports?.push({ engine: engine.id, status: "missing", detail: `${engine.bin} not on PATH` });
+        reports?.push({ engine: engine.id, status: "missing", detail: `${engine.bin} not on PATH`, selectedFiles: selected, durationMs: Date.now() - startedAt });
         return;
       }
       try {
@@ -105,9 +106,11 @@ async function runEngines(
           status: found.length > 0 ? "findings" : "clean",
           found: found.length,
           kept: found.length,
+          selectedFiles: selected,
+          durationMs: Date.now() - startedAt,
         });
       } catch (err) {
-        reports?.push({ engine: engine.id, status: "error", detail: String(err).slice(0, 500) });
+        reports?.push({ engine: engine.id, status: "error", detail: String(err).slice(0, 500), selectedFiles: selected, durationMs: Date.now() - startedAt });
       }
     }),
   );

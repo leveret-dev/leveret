@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
@@ -8,9 +8,14 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { auditConfig, createAuditRun, withAuditTrace } from "../src/audit.js";
 import { materializeChangeEvidence } from "../src/change-evidence.js";
+import { createEvidencePack, writeEvidencePack } from "../src/evidence-pack.js";
 import { runStreaming } from "../src/exec.js";
 import { ensureGraph } from "../src/app/graph.js";
 import { scan } from "../src/scan.js";
+import { ENGINES } from "../src/engines/registry.js";
+import { loadProfile } from "../src/profile.js";
+import { projectFacts } from "../src/project-facts.js";
+import { materializeTrustedReviewState, type TrustedReviewState } from "../src/trusted-state.js";
 import { parseWorkItem, type WorkItem } from "../src/work-item.js";
 
 export const CORPUS_SCHEMA = "leveret.replay-corpus/v1" as const;
@@ -188,6 +193,7 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
   let audit: Awaited<ReturnType<typeof createAuditRun>> = undefined;
   let auditRunDir: string | null = null;
   let preconditions: PreconditionResult[] = [];
+  let trusted: TrustedReviewState | undefined;
   try {
     await git(repo, ["worktree", "add", "--quiet", "--detach", checkout, plan.head]);
     const actualHead = await git(checkout, ["rev-parse", "HEAD"]);
@@ -197,11 +203,12 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
     preconditions = await executePreconditions(checkout, rows.flatMap((row) => row.preconditions));
     const failed = preconditions.find((condition) => !condition.ok);
     if (failed) return invalid(plan, "precondition", "failed-precondition", `${failed.precondition.path}: ${failed.detail}`, preconditions);
+    trusted = await materializeTrustedReviewState(checkout, plan.base);
     const traceRoot = resolve(options.traceRoot ?? join(tmpdir(), "leveret-replay-traces"));
     const harnessRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
     for (const rootPath of [harnessRoot, repo]) { const rel = relative(rootPath, traceRoot); if (rel === "" || (!rel.startsWith(`..${sep}`) && rel !== "..")) return invalid(plan, "preparation", "orchestration-failure", "private trace root must stay outside both repositories", preconditions); }
     await mkdir(traceRoot, { recursive: true });
-    const runId = `replay-${plan.id}-${randomUUID()}`;
+    const runId = randomUUID();
     const traceEnvironment = { LEVERET_TRACE_ENABLED: "1", LEVERET_TRACE_ROOT: traceRoot, LEVERET_TRACE_SINKS: "private", LEVERET_TRACE_FAILURE: "fail", LEVERET_TRACE_KEEP_UNPACKED: "1" };
     audit = await createAuditRun(auditConfig(traceRoot, traceEnvironment), runId);
     if (!audit) return invalid(plan, "audit", "incomplete-audit", "#51 audit capture is disabled", preconditions);
@@ -225,16 +232,36 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
           bytes: auditPatch.bytes,
         });
         const graph = await ensureGraph(checkout);
-        const scanResult = await (options.scanFn ?? scan)({ repo: checkout, base: evidence.manifest.base, manifest: evidence.manifest, profilePath: options.profilePath, allowCustomEngines: false });
+        const effectiveProfilePath = options.profilePath ?? trusted!.profilePath;
+        const scanResult = await (options.scanFn ?? scan)({
+          repo: checkout,
+          base: evidence.manifest.base,
+          manifest: evidence.manifest,
+          profilePath: effectiveProfilePath,
+          rulesRoot: trusted!.root,
+          memoryRepo: trusted!.root,
+          allowCustomEngines: false,
+        });
         await audit!.record("repository", "scan_completed", { base_sha: plan.base, head_sha: plan.head, graph, scan: scanResult });
-        await audit!.writeCapabilities({ graph, scanner: { engines: scanResult.engines }, node: process.version });
-        const leadsPath = join(runnerDir, "leads.json");
-        await writeFile(leadsPath, `${JSON.stringify(scanResult, null, 1)}\n`);
+        const [profile, facts] = await Promise.all([loadProfile(effectiveProfilePath), projectFacts(checkout)]);
+        const evidencePack = await createEvidencePack({
+          repo: checkout,
+          manifest: evidence.manifest,
+          profile,
+          profilePath: effectiveProfilePath,
+          rulesRoot: trusted!.root,
+          project: facts,
+          scan: scanResult,
+          engines: ENGINES,
+        });
+        const evidencePackFile = await writeEvidencePack(checkout, join(runnerDir, "evidence-pack.v1.json"), evidencePack);
+        await audit!.record("repository", "evidence_pack", { pack: evidencePack, schema: evidencePack.schema, sha256: evidencePackFile.sha256, bytes: evidencePackFile.bytes });
+        await audit!.writeCapabilities({ graph, scanner: { engines: scanResult.engines }, evidence_pack: { schema: evidencePack.schema, sha256: evidencePackFile.sha256, bytes: evidencePackFile.bytes }, node: process.version });
         let workItemPath: string | undefined;
         if (plan.mode === "review-context") { workItemPath = join(runnerDir, "work-item.json"); await copyFile(plan.work_item_path!, workItemPath); await audit!.record("app", "work_item_materialized", { schema: "leveret.work-item/v1", sha256: plan.work_item_sha256, path_role: "outside-checkout runner input" }); }
         else await audit!.record("app", "work_item_omitted", { context_mode: "diff-only" });
         const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("LEVERET_TRACE_")));
-        const env = { ...inherited, ...traceEnvironment, LEVERET_REPO: checkout, LEVERET_BASE: plan.base, LEVERET_LEADS: leadsPath, LEVERET_CHANGE_MANIFEST: evidencePath, LEVERET_GRAPH: graph.ok ? "1" : "0", LEVERET_TRACE_DIR: audit!.partialDir, LEVERET_RUN_ID: runId, LEVERET_DATA: traceRoot, ...(workItemPath ? { LEVERET_WORK_ITEM: workItemPath } : {}) };
+        const env = { ...inherited, ...traceEnvironment, LEVERET_REPO: checkout, LEVERET_BASE: plan.base, LEVERET_CHANGE_MANIFEST: evidencePath, LEVERET_EVIDENCE_PACK: evidencePackFile.path, LEVERET_EVIDENCE_PACK_SHA256: evidencePackFile.sha256, LEVERET_GRAPH: graph.ok ? "1" : "0", LEVERET_TRACE_DIR: audit!.partialDir, LEVERET_RUN_ID: runId, LEVERET_DATA: traceRoot, ...(workItemPath ? { LEVERET_WORK_ITEM: workItemPath } : {}) };
         const runner = options.runner ?? commandRunner(options.runnerCommand ?? process.env.LEVERET_RUNNER ?? `${process.execPath} ${resolve(harnessRoot, "dist/runner/pi.js")}`);
         await audit!.record("lifecycle", "runner_started", { context_mode: plan.mode, environment_names: Object.keys(env).sort() });
         const result = await runner({ cwd: runnerDir, env });
@@ -256,6 +283,7 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
     try { if (audit && !auditRunDir) auditRunDir = (await audit.finalize("failed", error)).runDir ?? null; } catch { /* retain original failure */ }
     return invalid(plan, "preparation", "orchestration-failure", error instanceof Error ? error.message : String(error), preconditions, auditRunDir);
   } finally {
+    if (trusted) await trusted.close().catch(() => {});
     try { await git(repo, ["worktree", "remove", "--force", checkout]); } catch { /* not registered */ }
     await rm(root, { recursive: true, force: true });
   }

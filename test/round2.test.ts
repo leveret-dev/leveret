@@ -42,7 +42,7 @@ describe("semgrep registry knob (R13)", () => {
     writeFileSync(join(repo, "a.py"), "x = 1\n");
     writeFileSync(join(repo, ".leveret.yml"), "engines:\n  semgrep:\n    registry: false\n");
     const r = await scan({ repo, files: ["a.py"], engines: ["semgrep"] });
-    expect(r.engines).toEqual([{ engine: "semgrep", status: "not-applicable" }]);
+    expect(r.engines).toEqual([expect.objectContaining({ engine: "semgrep", status: "not-applicable", selectedFiles: [], durationMs: expect.any(Number) })]);
   });
 
   it("registry: false with a local rule pack still runs the pack (offline path)", async () => {
