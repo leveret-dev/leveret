@@ -19,6 +19,17 @@ function json(value: unknown, details: Record<string, unknown> = {}) {
 function text(value: string, details: Record<string, unknown> = {}) {
   return { content: [{ type: "text" as const, text: value }], details };
 }
+const PROBE_PRESENTATION_MAX_BYTES = 64 * 1024;
+const PROBE_AUDIT_MAX_BYTES = 64 * 1024 * 1024;
+
+function presentProbeOutput(value: string): { text: string; truncated: boolean } {
+  const bytes = Buffer.from(value);
+  return {
+    text: bytes.subarray(0, PROBE_PRESENTATION_MAX_BYTES).toString("utf8"),
+    truncated: bytes.length > PROBE_PRESENTATION_MAX_BYTES,
+  };
+}
+
 
 async function codegraph(repo: string, args: string[]): Promise<ReturnType<typeof text>> {
   const result = await run("codegraph", args, repo, {
@@ -318,21 +329,23 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
         const result = await runStreaming(command, params.args ?? [], cwd, {
           timeoutMs: params.timeout_ms ?? 30_000,
           env: safeChildEnvironment(),
-          maxBuffer: 64 * 1024,
+          maxBuffer: PROBE_AUDIT_MAX_BYTES,
         });
         if (result.spawnError) throw new ToolExecutionError(`probe spawn failed: ${result.spawnError}`);
         const timedOut = result.timedOut === true;
+        const stdout = presentProbeOutput(result.stdout);
+        const stderr = presentProbeOutput(result.stderr);
         return json({
           outcome: timedOut ? "timed-out" : result.signal ? "signaled" : "exited",
           code: result.code,
           signal: result.signal ?? null,
-          stdout: result.stdout,
-          stderr: result.stderr,
+          stdout: stdout.text,
+          stderr: stderr.text,
           duration_ms: Date.now() - startedAt,
           timed_out: timedOut,
           truncated: {
-            stdout: result.stdoutTruncated === true,
-            stderr: result.stderrTruncated === true,
+            stdout: stdout.truncated || result.stdoutTruncated === true,
+            stderr: stderr.truncated || result.stderrTruncated === true,
           },
         }, { timedOut });
       },

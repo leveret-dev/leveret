@@ -1,8 +1,9 @@
 import { createAgentSession, ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { auditConfig, createAuditRun, withAuditTrace } from "../src/audit.js";
 import { run, runStreaming } from "../src/exec.js";
 import { prefetchSerena } from "../src/runner/prefetch-serena.js";
 import { buildPiSystemPrompt } from "../src/runner/pi-system.js";
@@ -161,6 +162,47 @@ describe("Pi runtime isolation", () => {
       rmSync(repo, { recursive: true, force: true });
     }
   });
+  it("keeps full probe output in private audit while capping model evidence", async () => {
+    const root = mkdtempSync(join(tmpdir(), "leveret-probe-audit-"));
+    const repo = join(root, "repo");
+    mkdirSync(repo);
+    const secret = "must-not-enter-probe-trace";
+    const priorSecret = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = secret;
+    const audit = (await createAuditRun(auditConfig(root, {
+      LEVERET_TRACE_ROOT: join(root, "runs"),
+      LEVERET_TRACE_SINKS: "private",
+      LEVERET_TRACE_BLOB_BYTES: "1024",
+    }), "00000000-0000-4000-8000-000000000000"))!;
+    const bundle = await buildPiTools(toolOptions(repo, true));
+    const probe = bundle.tools.find((tool) => tool.name === "leveret_probe")!;
+    try {
+      const result = await withAuditTrace(audit, () => probe.execute("00000000-0000-4000-8000-000000000001", {
+        command: "node",
+        args: ["-e", "process.stdout.write((process.env.OPENAI_API_KEY ?? 'safe') + '\\n' + 'x'.repeat(131072))"],
+      }, undefined, undefined, {} as never));
+      const payload = toolPayload(result);
+      expect(Buffer.byteLength(payload.stdout as string)).toBe(64 * 1024);
+      expect(payload).toMatchObject({ outcome: "exited", truncated: { stdout: true, stderr: false } });
+
+      const runDir = (await audit.finalize("complete")).runDir!;
+      const event = (readFileSync(join(runDir, "app.ndjson"), "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line))
+        .find((entry) => entry.category === "subprocess")) as { payload_ref: { sha256: string } };
+      const captured = JSON.parse(readFileSync(join(runDir, "blobs", "sha256", event.payload_ref.sha256), "utf8"));
+      expect(captured.stdout).toBe(`safe\n${"x".repeat(131072)}`);
+      expect(captured.stdoutTruncated).toBeUndefined();
+      expect(JSON.stringify(captured)).not.toContain(secret);
+    } finally {
+      if (priorSecret === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = priorSecret;
+      await bundle.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
 
   it("records probe timeout and signal metadata instead of output words", async () => {
     const repo = mkdtempSync(join(tmpdir(), "leveret-probe-outcome-"));
