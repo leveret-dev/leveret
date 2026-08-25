@@ -9,6 +9,7 @@ import { z } from "zod";
 import { auditConfig, createAuditRun, withAuditTrace } from "../src/audit.js";
 import { materializeChangeEvidence } from "../src/change-evidence.js";
 import { createEvidencePack, writeEvidencePack } from "../src/evidence-pack.js";
+import { createGuidanceResult, writeGuidanceResult } from "../src/semantic-checks.js";
 import { runStreaming } from "../src/exec.js";
 import { ensureGraph } from "../src/app/graph.js";
 import { scan } from "../src/scan.js";
@@ -255,13 +256,15 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
           engines: ENGINES,
         });
         const evidencePackFile = await writeEvidencePack(checkout, join(runnerDir, "evidence-pack.v1.json"), evidencePack);
+        const guidanceFile = await writeGuidanceResult(checkout, join(runnerDir, "guidance-result.v1.json"), await createGuidanceResult(checkout, evidencePackFile));
         await audit!.record("repository", "evidence_pack", { pack: evidencePack, schema: evidencePack.schema, sha256: evidencePackFile.sha256, bytes: evidencePackFile.bytes });
-        await audit!.writeCapabilities({ graph, scanner: { engines: scanResult.engines }, evidence_pack: { schema: evidencePack.schema, sha256: evidencePackFile.sha256, bytes: evidencePackFile.bytes }, node: process.version });
+        await audit!.record("repository", "guidance_result", { guidance: guidanceFile.guidance, schema: guidanceFile.guidance.schema, sha256: guidanceFile.sha256, bytes: guidanceFile.bytes, selected_card_ids: guidanceFile.guidance.selectedCards.map((card) => card.id), selected_rule_ids: guidanceFile.guidance.selectedCards.flatMap((card) => card.ruleId ? [card.ruleId] : []), emitted_rule_lead_ids: guidanceFile.guidance.ruleLeads.map((lead) => lead.id), selected_mutation_ids: [...new Set(guidanceFile.guidance.mutationLeads.map((lead) => lead.mutationId))].sort(), hashes: guidanceFile.guidance.provenance });
+        await audit!.writeCapabilities({ graph, scanner: { engines: scanResult.engines }, evidence_pack: { schema: evidencePack.schema, sha256: evidencePackFile.sha256, bytes: evidencePackFile.bytes }, guidance: { schema: guidanceFile.guidance.schema, sha256: guidanceFile.sha256, bytes: guidanceFile.bytes }, node: process.version });
         let workItemPath: string | undefined;
         if (plan.mode === "review-context") { workItemPath = join(runnerDir, "work-item.json"); await copyFile(plan.work_item_path!, workItemPath); await audit!.record("app", "work_item_materialized", { schema: "leveret.work-item/v1", sha256: plan.work_item_sha256, path_role: "outside-checkout runner input" }); }
         else await audit!.record("app", "work_item_omitted", { context_mode: "diff-only" });
         const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("LEVERET_TRACE_")));
-        const env = { ...inherited, ...traceEnvironment, LEVERET_REPO: checkout, LEVERET_BASE: plan.base, LEVERET_CHANGE_MANIFEST: evidencePath, LEVERET_EVIDENCE_PACK: evidencePackFile.path, LEVERET_EVIDENCE_PACK_SHA256: evidencePackFile.sha256, LEVERET_GRAPH: graph.ok ? "1" : "0", LEVERET_TRACE_DIR: audit!.partialDir, LEVERET_RUN_ID: runId, LEVERET_DATA: traceRoot, ...(workItemPath ? { LEVERET_WORK_ITEM: workItemPath } : {}) };
+        const env = { ...inherited, ...traceEnvironment, LEVERET_REPO: checkout, LEVERET_BASE: plan.base, LEVERET_CHANGE_MANIFEST: evidencePath, LEVERET_EVIDENCE_PACK: evidencePackFile.path, LEVERET_EVIDENCE_PACK_SHA256: evidencePackFile.sha256, LEVERET_GUIDANCE: guidanceFile.path, LEVERET_GUIDANCE_SHA256: guidanceFile.sha256, LEVERET_GRAPH: graph.ok ? "1" : "0", LEVERET_TRACE_DIR: audit!.partialDir, LEVERET_RUN_ID: runId, LEVERET_DATA: traceRoot, ...(workItemPath ? { LEVERET_WORK_ITEM: workItemPath } : {}) };
         const runner = options.runner ?? commandRunner(options.runnerCommand ?? process.env.LEVERET_RUNNER ?? `${process.execPath} ${resolve(harnessRoot, "dist/runner/pi.js")}`);
         await audit!.record("lifecycle", "runner_started", { context_mode: plan.mode, environment_names: Object.keys(env).sort() });
         const result = await runner({ cwd: runnerDir, env });

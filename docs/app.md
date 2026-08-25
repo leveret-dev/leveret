@@ -255,7 +255,8 @@ can extend it. `PI_OFFLINE=1`, `PI_TELEMETRY=0`, and
 `PI_SKIP_VERSION_CHECK=1` are enforced by the runner. A custom `LEVERET_RUNNER`
 command is the escape hatch for other harnesses; it receives
 `LEVERET_REPO`, `LEVERET_BASE`, `LEVERET_CHANGE_MANIFEST`,
-`LEVERET_EVIDENCE_PACK`, its required `LEVERET_EVIDENCE_PACK_SHA256`,
+`LEVERET_EVIDENCE_PACK` and its required `LEVERET_EVIDENCE_PACK_SHA256`,
+`LEVERET_GUIDANCE` and its required `LEVERET_GUIDANCE_SHA256`,
 `LEVERET_WORK_ITEM`, `LEVERET_GRAPH`, optional `LEVERET_PRIOR`,
 `LEVERET_TRACE_DIR`, and `LEVERET_RUN_ID`, and must print the
 verify-output JSON (see `agents/verify.md`).
@@ -265,6 +266,12 @@ outside the reviewed checkout. It is the single bounded handoff for changed-file
 dispositions, project/workflow facts, analyzer applicability and lifecycle, and
 profile/memory-suppressed leads. Custom runners must validate its base/head and
 hash before use; static analyzer cleanliness is explicitly not semantic coverage.
+
+`LEVERET_GUIDANCE` names a mode-0600 `leveret.guidance-result/v1` JSON file
+outside the checkout. It contains only host-packaged, source-pinned caveat cards,
+bounded deterministic leads and mutations, and unresolved reviewer questions.
+Custom runners must validate its evidence-pack/base/head identity and hash; PR or
+repository text cannot create or widen trusted cards or rules.
 
 `LEVERET_WORK_ITEM` names a mode-0600 `leveret.work-item/v1` JSON file outside
 the reviewed checkout. Its bounded title, body, author, PR/action/base/head, and

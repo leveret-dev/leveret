@@ -48,8 +48,10 @@ describe("frozen full replay", () => {
   it("invalidates missing review context while the identical diff-only trial remains runnable", async () => {
     const fixture = repository();
     let handedPack: unknown;
+    let handedGuidance: unknown;
     const runner = vi.fn<ReplayRunner>(async (context) => {
       handedPack = JSON.parse(readFileSync(context.env.LEVERET_EVIDENCE_PACK!, "utf8"));
+      handedGuidance = JSON.parse(readFileSync(context.env.LEVERET_GUIDANCE!, "utf8"));
       return completeRunner(context);
     });
     const target = row([{ kind: "contains", path: "target.txt", text: "defect-present" }]);
@@ -61,7 +63,9 @@ describe("frozen full replay", () => {
     expect(runner.mock.calls[0]![0].env.LEVERET_WORK_ITEM).toBeUndefined();
     expect(runner.mock.calls[0]![0].env.LEVERET_LEADS).toBeUndefined();
     expect(runner.mock.calls[0]![0].env.LEVERET_EVIDENCE_PACK_SHA256).toMatch(/^[a-f0-9]{64}$/);
+    expect(runner.mock.calls[0]![0].env.LEVERET_GUIDANCE_SHA256).toMatch(/^[a-f0-9]{64}$/);
     expect(handedPack).toMatchObject({ schema: "leveret.evidence-pack/v1", base: fixture.base, head: fixture.head });
+    expect(handedGuidance).toMatchObject({ schema: "leveret.guidance-result/v1", base: fixture.base, head: fixture.head });
   });
 
   it("mechanically validates the fixture and makes repeated plans stable and unique", async () => {

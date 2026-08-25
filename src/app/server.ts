@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { auditConfig, createAuditRun, redactAuditText, withAuditTrace } from "../audit.js";
 import { materializeChangeEvidence } from "../change-evidence.js";
 import { createEvidencePack, writeEvidencePack } from "../evidence-pack.js";
+import { createGuidanceResult, writeGuidanceResult } from "../semantic-checks.js";
 import { loadProfile } from "../profile.js";
 import { scan } from "../scan.js";
 import type { Finding, ScanResult } from "../findings.js";
@@ -202,11 +203,24 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
         engines: ENGINES,
       });
       const evidencePackFile = await writeEvidencePack(work, evidencePackPath, evidencePack);
+      const guidancePath = join(runnerWork, "guidance-result.v1.json");
+      const guidanceFile = await writeGuidanceResult(work, guidancePath, await createGuidanceResult(work, evidencePackFile));
       await audit?.record("repository", "evidence_pack", {
         pack: evidencePack,
         schema: evidencePack.schema,
         sha256: evidencePackFile.sha256,
         bytes: evidencePackFile.bytes,
+      });
+      await audit?.record("repository", "guidance_result", {
+        guidance: guidanceFile.guidance,
+        schema: guidanceFile.guidance.schema,
+        sha256: guidanceFile.sha256,
+        bytes: guidanceFile.bytes,
+        selected_card_ids: guidanceFile.guidance.selectedCards.map((card) => card.id),
+        selected_rule_ids: guidanceFile.guidance.selectedCards.flatMap((card) => card.ruleId ? [card.ruleId] : []),
+        emitted_rule_lead_ids: guidanceFile.guidance.ruleLeads.map((lead) => lead.id),
+        selected_mutation_ids: [...new Set(guidanceFile.guidance.mutationLeads.map((lead) => lead.mutationId))].sort(),
+        hashes: guidanceFile.guidance.provenance,
       });
       const engineCapabilities = Object.fromEntries(evidencePack.analyzers.map((analyzer) => [
         analyzer.id,
@@ -216,6 +230,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
         graph,
         scanner: { engines: engineCapabilities },
         evidence_pack: { schema: evidencePack.schema, sha256: evidencePackFile.sha256, bytes: evidencePackFile.bytes },
+        guidance: { schema: guidanceFile.guidance.schema, sha256: guidanceFile.sha256, bytes: guidanceFile.bytes },
         node: process.version,
       });
 
@@ -258,6 +273,8 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
           LEVERET_CHANGE_MANIFEST: evidencePath,
           LEVERET_EVIDENCE_PACK: evidencePackFile.path,
           LEVERET_EVIDENCE_PACK_SHA256: evidencePackFile.sha256,
+          LEVERET_GUIDANCE: guidanceFile.path,
+          LEVERET_GUIDANCE_SHA256: guidanceFile.sha256,
           LEVERET_GRAPH: graph.ok ? "1" : "0",
           ...(prior.length > 0 ? { LEVERET_PRIOR: join(runnerWork, "prior.json") } : {}),
           ...(audit ? { LEVERET_TRACE_DIR: audit.partialDir, LEVERET_RUN_ID: runId, LEVERET_DATA: DATA_DIR } : {}),
