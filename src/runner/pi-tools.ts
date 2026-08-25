@@ -5,15 +5,15 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { readFile, readdir, realpath } from "node:fs/promises";
 import { astSearch } from "../astsearch.js";
 import { context } from "../context.js";
-import { run, safeChildEnvironment } from "../exec.js";
+import { run, runStreaming, safeChildEnvironment } from "../exec.js";
 import { memoryList } from "../memory.js";
 import { scan } from "../scan.js";
 import { ENGINES } from "../engines/registry.js";
 import type { SerenaBridge } from "./serena.js";
 import { pathIsInside } from "../path.js";
 
-function json(value: unknown) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(value, null, 1) }], details: {} };
+function json(value: unknown, details: Record<string, unknown> = {}) {
+  return { content: [{ type: "text" as const, text: JSON.stringify(value, null, 1) }], details };
 }
 
 function text(value: string, details: Record<string, unknown> = {}) {
@@ -55,7 +55,8 @@ function annotateEvidence(tool: ToolDefinition, onOutcome?: (toolCallId: string,
     async execute(toolCallId, params, signal, onUpdate, context) {
       try {
         const result = await execute(toolCallId, params as never, signal, onUpdate, context);
-        onOutcome?.(toolCallId, { timedOut: false });
+        const timedOut = (result.details as { timedOut?: unknown } | undefined)?.timedOut === true;
+        onOutcome?.(toolCallId, { timedOut });
         return {
           ...result,
           content: [{ type: "text" as const, text: `evidence_id: ${toolCallId}` }, ...result.content],
@@ -298,7 +299,7 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
     tools.push(defineTool({
       name: "leveret_probe",
       label: "Bounded probe",
-      description: "Execute one non-shell command inside the declared review sandbox. Output and time are capped.",
+      description: "Execute one non-shell command inside the declared review sandbox. Exit, signal, timeout, stdout, and stderr are returned as structured evidence.",
       parameters: Type.Object({
         command: Type.String(),
         args: Type.Optional(Type.Array(Type.String())),
@@ -313,13 +314,27 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
           command = resolve(cwd, command);
           if (!pathIsInside(repo, command)) throw new Error("probe command path must stay inside the reviewed checkout");
         }
-        const result = await run(command, params.args ?? [], cwd, {
+        const startedAt = Date.now();
+        const result = await runStreaming(command, params.args ?? [], cwd, {
           timeoutMs: params.timeout_ms ?? 30_000,
           env: safeChildEnvironment(),
-          maxBuffer: 1024 * 1024,
+          maxBuffer: 64 * 1024,
         });
-        if (result.code !== 0) throw new ToolExecutionError(`probe rc=${result.code}: ${result.stderr.slice(0, 1000)}`, result.timedOut);
-        return text(result.stdout, { code: result.code, signal: result.signal });
+        if (result.spawnError) throw new ToolExecutionError(`probe spawn failed: ${result.spawnError}`);
+        const timedOut = result.timedOut === true;
+        return json({
+          outcome: timedOut ? "timed-out" : result.signal ? "signaled" : "exited",
+          code: result.code,
+          signal: result.signal ?? null,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          duration_ms: Date.now() - startedAt,
+          timed_out: timedOut,
+          truncated: {
+            stdout: result.stdoutTruncated === true,
+            stderr: result.stderrTruncated === true,
+          },
+        }, { timedOut });
       },
     }));
   }

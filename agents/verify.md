@@ -18,6 +18,8 @@ reason); a concern enforcing a taught convention is NOT refutable by "the linter
 doesn't require it" — the human taught it, so it stands.
 
 ## Per concern (and per remaining lead)
+Concern IDs start with `R`; remaining scan lead IDs start with `L`. Emit exactly
+one verdict for every supplied ID, with no extras or duplicates.
 
 1. Read the cited code **as it is now**; the claim may be stale or misread.
 2. Attempt refutation: find the guard the reviewer missed, the caller that never
@@ -26,6 +28,9 @@ doesn't require it" — the human taught it, so it stands.
    where executable off-target, otherwise the exact current code lines that prove
    it. `leveret.ast_search` settles "every call site shaped like this" claims;
    plausibility settles nothing.
+   The bounded probe tool returns normal nonzero exits, signals, timeouts, stdout, stderr,
+   and per-stream truncation as structured evidence. Treat a nonzero exit as a
+   result to interpret, not an automatic tool failure.
 4. Assign exactly one grade:
    - **actionable** — real, in scope, worth reporting. Requires evidence from step 3.
    - **priced-noise** — technically true, but fixing it buys nothing here (repo
@@ -77,9 +82,20 @@ Return only JSON; no prose around it:
   ],
   "verdicts": [
     { "id": "R1", "grade": "actionable" },
-    { "id": "R2", "grade": "false-positive", "reason": "guarded two lines above" }
+    { "id": "L1", "grade": "false-positive", "reason": "guarded two lines above" }
   ],
-  "coverage": { "lenses": [], "files": [] },
+  "coverage": {
+    "lenses": [
+      { "lens": "correctness-hostile-inputs", "outcome": "1 actionable concern" },
+      { "lens": "contract-conformance", "outcome": "clean" },
+      { "lens": "test-honesty", "outcome": "clean" },
+      { "lens": "blast-radius", "outcome": "7 callers traced; clean" },
+      { "lens": "leads-triage", "outcome": "1 remaining lead refuted" }
+    ],
+    "files": [
+      { "file": "src/foo.php", "verdict": "findings" }
+    ]
+  },
   "resolutions": [
     { "threadId": "T1", "status": "resolved", "note": "attempts now counts total invocations; probe re-run confirms 3 calls for attempts: 3" }
   ]
@@ -101,11 +117,13 @@ outside the diff is never grounds to drop a correlated defect (verify the stated
 still be real but belongs in a separate report). In the published output they render
 in their own section, since GitHub cannot attach them inline to the diff.
 
-Order `report` by tier, most severe first. `report` holds only `actionable` items.
-`verdicts` holds every concern and lead you judged, so nothing is silently dropped —
-the counts must add up. `coverage` is the review agent's coverage block, passed
-through with any corrections you found (a file the reviewer marked considered-fine
-where you confirmed a defect flips to findings). The final published summary is
-built from this object: tiers group the inline comments, coverage becomes the
-"what was checked" walkthrough, and the verdict/suppression counts show what was
-examined and dropped rather than only what survived.
+Order `report` by tier, most severe first. `report` holds exactly the IDs graded
+`actionable`; `verdicts` holds every supplied concern and remaining lead exactly
+once, so nothing is silently dropped. Non-actionable verdicts require a reason.
+
+`coverage` contains exactly one object for every changed file plus any correlated
+out-of-diff concern/report file. It retains all five named lens objects. A file that
+produced a review concern remains `findings` even when you refute or drop that
+concern; never downgrade it to `considered-fine` or `not-examined`. Confirmed new
+findings may upgrade prior coverage. The runner mechanically merges this block with
+the review audit trail and renders all-priced concern files as `findings-priced`.

@@ -11,6 +11,7 @@
     "leveret-prefetch-serena": "dist/runner/prefetch-serena.js"
   },
   "scripts": {
+    "bench:report": "tsx bench/report.mts",
     "build": "tsc",
     "dev": "tsx src/server.ts",
     "test": "vitest run"

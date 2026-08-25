@@ -13,6 +13,9 @@ export interface ExecResult {
   signal?: string;
   timedOut?: boolean;
   truncated?: boolean;
+  stdoutTruncated?: boolean;
+  stderrTruncated?: boolean;
+  spawnError?: string;
 }
 
 export interface ExecutableIdentity {
@@ -137,24 +140,28 @@ export function runStreaming(cmd: string, args: string[], cwd: string, opts?: St
     let stderrBytes = 0;
     let timedOut = false;
     let truncated = false;
-    let spawnError: Error | undefined;
+    let stdoutTruncated = false;
+    let stderrTruncated = false;
+    let spawnError: string | undefined;
     let forceTimer: ReturnType<typeof setTimeout> | undefined;
     const terminate = (): void => {
       child.kill("SIGTERM");
       forceTimer ??= setTimeout(() => child.kill("SIGKILL"), 5000);
     };
-    const keep = (chunks: Buffer[], chunk: Buffer, used: number): number => {
+    const keep = (chunks: Buffer[], chunk: Buffer, used: number, stream: "stdout" | "stderr"): number => {
       const remaining = Math.max(0, maxBuffer - used);
       if (remaining > 0) chunks.push(chunk.subarray(0, remaining));
       if (chunk.length > remaining) {
         truncated = true;
+        if (stream === "stdout") stdoutTruncated = true;
+        else stderrTruncated = true;
         terminate();
       }
       return used + Math.min(chunk.length, remaining);
     };
-    child.stdout.on("data", (chunk: Buffer) => { stdoutBytes = keep(stdout, chunk, stdoutBytes); opts?.onStdout?.(chunk); });
-    child.stderr.on("data", (chunk: Buffer) => { stderrBytes = keep(stderr, chunk, stderrBytes); opts?.onStderr?.(chunk); });
-    child.on("error", (error) => { spawnError = error; });
+    child.stdout.on("data", (chunk: Buffer) => { stdoutBytes = keep(stdout, chunk, stdoutBytes, "stdout"); opts?.onStdout?.(chunk); });
+    child.stderr.on("data", (chunk: Buffer) => { stderrBytes = keep(stderr, chunk, stderrBytes, "stderr"); opts?.onStderr?.(chunk); });
+    child.on("error", (error) => { spawnError = error.message; });
     const timer = setTimeout(() => { timedOut = true; terminate(); }, timeoutMs);
     child.on("close", (code, signal) => {
       clearTimeout(timer);
@@ -166,8 +173,11 @@ export function runStreaming(cmd: string, args: string[], cwd: string, opts?: St
         ...(signal ? { signal } : {}),
         ...(timedOut ? { timedOut } : {}),
         ...(truncated ? { truncated } : {}),
+        ...(stdoutTruncated ? { stdoutTruncated } : {}),
+        ...(stderrTruncated ? { stderrTruncated } : {}),
+        ...(spawnError ? { spawnError } : {}),
       };
-      if (spawnError) result.stderr = `${result.stderr}${result.stderr ? "\n" : ""}${spawnError.message}`;
+      if (spawnError) result.stderr = `${result.stderr}${result.stderr ? "\n" : ""}${spawnError}`;
       const captured = captureSubprocess(cmd, args, cwd, env, timeoutMs, startedAt, result);
       if (captured) void captured.then(() => resolveResult(result), () => resolveResult(result));
       else resolveResult(result);

@@ -69,7 +69,8 @@ Return only a JSON object; no prose around it:
       "evidence_hint": "the command or code path the verifier should use to confirm",
       "scope": "in-diff",
       "correlation": "only for out-of-diff concerns: why this connects to the change — same symbol, same copied pattern, downstream of a changed contract",
-      "evidence_ids": ["tool-call evidence_id values used by this concern"]
+      "evidence_ids": ["tool-call evidence_id values used by this concern"],
+      "lead_ids": ["L1"]
     }
   ],
   "coverage": {
@@ -95,6 +96,9 @@ its outcome even when clean: the report must show what was checked, not only wha
 was found. Raise concerns in files outside the diff with the same shape (list such
 files in `files` too). An empty concerns array is a valid result; do not invent
 concerns to look useful.
+
+Every concern lists the stable scan lead IDs it adopts in `lead_ids`; use an empty
+array for independently discovered concerns. Never invent or reuse a lead ID.
 
 Out-of-diff concerns (`"scope": "out-of-diff"`) are wanted, not tolerated: a defect
 in untouched code that is *correlated* with this change — the same symbol the diff

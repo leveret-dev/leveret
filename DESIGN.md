@@ -189,10 +189,11 @@ engine findings adjacent to changed lines; out-of-diff findings are agent-discov
 and correlation-driven, any distance away.
 
 The principle throughout: the report shows **what was checked**, not only what was
-found — a clean review must be distinguishable from a shallow one. The data for all
-of this already exists in the verify output object (`report` + `verdicts` +
-`coverage`) and `ScanResult`; the App layer renders it, the MCP/interactive path
-prints it.
+found — a clean review must be distinguishable from a shallow one. The model emits
+one structured verify object (`report` + `verdicts` + `coverage`); deterministic
+code combines it with `ScanResult` and renders PR comments, walkthrough Markdown,
+benchmark tables, or future HTML. The model never reformats the same result for
+each presentation surface.
 
 ## Distribution: GitHub App + BYOAI (product decision, 2026-08-21)
 
@@ -362,23 +363,22 @@ treats subscription OAuth as a peer of the API key, never an afterthought.
 
 ## Validation gate (the benchmark)
 
-Corpus: historical pfBlockerNG PRs whose accepted CodeRabbit findings are indexed by
-provenance comments in `tests/` (CR2, CR5, #65, #685, …) plus their full review
-threads. Replay each PR's diff through the pipeline at the pre-merge SHA.
+Corpus: historical pfBlockerNG review threads frozen with their accepted/dismissed
+disposition, `original_commit_id`, verified base/fork SHA, and an executable
+defect-presence precondition. Replaying a repaired final PR head is invalid, never a
+miss.
 
-Replay mechanics (probed 2026-08-20): the exact reviewed tree survives rebase-merge
-via `git fetch origin pull/N/head`; diff base is `git merge-base <head> origin/devel`
-(linear history makes that the fork point). Replays run against the dedicated mirror
-`~/git/pfblockerng-bench` (origin = GitHub), never the working clone — bench results
-must not race live development, and bench worktrees must not interfere with it. The
-clone must be full: a shallow clone hides old fork points and merge-base fails. Scan a throwaway detached worktree at the
-fetched SHA with the repo profile applied; CodeRabbit's side comes from
-`pulls/N/comments` + `pulls/N/reviews` filtered to `coderabbitai[bot]`. Candidate
-PRs with the densest engagement, verified by API count: #2521 (7 inline), #2417
-(7 inline / 4 reviews), #2474 (6/5), #2471 (6/2), #2444 (6/1); a dozen more carry
-1–3 findings each. Note the deterministic layer alone is expected to catch only a
-minority of CodeRabbit's LLM-judged findings — the first replay establishes that
-baseline gap, and P5's agents are what close it.
+Replay the standardized Pi pipeline in a throwaway detached worktree at the exact
+reviewed commit. Prefer a recorded merge base; rewritten branches may instead need
+the frozen two-dot parent documented by the corpus. A missing commit/base, failed
+precondition, incomplete structured output, or capability mismatch invalidates the
+run. The dedicated mirror remains separate from live development.
+
+Runner JSON is the source of record. `npm run bench:report` mechanically renders
+factual counts, coverage, tool outcomes, and published findings from result files.
+Semantic same-mechanism overlap and defect validity remain an
+explicit adjudication layer; the renderer never asks an LLM to restate fields the
+harness already has.
 
 Metrics:
 

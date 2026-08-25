@@ -1,4 +1,7 @@
 import { createAgentSession, ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { run, runStreaming } from "../src/exec.js";
 import { prefetchSerena } from "../src/runner/prefetch-serena.js";
@@ -11,9 +14,9 @@ import {
   parseDuration,
   piRuntimeConfig,
   toolMetricsSummary,
-  verifySchemaGaps,
   withDeadline,
 } from "../src/runner/pi.js";
+import { mergeVerificationCoverage, verifySchemaGaps } from "../src/runner/verify-output.js";
 import {
   buildSerenaArgs,
   createSerenaRuntimeHome,
@@ -35,6 +38,12 @@ const toolOptions = (repo: string, sandboxed = false) => ({
   graphLive: false,
   sandboxed,
 });
+function toolPayload(result: { content: readonly { type: string; text?: string }[] }): Record<string, unknown> {
+  const content = result.content.find((item) => item.type === "text" && item.text?.startsWith("{"));
+  if (!content?.text) throw new Error("tool returned no JSON payload");
+  return JSON.parse(content.text) as Record<string, unknown>;
+}
+
 
 describe("Pi runtime isolation", () => {
   it("ships Pi as the sole standard runner", async () => {
@@ -124,6 +133,95 @@ describe("Pi runtime isolation", () => {
     expect(tools.tools.map((tool) => tool.name)).toContain("leveret_probe");
     await tools.close();
   });
+  it("returns nonzero probe exits as structured evidence without credentials", async () => {
+    const repo = mkdtempSync(join(tmpdir(), "leveret-probe-"));
+    const priorSecret = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = "must-not-leak";
+    const bundle = await buildPiTools(toolOptions(repo, true));
+    const probe = bundle.tools.find((tool) => tool.name === "leveret_probe")!;
+    try {
+      const result = await probe.execute("p1", {
+        command: "node",
+        args: ["-e", "console.log(process.env.OPENAI_API_KEY ?? 'safe'); console.error('expected failure'); process.exit(1)"],
+      }, undefined, undefined, {} as never);
+      expect(result.content[0]).toMatchObject({ type: "text", text: "evidence_id: p1" });
+      expect(toolPayload(result)).toMatchObject({
+        outcome: "exited",
+        code: 1,
+        signal: null,
+        stdout: "safe\n",
+        stderr: "expected failure\n",
+        timed_out: false,
+        truncated: { stdout: false, stderr: false },
+      });
+    } finally {
+      if (priorSecret === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = priorSecret;
+      await bundle.close();
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("records probe timeout and signal metadata instead of output words", async () => {
+    const repo = mkdtempSync(join(tmpdir(), "leveret-probe-outcome-"));
+    const outcomes = new Map<string, boolean>();
+    const bundle = await buildPiTools({
+      ...toolOptions(repo, true),
+      onToolOutcome: (id, outcome) => outcomes.set(id, outcome.timedOut),
+    });
+    const probe = bundle.tools.find((tool) => tool.name === "leveret_probe")!;
+    try {
+      const words = await probe.execute("words", {
+        command: "node",
+        args: ["-e", "console.log('timeout deadline aborted')"],
+      }, undefined, undefined, {} as never);
+      expect(toolPayload(words)).toMatchObject({ outcome: "exited", timed_out: false });
+      expect(outcomes.get("words")).toBe(false);
+
+      const timeout = await probe.execute("timeout", {
+        command: "node",
+        args: ["-e", "Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0)"],
+        timeout_ms: 50,
+      }, undefined, undefined, {} as never);
+      expect(toolPayload(timeout)).toMatchObject({ outcome: "timed-out", timed_out: true });
+      expect(outcomes.get("timeout")).toBe(true);
+
+      const signaled = await probe.execute("signal", {
+        command: "node",
+        args: ["-e", "process.kill(process.pid, 'SIGTERM')"],
+      }, undefined, undefined, {} as never);
+      expect(toolPayload(signaled)).toMatchObject({ outcome: "signaled", signal: "SIGTERM", timed_out: false });
+    } finally {
+      await bundle.close();
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("distinguishes probe truncation, spawn failure, and jail rejection", async () => {
+    const repo = mkdtempSync(join(tmpdir(), "leveret-probe-failure-"));
+    const bundle = await buildPiTools(toolOptions(repo, true));
+    const probe = bundle.tools.find((tool) => tool.name === "leveret_probe")!;
+    try {
+      const stdout = await probe.execute("stdout-cap", {
+        command: "node",
+        args: ["-e", "process.stdout.write('x'.repeat(131072))"],
+      }, undefined, undefined, {} as never);
+      expect(toolPayload(stdout)).toMatchObject({ timed_out: false, truncated: { stdout: true, stderr: false } });
+
+      const stderr = await probe.execute("stderr-cap", {
+        command: "node",
+        args: ["-e", "process.stderr.write('x'.repeat(131072))"],
+      }, undefined, undefined, {} as never);
+      expect(toolPayload(stderr)).toMatchObject({ timed_out: false, truncated: { stdout: false, stderr: true } });
+
+      await expect(probe.execute("spawn", { command: "leveret-command-that-does-not-exist" }, undefined, undefined, {} as never)).rejects.toThrow(/spawn failed/);
+      await expect(probe.execute("jail", { command: "node", cwd: ".." }, undefined, undefined, {} as never)).rejects.toThrow(/inside/);
+    } finally {
+      await bundle.close();
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
 
   it("pins the required provider and model catalog without a network refresh", async () => {
     const runtime = await ModelRuntime.create({ allowModelNetwork: false, refreshOnCreate: false, modelsPath: null });
@@ -231,6 +329,30 @@ describe("Pi runtime isolation", () => {
   });
 });
 
+const lenses = [
+  { lens: "correctness-hostile-inputs", outcome: "clean" },
+  { lens: "contract-conformance", outcome: "clean" },
+  { lens: "test-honesty", outcome: "clean" },
+  { lens: "blast-radius", outcome: "clean" },
+  { lens: "leads-triage", outcome: "clean" },
+];
+
+const expectations = {
+  concerns: [{ id: "R1", file: "a.ts" }],
+  remainingLeadIds: ["L1"],
+  changedFiles: ["a.ts"],
+  priorThreadIds: [] as string[],
+};
+
+const validVerification = () => ({
+  report: [],
+  verdicts: [
+    { id: "R1", grade: "priced-noise", reason: "documented ceiling" },
+    { id: "L1", grade: "false-positive", reason: "guarded" },
+  ],
+  coverage: { lenses, files: [{ file: "a.ts", verdict: "findings" }] },
+});
+
 describe("Pi result and metrics parsing", () => {
   it("parses runner durations", () => {
     expect(parseDuration("30m")).toBe(30 * 60_000);
@@ -245,17 +367,79 @@ describe("Pi result and metrics parsing", () => {
     expect(classifyAuth("api_key", false)).toBe("api-key-or-local");
   });
 
-  it("names every missing verify-output section", () => {
-    const bare = { report: [] };
-    expect(verifySchemaGaps(bare, false)).toEqual(["verdicts", "coverage"]);
-    const full = {
-      report: [],
-      verdicts: [],
-      coverage: { lenses: [{ lens: "x", outcome: "clean" }], files: [{ file: "a", verdict: "considered-fine" }] },
+  it("validates nested verifier schema and exact accounting", () => {
+    expect(verifySchemaGaps(validVerification(), expectations)).toEqual([]);
+    expect(verifySchemaGaps({
+      ...validVerification(),
+      coverage: { lenses: ["correctness"], files: ["a.ts"] },
+    }, expectations)).toEqual(expect.arrayContaining(["schema:coverage.lenses.0", "schema:coverage.files.0"]));
+    expect(verifySchemaGaps({
+      ...validVerification(),
+      verdicts: [{ id: "R1", grade: "priced-noise", reason: "documented ceiling" }],
+    }, expectations)).toContain("verdicts:missing:L1");
+    expect(verifySchemaGaps({
+      ...validVerification(),
+      coverage: { lenses, files: [{ file: "a.ts", verdict: "considered-fine" }] },
+    }, expectations)).toContain("coverage.files:downgraded:a.ts");
+  });
+
+  it("requires exact prior-thread resolutions", () => {
+    const expected = { ...expectations, priorThreadIds: ["T1"] };
+    expect(verifySchemaGaps(validVerification(), expected)).toContain("resolutions:missing:T1");
+    expect(verifySchemaGaps({
+      ...validVerification(),
+      resolutions: [{ threadId: "T1", status: "resolved", note: "fixed" }],
+    }, expected)).toEqual([]);
+  });
+
+  it("mechanically preserves concern coverage and exposes priced findings", () => {
+    const review = {
+      concerns: [{ id: "R1", file: "a.ts", lead_ids: [] }],
+      coverage: { lenses, files: [{ file: "a.ts", verdict: "findings" }] },
     };
-    expect(verifySchemaGaps(full, false)).toEqual([]);
-    expect(verifySchemaGaps(full, true)).toEqual(["resolutions"]);
-    expect(verifySchemaGaps({ report: [], verdicts: [], coverage: { lenses: [], files: [] } }, false)).toEqual(["coverage"]);
+    expect(mergeVerificationCoverage(review, validVerification()).coverage.files).toEqual([
+      { file: "a.ts", verdict: "findings-priced", note: "all review concerns were priced-noise" },
+    ]);
+    const refuted = {
+      ...validVerification(),
+      verdicts: [
+        { id: "R1", grade: "false-positive", reason: "guarded" },
+        { id: "L1", grade: "false-positive", reason: "guarded" },
+      ],
+    };
+    expect(mergeVerificationCoverage(review, refuted).coverage.files[0].verdict).toBe("findings");
+  });
+
+  it("keeps mixed concerns as findings and permits verifier upgrades", () => {
+    const review = {
+      concerns: [
+        { id: "R1", file: "a.ts", lead_ids: [] },
+        { id: "R2", file: "a.ts", lead_ids: [] },
+      ],
+      coverage: { lenses, files: [
+        { file: "a.ts", verdict: "findings" },
+        { file: "b.ts", verdict: "considered-fine" },
+      ] },
+    };
+    const verify = {
+      report: [
+        { id: "R1", file: "a.ts", line: 1, title: "bug", tier: "major", severity: "error", scope: "in-diff", evidence: "line 1", evidence_ids: [] },
+        { id: "L1", file: "b.ts", line: 2, title: "new bug", tier: "minor", severity: "warning", scope: "in-diff", evidence: "line 2", evidence_ids: [] },
+      ],
+      verdicts: [
+        { id: "R1", grade: "actionable" },
+        { id: "R2", grade: "priced-noise", reason: "documented ceiling" },
+        { id: "L1", grade: "actionable" },
+      ],
+      coverage: { lenses, files: [
+        { file: "a.ts", verdict: "findings" },
+        { file: "b.ts", verdict: "findings" },
+      ] },
+    };
+    expect(mergeVerificationCoverage(review, verify).coverage.files.map(({ file, verdict }) => ({ file, verdict }))).toEqual([
+      { file: "a.ts", verdict: "findings" },
+      { file: "b.ts", verdict: "findings" },
+    ]);
   });
 
   it("kills a wedged child at its deadline", async () => {
