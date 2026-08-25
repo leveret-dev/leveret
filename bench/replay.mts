@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { auditConfig, createAuditRun, withAuditTrace } from "../src/audit.js";
+import { materializeChangeEvidence } from "../src/change-evidence.js";
 import { runStreaming } from "../src/exec.js";
 import { ensureGraph } from "../src/app/graph.js";
 import { scan } from "../src/scan.js";
@@ -210,9 +211,21 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
       await withAuditTrace(audit, async () => {
         await audit!.record("app", "replay_started", { plan, corpus_target_ids: plan.target_ids });
         await audit!.record("repository", "defect_preconditions_validated", { results: preconditions });
-        await audit!.record("repository", "review_diff", { base_sha: plan.base, head_sha: plan.head, range: plan.range, changed_files: (await git(checkout, ["diff", "--name-only", "-z", plan.range])).split("\0").filter(Boolean) });
+        const evidencePath = join(runnerDir, "change-evidence.v1.json");
+        const evidence = await materializeChangeEvidence(checkout, plan.base, evidencePath, plan.head);
+        const auditPatch = await evidence.auditPatch();
+        await audit!.record("repository", "review_diff", {
+          base_sha: evidence.manifest.base,
+          head_sha: evidence.manifest.head,
+          range: plan.range,
+          changed_files: evidence.manifest.files.map((file) => file.path),
+          change_manifest: evidence.manifest,
+          unified_diff: auditPatch.patch,
+          sha256: auditPatch.sha256,
+          bytes: auditPatch.bytes,
+        });
         const graph = await ensureGraph(checkout);
-        const scanResult = await (options.scanFn ?? scan)({ repo: checkout, base: plan.base, profilePath: options.profilePath, allowCustomEngines: false });
+        const scanResult = await (options.scanFn ?? scan)({ repo: checkout, base: evidence.manifest.base, manifest: evidence.manifest, profilePath: options.profilePath, allowCustomEngines: false });
         await audit!.record("repository", "scan_completed", { base_sha: plan.base, head_sha: plan.head, graph, scan: scanResult });
         await audit!.writeCapabilities({ graph, scanner: { engines: scanResult.engines }, node: process.version });
         const leadsPath = join(runnerDir, "leads.json");
@@ -221,7 +234,7 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
         if (plan.mode === "review-context") { workItemPath = join(runnerDir, "work-item.json"); await copyFile(plan.work_item_path!, workItemPath); await audit!.record("app", "work_item_materialized", { schema: "leveret.work-item/v1", sha256: plan.work_item_sha256, path_role: "outside-checkout runner input" }); }
         else await audit!.record("app", "work_item_omitted", { context_mode: "diff-only" });
         const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("LEVERET_TRACE_")));
-        const env = { ...inherited, ...traceEnvironment, LEVERET_REPO: checkout, LEVERET_BASE: plan.base, LEVERET_LEADS: leadsPath, LEVERET_GRAPH: graph.ok ? "1" : "0", LEVERET_TRACE_DIR: audit!.partialDir, LEVERET_RUN_ID: runId, LEVERET_DATA: traceRoot, ...(workItemPath ? { LEVERET_WORK_ITEM: workItemPath } : {}) };
+        const env = { ...inherited, ...traceEnvironment, LEVERET_REPO: checkout, LEVERET_BASE: plan.base, LEVERET_LEADS: leadsPath, LEVERET_CHANGE_MANIFEST: evidencePath, LEVERET_GRAPH: graph.ok ? "1" : "0", LEVERET_TRACE_DIR: audit!.partialDir, LEVERET_RUN_ID: runId, LEVERET_DATA: traceRoot, ...(workItemPath ? { LEVERET_WORK_ITEM: workItemPath } : {}) };
         const runner = options.runner ?? commandRunner(options.runnerCommand ?? process.env.LEVERET_RUNNER ?? `${process.execPath} ${resolve(harnessRoot, "dist/runner/pi.js")}`);
         await audit!.record("lifecycle", "runner_started", { context_mode: plan.mode, environment_names: Object.keys(env).sort() });
         const result = await runner({ cwd: runnerDir, env });

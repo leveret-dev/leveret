@@ -1,5 +1,6 @@
 import { existsSync, realpathSync } from "node:fs";
 import { join, matchesGlob, resolve } from "node:path";
+import { buildChangeManifest, validateChangeManifestCheckout, type ChangeManifest } from "./change-evidence.js";
 import { parseSarif } from "./sarif.js";
 import { baseFindingKeys, consumeKey, findingKey } from "./delta.js";
 import { ENGINES, which, type Engine, type ScanContext } from "./engines/registry.js";
@@ -8,62 +9,41 @@ import type { EngineReport, Finding, ScanResult } from "./findings.js";
 import { applyMemory } from "./memory.js";
 import { filterFindings, loadProfile, scopeFiles, type Profile } from "./profile.js";
 
+function scannableFiles(manifest: ChangeManifest): string[] {
+  return manifest.files.filter((file) => file.new.exists).map((file) => file.path);
+}
+
+function manifestRenames(manifest: ChangeManifest): Map<string, string> {
+  return new Map(manifest.files
+    .filter((file) => file.status === "rename")
+    .map((file) => [file.oldPath, file.newPath]));
+}
+
+function manifestHunks(manifest: ChangeManifest): Map<string, [number, number][]> {
+  return new Map(manifest.files
+    .filter((file) => file.hunks.length > 0)
+    .map((file) => [file.path, file.hunks.map((hunk) => [
+      hunk.newStart,
+      hunk.newStart + Math.max(hunk.newLines, 1) - 1,
+    ] as [number, number])]));
+}
+
 export async function changedFiles(repo: string, base: string): Promise<string[]> {
-  // ACMR: deletions have nothing to scan. -z survives any file name.
-  const r = await run(
-    "git",
-    ["diff", "--name-only", "-z", "--diff-filter=ACMR", `${base}...HEAD`],
-    repo,
-  );
-  if (r.code !== 0) throw new Error(`git diff failed: ${r.stderr.slice(0, 500)}`);
-  return r.stdout.split("\0").filter(Boolean);
+  return scannableFiles(await buildChangeManifest(repo, base));
 }
 
 /** base path -> head path for renames, so a renamed file's base findings keep
  * matching under the head name instead of resurfacing as "introduced" */
 export async function renamedFiles(repo: string, base: string): Promise<Map<string, string>> {
-  const r = await run(
-    "git",
-    ["diff", "--name-status", "-z", "-M", "--diff-filter=R", `${base}...HEAD`],
-    repo,
-  );
-  if (r.code !== 0) throw new Error(`git diff failed: ${r.stderr.slice(0, 500)}`);
-  // -z format: R<score>\0old\0new\0 ...
-  const parts = r.stdout.split("\0").filter(Boolean);
-  const map = new Map<string, string>();
-  for (let i = 0; i + 2 < parts.length + 1; i += 3) {
-    if (parts[i]?.startsWith("R") && parts[i + 1] && parts[i + 2]) {
-      map.set(parts[i + 1]!, parts[i + 2]!);
-    }
-  }
-  return map;
+  return manifestRenames(await buildChangeManifest(repo, base));
 }
 
-/** head-side changed line ranges per file, from `git diff -U0` hunk headers */
+/** head-side changed line ranges per file */
 export async function changedHunks(
   repo: string,
   base: string,
 ): Promise<Map<string, [number, number][]>> {
-  const r = await run("git", ["diff", "-U0", "-M", `${base}...HEAD`], repo);
-  if (r.code !== 0) throw new Error(`git diff failed: ${r.stderr.slice(0, 500)}`);
-  const hunks = new Map<string, [number, number][]>();
-  let file = "";
-  for (const line of r.stdout.split("\n")) {
-    const f = line.match(/^\+\+\+ b\/(.*)$/);
-    if (f) {
-      file = f[1]!;
-      continue;
-    }
-    const h = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
-    if (h && file) {
-      const start = Number(h[1]);
-      const count = h[2] === undefined ? 1 : Number(h[2]);
-      const list = hunks.get(file) ?? [];
-      list.push([start, start + Math.max(count, 1) - 1]);
-      hunks.set(file, list);
-    }
-  }
-  return hunks;
+  return manifestHunks(await buildChangeManifest(repo, base));
 }
 
 /** how close (in lines) a pre-existing finding must sit to a changed hunk to
@@ -138,6 +118,7 @@ export async function scan(opts: {
   repo: string;
   base?: string;
   files?: string[];
+  manifest?: ChangeManifest;
   engines?: string[];
   profilePath?: string;
   rulesRoot?: string;
@@ -147,7 +128,20 @@ export async function scan(opts: {
   /** with a base: drop findings already present at the base tree (default true) */
   delta?: boolean;
 }): Promise<ScanResult> {
-  const files = opts.files ?? (opts.base ? await changedFiles(opts.repo, opts.base) : []);
+  let manifest = opts.manifest;
+  let base = opts.base;
+  if (base) {
+    if (manifest) {
+      await validateChangeManifestCheckout(opts.repo, manifest);
+      if (base !== manifest.base) throw new Error("scan base does not match the change manifest");
+    } else {
+      manifest = await buildChangeManifest(opts.repo, base);
+    }
+    base = manifest.base;
+  } else if (manifest) {
+    throw new Error("scan needs base when a change manifest is supplied");
+  }
+  const files = opts.files ?? (manifest ? scannableFiles(manifest) : []);
   if (files.length === 0 && !opts.files) {
     throw new Error("scan needs either files[] or a base ref with changes");
   }
@@ -169,7 +163,7 @@ export async function scan(opts: {
 
   const reports: EngineReport[] = [];
   const findings = await runEngines(
-    { repo: opts.repo, files, base: opts.base },
+    { repo: opts.repo, files, base },
     profile,
     wanted,
     opts.rulesRoot ?? opts.repo,
@@ -181,9 +175,9 @@ export async function scan(opts: {
   let preExisting = 0;
   let baseErrors: EngineReport[] = [];
   let reminderCandidates: Finding[] = [];
-  if (opts.base) {
-    const renames = await renamedFiles(opts.repo, opts.base);
-    const baseScan = await baseFindingKeys(opts.repo, opts.base, renames, (baseRepo, baseReports) =>
+  if (base && manifest) {
+    const renames = manifestRenames(manifest);
+    const baseScan = await baseFindingKeys(opts.repo, base, renames, (baseRepo, baseReports) =>
       runEngines(
         {
           repo: baseRepo,
@@ -213,7 +207,7 @@ export async function scan(opts: {
       // unless the profile explicitly says reminders: false, or a suppression
       // prices the class. (Owner ruling, 2026-08-21.)
       if (profile.reminders) {
-        const hunks = await changedHunks(opts.repo, opts.base);
+        const hunks = manifestHunks(manifest);
         reminderCandidates = dropped.filter((f) => nearChange(hunks, f));
       }
     }

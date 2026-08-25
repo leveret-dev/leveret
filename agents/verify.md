@@ -21,7 +21,10 @@ doesn't require it" — the human taught it, so it stands.
 Concern IDs start with `R`; remaining scan lead IDs start with `L`. Emit exactly
 one verdict for every supplied ID, with no extras or duplicates.
 
-1. Read the cited code **as it is now**; the claim may be stale or misread.
+1. Retrieve the concern's cited current change evidence with a bounded
+   `leveret_diff` request for the manifest path and relevant hunk/range; follow its
+   cursor and account for omissions. Never request an unscoped whole diff. The
+   claim may be stale or misread.
 2. Attempt refutation: find the guard the reviewer missed, the caller that never
    passes the feared input, the test that already covers it.
 3. If refutation fails, ground the claim: an **executed probe** (command plus output)

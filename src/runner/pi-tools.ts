@@ -3,6 +3,7 @@ import { Type } from "typebox";
 import { createHash } from "node:crypto";
 import { isAbsolute, relative, resolve } from "node:path";
 import { readFile, readdir, realpath } from "node:fs/promises";
+import type { ChangeEvidence } from "../change-evidence.js";
 import { astSearch } from "../astsearch.js";
 import { context } from "../context.js";
 import { run, runStreaming, safeChildEnvironment } from "../exec.js";
@@ -31,7 +32,7 @@ function presentProbeOutput(value: string): { text: string; truncated: boolean }
 }
 
 
-async function codegraph(repo: string, args: string[]): Promise<ReturnType<typeof text>> {
+async function codegraph(repo: string, args: string[]) {
   const result = await run("codegraph", args, repo, {
     timeoutMs: 120_000,
     env: safeChildEnvironment(),
@@ -91,6 +92,7 @@ export interface PiToolsOptions {
   rulesRoot: string;
   memoryRepo: string;
   base: string;
+  evidence: ChangeEvidence;
   serenaBundleSha256?: string;
   onToolOutcome?: (toolCallId: string, outcome: PiToolOutcome) => void;
 }
@@ -197,6 +199,7 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
         return json(await scan({
           repo,
           base: options.base,
+          manifest: options.evidence.manifest,
           files,
           engines: params.engines,
           profilePath: options.profilePath,
@@ -208,24 +211,25 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
     }),
     defineTool({
       name: "leveret_diff",
-      label: "Reviewed diff",
-      description: "Return the base-pinned unified diff and changed-file list for this review.",
-      parameters: Type.Object({}),
-      async execute() {
-        const changed = await run("git", ["diff", "--name-only", "-z", `${options.base}...HEAD`], repo, {
-          timeoutMs: 60_000,
-          env: safeChildEnvironment(),
-          maxBuffer: 2 * 1024 * 1024,
-        });
-        const diff = await run("git", ["diff", "--no-ext-diff", "--unified=80", `${options.base}...HEAD`], repo, {
-          timeoutMs: 60_000,
-          env: safeChildEnvironment(),
-          maxBuffer: 16 * 1024 * 1024,
-        });
-        if (changed.code !== 0 || diff.code !== 0) {
-          throw new ToolExecutionError(`git diff failed: ${(changed.stderr || diff.stderr).slice(0, 500)}`, changed.timedOut || diff.timedOut);
-        }
-        return text(`changed_files:\n${changed.stdout.split("\0").filter(Boolean).join("\n")}\n\nunified_diff:\n${diff.stdout}`);
+      label: "Scoped change evidence",
+      description: "Return the compact pinned change manifest, or bounded patches for explicit manifest paths. Patch responses are paginated and never exceed the byte budget.",
+      parameters: Type.Union([
+        Type.Object({ kind: Type.Literal("manifest") }),
+        Type.Object({
+          kind: Type.Literal("patch"),
+          paths: Type.Array(Type.String(), { minItems: 1 }),
+          context: Type.Optional(Type.Number({ minimum: 0, maximum: 20 })),
+          hunk: Type.Optional(Type.Number({ minimum: 1 })),
+          range: Type.Optional(Type.Object({
+            start: Type.Number({ minimum: 1 }),
+            end: Type.Number({ minimum: 1 }),
+          })),
+          byteBudget: Type.Optional(Type.Number({ minimum: 4, maximum: 256 * 1024 })),
+          cursor: Type.Optional(Type.String()),
+        }),
+      ]),
+      async execute(_id, params) {
+        return json(await options.evidence.retrieve(params));
       },
     }),
     defineTool({

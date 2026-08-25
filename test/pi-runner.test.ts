@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { auditConfig, createAuditRun, withAuditTrace } from "../src/audit.js";
+import type { ChangeEvidence, ChangeManifest } from "../src/change-evidence.js";
 import { run, runStreaming } from "../src/exec.js";
 import { prefetchSerena } from "../src/runner/prefetch-serena.js";
 import { buildPiSystemPrompt } from "../src/runner/pi-system.js";
@@ -32,6 +33,21 @@ import {
 import { buildPiTools } from "../src/runner/pi-tools.js";
 import { createPullRequestWorkItem, writeWorkItem } from "../src/work-item.js";
 
+const TEST_CHANGE_MANIFEST: ChangeManifest = {
+  schema: 1,
+  base: "0".repeat(40),
+  head: "1".repeat(40),
+  range: `${"0".repeat(40)}...${"1".repeat(40)}`,
+  files: [],
+  errors: [],
+  truncated: false,
+};
+const TEST_CHANGE_EVIDENCE: ChangeEvidence = {
+  manifest: TEST_CHANGE_MANIFEST,
+  async retrieve() { throw new Error("change evidence is not exercised by this fixture"); },
+  async auditPatch() { throw new Error("audit patch is not exercised by this fixture"); },
+};
+
 const toolOptions = (repo: string, sandboxed = false) => ({
   repo,
   base: "HEAD",
@@ -40,6 +56,7 @@ const toolOptions = (repo: string, sandboxed = false) => ({
   memoryRepo: repo,
   graphLive: false,
   sandboxed,
+  evidence: TEST_CHANGE_EVIDENCE,
 });
 function toolPayload(result: { content: readonly { type: string; text?: string }[] }): Record<string, unknown> {
   const content = result.content.find((item) => item.type === "text" && item.text?.startsWith("{"));
@@ -90,6 +107,10 @@ describe("Pi runtime isolation", () => {
     const names = tools.tools.map((tool) => tool.name);
     expect(names).toContain("leveret_scan");
     expect(names).toContain("leveret_diff");
+    const diff = tools.tools.find((tool) => tool.name === "leveret_diff")!;
+    expect(JSON.stringify(diff.parameters)).toContain("\"kind\"");
+    expect(JSON.stringify(diff.parameters)).toContain("\"required\":[\"kind\"]");
+    expect(JSON.stringify(diff.parameters)).toContain("\"paths\"");
     expect(names).toContain("leveret_ast_search");
     expect(names).toContain("leveret_read");
     expect(names).not.toContain("read");

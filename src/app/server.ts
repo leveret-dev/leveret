@@ -5,6 +5,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { auditConfig, createAuditRun, redactAuditText, withAuditTrace } from "../audit.js";
+import { materializeChangeEvidence } from "../change-evidence.js";
 import { loadProfile } from "../profile.js";
 import { scan } from "../scan.js";
 import type { Finding, ScanResult } from "../findings.js";
@@ -163,21 +164,23 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
       // the graph is derived and always buildable — structure is queried, not grepped)
       const graph = await ensureGraph(work);
       if (!graph.ok) log.warn("codegraph unavailable", { detail: graph.detail });
-      const diff = await run("git", ["diff", "--no-ext-diff", "--unified=80", `${base}...HEAD`], work, { timeoutMs: APP_CHILD_TIMEOUT_MS });
-      const changed = await run("git", ["diff", "--name-only", "-z", `${base}...HEAD`], work, { timeoutMs: APP_CHILD_TIMEOUT_MS });
-      if (diff.code !== 0 || changed.code !== 0) throw new Error("git diff identity capture failed");
+      const evidencePath = join(runnerWork, "change-evidence.v1.json");
+      const evidence = await materializeChangeEvidence(work, base, evidencePath, job.headSha);
+      const auditPatch = await evidence.auditPatch();
       await audit?.record("repository", "review_diff", {
         base_ref: baseRef,
-        base_sha: base,
-        head_sha: job.headSha,
-        changed_files: changed.stdout.split("\0").filter(Boolean),
-        unified_diff: diff.stdout,
-        sha256: createHash("sha256").update(diff.stdout).digest("hex"),
-        bytes: Buffer.byteLength(diff.stdout),
+        base_sha: evidence.manifest.base,
+        head_sha: evidence.manifest.head,
+        changed_files: evidence.manifest.files.map((file) => file.path),
+        change_manifest: evidence.manifest,
+        unified_diff: auditPatch.patch,
+        sha256: auditPatch.sha256,
+        bytes: auditPatch.bytes,
       });
       const result = await scan({
         repo: work,
-        base,
+        base: evidence.manifest.base,
+        manifest: evidence.manifest,
         profilePath: trusted.profilePath,
         rulesRoot: trusted.root,
         memoryRepo: trusted.root,
@@ -233,6 +236,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
           LEVERET_BASE: base,
           LEVERET_LEADS: leadsPath,
           LEVERET_WORK_ITEM: workItemFile.path,
+          LEVERET_CHANGE_MANIFEST: evidencePath,
           LEVERET_GRAPH: graph.ok ? "1" : "0",
           ...(prior.length > 0 ? { LEVERET_PRIOR: join(runnerWork, "prior.json") } : {}),
           ...(audit ? { LEVERET_TRACE_DIR: audit.partialDir, LEVERET_RUN_ID: runId, LEVERET_DATA: DATA_DIR } : {}),

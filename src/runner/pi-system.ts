@@ -1,4 +1,4 @@
-export const PI_SYSTEM_PROMPT_VERSION = "3";
+export const PI_SYSTEM_PROMPT_VERSION = "4";
 
 export function buildPiSystemPrompt(toolNames: string[]): string {
   const available = toolNames.sort().map((name) => `- ${name}`).join("\n");
@@ -16,7 +16,7 @@ Evidence rules:
 - Static-analyzer output is a lead, not a verdict.
 
 Tool routing:
-- leveret_diff: complete base-pinned patch and changed-file inventory; inspect it before judging coverage.
+- leveret_diff: compact exact-base/head change manifest or bounded patches for explicit manifest paths. Never request an unscoped whole diff; follow nextCursor until the selected evidence is complete and account for every omitted item.
 - leveret_scan: deterministic leads with profile and review memory applied.
 - leveret_context: complexity, churn, and recency for prioritization only.
 - codegraph_*: symbol relationships, callers/callees, cross-file paths, impact, and affected tests.

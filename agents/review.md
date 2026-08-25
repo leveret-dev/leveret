@@ -17,8 +17,10 @@ be verified and will be dropped.
 2. `leveret.context` on the changed files — per-function complexity, churn, and
    recency. High complexity in a high-churn file gets your deepest read; do not
    spend your budget evenly.
-3. The diff itself (`git diff {{BASE}}...HEAD` in `{{REPO}}`) and the full current
-   text of every changed file.
+3. The supplied exact-base/head change manifest, then bounded `leveret_diff` patch
+   requests for its paths. Start with prioritized files, use hunk/range selection
+   where useful, follow cursors, and record every omitted path or hunk. There is no
+   whole-diff route and you do not need the full text of every changed file.
 4. **Blast radius — mandatory.** For every changed function, class, constant, or
    config key, find its callers and dependents **outside the diff** (code-graph
    tooling such as CodeGraph where available, otherwise `leveret.ast_search` and
