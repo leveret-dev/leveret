@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { createPullRequestWorkItem, type WorkItem } from "../work-item.js";
 
 // GitHub webhook plumbing: signature verification and event → job routing.
 // Pure; the HTTP server and API client wrap around this.
@@ -66,6 +67,7 @@ export type Job =
       repo: string;
       pr: number;
       headSha: string;
+      baseSha: string;
       baseRef: string;
       cloneUrl: string;
       action: string;
@@ -73,6 +75,7 @@ export type Job =
       event: "pull_request";
       deliveryId?: string;
       installationId?: number;
+      workItem: WorkItem;
     }
   | {
       kind: "learn-feed";
@@ -93,8 +96,10 @@ interface PullPayload {
   pull_request?: {
     number: number;
     title?: string;
+    body?: string | null;
+    user?: { login?: string };
     head: { sha: string };
-    base: { ref: string; repo: { full_name: string; clone_url: string } };
+    base: { ref: string; sha: string; repo: { full_name: string; clone_url: string } };
   };
   comment?: {
     id: number;
@@ -114,10 +119,25 @@ export function routeEvent(event: string, payload: PullPayload, deliveryId?: str
       repo: pr.base.repo.full_name,
       pr: pr.number,
       headSha: pr.head.sha,
+      baseSha: pr.base.sha,
       baseRef: pr.base.ref,
       cloneUrl: pr.base.repo.clone_url,
       action: payload.action,
       title: pr.title ?? "",
+      workItem: createPullRequestWorkItem({
+        event: "pull_request",
+        deliveryId,
+        installationId: payload.installation?.id,
+        repository: pr.base.repo.full_name,
+        number: pr.number,
+        action: payload.action,
+        title: pr.title,
+        body: pr.body,
+        authorLogin: pr.user?.login,
+        baseRef: pr.base.ref,
+        baseSha: pr.base.sha,
+        headSha: pr.head.sha,
+      }),
       event: "pull_request",
       ...(deliveryId ? { deliveryId } : {}),
       ...(payload.installation ? { installationId: payload.installation.id } : {}),

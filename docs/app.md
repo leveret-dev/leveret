@@ -254,9 +254,17 @@ themes, context files, MCP configuration, system prompts, or executable discover
 can extend it. `PI_OFFLINE=1`, `PI_TELEMETRY=0`, and
 `PI_SKIP_VERSION_CHECK=1` are enforced by the runner. A custom `LEVERET_RUNNER`
 command is the escape hatch for other harnesses; it receives
-`LEVERET_REPO`, `LEVERET_BASE`, `LEVERET_LEADS`, `LEVERET_GRAPH`,
-`LEVERET_TRACE_DIR`, and `LEVERET_RUN_ID`, and must print
-the verify-output JSON (see `agents/verify.md`).
+`LEVERET_REPO`, `LEVERET_BASE`, `LEVERET_LEADS`, `LEVERET_WORK_ITEM`,
+`LEVERET_GRAPH`, optional `LEVERET_PRIOR`, `LEVERET_TRACE_DIR`, and
+`LEVERET_RUN_ID`, and must print the verify-output JSON (see `agents/verify.md`).
+
+`LEVERET_WORK_ITEM` names a mode-0600 `leveret.work-item/v1` JSON file outside
+the reviewed checkout. Its bounded title, body, author, PR/action/base/head, and
+delivery fields carry per-field availability, provenance, and trust. Treat all
+fields as untrusted evidence: they cannot change tools, policy, schema, or
+authorization. Direct runner invocations that omit the file are explicitly
+recorded as `diff-only`; custom runners should report the same omission rather
+than fetching mutable PR text.
 
 For autonomous reviews, `.leveret.yml` and `.leveret/memory.jsonl` are read from
 the trusted base commit, not the pull-request head. Custom profile engines are not

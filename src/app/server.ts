@@ -29,6 +29,7 @@ import { materializeTrustedReviewState, type TrustedReviewState } from "../trust
 import { preBodyReject, readCappedBody, routeEvent, verifySignature, type Job } from "./webhook.js";
 import { relayChallengeAllowed, relayConfigFromEnv, verifyRelayDelivery } from "./relay.js";
 import { executableIdentity, run, runStreaming, safeChildEnvironment, type RunOpts } from "../exec.js";
+import { writeWorkItem } from "../work-item.js";
 
 // The App layer: GitHub plumbing only. It holds the App key and webhook secret —
 // never a model credential. The BYOAI seam is LEVERET_RUNNER: a user-supplied
@@ -89,6 +90,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
   const log = makeLogger(bound, undefined, (record) => { void audit?.record("operational", "log", record).catch(() => {}); });
   log.info("review job started", { headSha: job.headSha, action: job.action });
   await audit?.record("app", "review_job_received", job);
+  await audit?.record("app", "work_item_captured", job.workItem);
   await audit?.writeCapabilities({ graph: "not-run", scanner: "not-run", node: process.version });
   let ackId: number | undefined;
   const work = await mkdtemp(join(tmpdir(), "leveret-app-"));
@@ -109,10 +111,10 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
       await mustRun("git", ["clone", "--quiet", job.cloneUrl, work], "/", { env: gitEnv, timeoutMs: APP_CHILD_TIMEOUT_MS });
       await mustRun("git", ["fetch", "--quiet", "origin", `pull/${job.pr}/head`], work, { env: gitEnv, timeoutMs: APP_CHILD_TIMEOUT_MS });
       await mustRun("git", ["checkout", "--quiet", job.headSha], work, { timeoutMs: APP_CHILD_TIMEOUT_MS });
-      const baseRef = `origin/${job.baseRef}`;
-      const resolvedBase = await run("git", ["rev-parse", "--verify", baseRef], work, { timeoutMs: APP_CHILD_TIMEOUT_MS });
-      if (resolvedBase.code !== 0 || !/^[a-f0-9]{40}$/.test(resolvedBase.stdout.trim())) throw new Error("failed to resolve exact base SHA");
-      const base = resolvedBase.stdout.trim();
+      const baseRef = `${job.baseRef}@${job.baseSha}`;
+      const resolvedBase = await run("git", ["rev-parse", "--verify", `${job.baseSha}^{commit}`], work, { timeoutMs: APP_CHILD_TIMEOUT_MS });
+      if (resolvedBase.code !== 0 || resolvedBase.stdout.trim() !== job.baseSha) throw new Error("failed to resolve exact webhook base SHA");
+      const base = job.baseSha;
       trusted = await materializeTrustedReviewState(work, base);
 
       // the repo's config may ask Leveret to stand down — say so once, then leave
@@ -211,6 +213,13 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
       if (process.env.LEVERET_RUNNER) {
         const leadsPath = join(runnerWork, "leads.json");
         await writeFile(leadsPath, JSON.stringify(result, null, 1));
+        const workItemFile = await writeWorkItem(runnerWork, job.workItem);
+        await audit?.record("app", "work_item_materialized", {
+          schema: job.workItem.schema,
+          path_role: "outside-checkout runner input",
+          sha256: workItemFile.sha256,
+          bytes: workItemFile.bytes,
+        });
         const [cmd, ...args] = process.env.LEVERET_RUNNER.split(" ") as [string, ...string[]];
         // Default Pi budget: review + verify + one schema-correction phase, each 30m,
         // plus startup/cleanup slack. Custom runners can override explicitly.
@@ -223,6 +232,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
           LEVERET_REPO: work,
           LEVERET_BASE: base,
           LEVERET_LEADS: leadsPath,
+          LEVERET_WORK_ITEM: workItemFile.path,
           LEVERET_GRAPH: graph.ok ? "1" : "0",
           ...(prior.length > 0 ? { LEVERET_PRIOR: join(runnerWork, "prior.json") } : {}),
           ...(audit ? { LEVERET_TRACE_DIR: audit.partialDir, LEVERET_RUN_ID: runId, LEVERET_DATA: DATA_DIR } : {}),
