@@ -1,0 +1,76 @@
+{
+ "schema": 1,
+ "date": "2026-08-25",
+ "purpose": "Post-hardening CodeRabbit parity rerun on exact pre-fix snapshots",
+ "cases": [
+  {
+   "name": "pf2444-coderabbit-original-rerun",
+   "repository": "pfBlockerNG/pfBlockerNG",
+   "pr": 2444,
+   "base": "8f08d6e4d7145a89fc4e15133d595e7a9825d673",
+   "head": "ed359c691e8002acaeb0a296bc69bf9ab1bbc97a",
+   "changed_files": 15,
+   "canonical_binary_diff_sha256": "dcfaec66412b7692f1510b3e4f47448c4fe0be9b6915e6c413d5d6fdcbccfabe",
+   "canonical_binary_diff_bytes": 150938,
+   "scan_leads": 0,
+   "result": "2026-08-25-parity-rerun-pf2444-summary.json",
+   "published_findings": 4,
+   "accepted_coderabbit_overlap": [
+    "stale marked configuration passes without generated URL validation"
+   ]
+  },
+  {
+   "name": "pf2521-coderabbit-original-rerun",
+   "repository": "pfBlockerNG/pfBlockerNG",
+   "pr": 2521,
+   "base": "03d1e963f0e8fb4c4673b0fef6b12134ff7a037f",
+   "head": "b312a6def6d5b2c440431314081e4d9095d3dd6c",
+   "changed_files": 72,
+   "canonical_binary_diff_sha256": "248f6acf13b823b00b0b815fdf9b403f1954d1dcc8c76b9a806404bd098f4406",
+   "canonical_binary_diff_bytes": 484436,
+   "scan_leads": 24,
+   "result": "2026-08-25-parity-rerun-pf2521-summary.json",
+   "published_findings": 2,
+   "accepted_coderabbit_overlap": [],
+   "lead_disposition": "24/24 priced-noise; 23 mutable-action-tag leads matched the seeded ruling and one separate lead was independently priced"
+  }
+ ],
+ "trusted_ruling": {
+  "kind": "convention",
+  "scope": [
+   ".github/workflows/**"
+  ],
+  "text": "Do not report GitHub Actions referenced by mutable release tags instead of full commit SHAs in this repository; maintainers price SHA pinning at zero unless the change introduces a concrete exploit path beyond tag mutability.",
+  "author": "benchmark-adjudication-2026-08-24"
+ },
+ "runner": {
+  "harness": "pi/0.84.2",
+  "model": "openai-codex/gpt-5.6-sol",
+  "thinking": "high",
+  "system_prompt_version": "2",
+  "system_prompt_sha256": "7e7732b5e0f26153acf92d9a2b6b7ff929aa9da70fd761a0f7e0654ab876e4a0",
+  "capabilities": {
+   "codegraph": true,
+   "lsp": false,
+   "probe": true
+  }
+ },
+ "method": [
+  "Detached worktree at exact original_commit_id.",
+  "Trusted synthetic base was a child of the original base containing only the ruling; three-dot merge-base remained the original base, so the code diff was unchanged.",
+  "CodeGraph initialized and indexed per exact worktree.",
+  "Deterministic scan leads generated against the trusted base.",
+  "Standard Pi review and verification runner executed with sandboxed probes.",
+  "Two-dot and three-dot canonical diffs were mechanically confirmed byte-identical for both cases."
+ ],
+ "capture_limitations": [
+  "Direct runner invocation did not set LEVERET_TRACE_DIR, so #51 native audit sessions were not persisted.",
+  "OMP console transport retained final output but elided the middle of detailed tool_calls arrays; recovered summaries preserve complete findings, verdicts, coverage, configuration, and aggregate tool metrics.",
+  "Future #69 runs must write result JSON and audit traces directly rather than recover console output."
+ ],
+ "scoring": {
+  "accepted_coderabbit_findings": 12,
+  "latest_overlap": "1/12",
+  "note": "The thirteenth CodeRabbit inline suggestion (GNU tar absolute path) was rejected by the maintainer with executed reasoning and is a precision control, not part of the recall denominator."
+ }
+}

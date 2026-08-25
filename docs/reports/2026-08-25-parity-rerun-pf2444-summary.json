@@ -1,0 +1,334 @@
+{
+ "report": [
+  {
+   "id": "R1",
+   "file": "scripts/gen_landing.py",
+   "line": 500,
+   "title": "installer one-liner masks fetch failures",
+   "tier": "major",
+   "severity": "error",
+   "scope": "in-diff",
+   "evidence": "Current generator line 500 and README line 71 emit `fetch -qo - ... | sh`. Executed `sh -c '(exit 7) | sh; printf ...'` returned `pipeline_rc=0`, confirming the failed producer is masked by `sh`.",
+   "suggested_fix": "Fetch to a temporary file and execute it only after a successful fetch, using `fetch ... && sh ...` with cleanup.",
+   "evidence_ids": [
+    "call_Jc8wzV3puOVWS79rdAkGHcBL|fc_040201482ef5978e016a8c5b785c1487d2af2df90ad4bf628a",
+    "call_ioSlF5vKImRChUT1nHY2Z5Yu|fc_040201482ef5978e016a8c5c0cbdd087d2a654246ed6d49a30",
+    "call_nTOU7IR4Bk5QVJ3pKvYcuvDK|fc_040201482ef5978e016a8c5bd597e887d2a5047ed093898b1f"
+   ]
+  },
+  {
+   "id": "R2",
+   "file": "scripts/channel-install/install-common.sh",
+   "line": 133,
+   "title": "cwd-relative hook overrides the embedded trusted hook",
+   "tier": "major",
+   "severity": "error",
+   "scope": "in-diff",
+   "evidence": "Lines 33-34 derive HOOK_SRC from `$0`, and lines 133-145 prefer and install that file. A generated installer piped through `sh -s` from a work directory copied and executed a decoy at `../rc.d/pfblockerng_repo_generate.sh`: `installer_rc=0`, `decoy_marker=executed-as-uid=501`, `installed_hook_is_decoy=True`, and `done_reported=True`. README line 68 directs users to run the command as root.",
+   "suggested_fix": "Make published installers always emit the embedded hook; permit HOOK_SRC only in an explicitly identified checkout invocation.",
+   "evidence_ids": [
+    "call_daSQat8dUuOfBb09klKkf3sY|fc_040201482ef5978e016a8c5c0cbde087d2ab4a24b862c683eb",
+    "call_jZa5QrhFCdVRtdJGRBSWqIYn|fc_040201482ef5978e016a8c5b785bfc87d291127c158262cb88",
+    "call_ioSlF5vKImRChUT1nHY2Z5Yu|fc_040201482ef5978e016a8c5c0cbdd087d2a654246ed6d49a30",
+    "call_zGL9JcaBxS6BFL9aP0G1fori|fc_040201482ef5978e016a8c5c055f6487d2958bee22840a83a6"
+   ]
+  },
+  {
+   "id": "R3",
+   "file": "scripts/channel-install/install-common.sh",
+   "line": 180,
+   "title": "stale marker lets failed conf regeneration pass",
+   "tier": "major",
+   "severity": "error",
+   "scope": "in-diff",
+   "evidence": "The hook leaves an existing conf unchanged on detection failure, while line 180 checks only whether the old marker exists. With a marked ce-2.7 conf and no version file, the executed installer produced `installer_rc=0`, `detection_warning=True`, `stale_conf_unchanged=True`, `stale_url_reported=True`, `pkg_update_called=True`, and `done_reported=True`.",
+   "suggested_fix": "Use a strict generation path that writes a newly generated conf to a temporary file and atomically replaces the existing conf only on successful detection and emission.",
+   "evidence_ids": [
+    "call_PWbTgGQ7wPmX1bd6LvTm6PUe|fc_040201482ef5978e016a8c5c0cbde887d2afe94cf19557fc3f",
+    "call_jZa5QrhFCdVRtdJGRBSWqIYn|fc_040201482ef5978e016a8c5b785bfc87d291127c158262cb88",
+    "call_faNdG78KknmPSsVt22u1z8Qk|fc_040201482ef5978e016a8c5c055f7087d2afc79fc06c340fa6"
+   ]
+  },
+  {
+   "id": "R4",
+   "file": "scripts/channel-install/install-common.sh",
+   "line": 305,
+   "title": "payload verification succeeds when pkg info fails",
+   "tier": "major",
+   "severity": "error",
+   "scope": "in-diff",
+   "evidence": "Lines 305-314 derive `_missing` through a pipeline without checking `pkg info -l` separately. An executed pkg double returned 9 for that query, but output showed `installer_rc=0`, `info-failed-rc=9`, `info_call_logged=True`, and `done_reported=True`.",
+   "suggested_fix": "Capture `pkg info -l` into a temporary file and fail with exit 6 if that command fails before processing its output.",
+   "evidence_ids": [
+    "call_NdEvcFn6EBzo5MxXRVnFMomD|fc_040201482ef5978e016a8c5b785c0887d29f3bb92d34f95a80",
+    "call_mr61vTGfHQnI3Mq1MVDirOPQ|fc_040201482ef5978e016a8c5c055f7887d298810d5216b5197b"
+   ]
+  }
+ ],
+ "verdicts": [
+  {
+   "id": "R1",
+   "grade": "actionable"
+  },
+  {
+   "id": "R2",
+   "grade": "actionable"
+  },
+  {
+   "id": "R3",
+   "grade": "actionable"
+  },
+  {
+   "id": "R4",
+   "grade": "actionable"
+  }
+ ],
+ "coverage": {
+  "lenses": [
+   {
+    "lens": "correctness-hostile-inputs",
+    "outcome": "4 concerns: fetch failure masking, cwd hook substitution, stale-conf fail-open, and swallowed verification failure"
+   },
+   {
+    "lens": "contract-conformance",
+    "outcome": "4 concerns against issue #2416's reliable one-command, self-contained, fail-closed, verified installer intent"
+   },
+   {
+    "lens": "test-honesty",
+    "outcome": "concerns R1-R4 lack regression coverage; valid-script pipe tests do not exercise fetch failure, cwd hook collision, stale marked conf, or failing `pkg info -l`"
+   },
+   {
+    "lens": "blast-radius",
+    "outcome": "traced pfb_channel_install through all four stubs and write_channel_installers; traced write_site/main through publish-pkg-repo.sh and five workflow invocations; traced hook env keys to add-repo.sh and existing hook specs"
+   },
+   {
+    "lens": "leads-triage",
+    "outcome": "0 kept leads; 21 shellcheck reports were pre-existing, with no suspicious suppressions"
+   }
+  ],
+  "files": [
+   {
+    "file": "CONTRIBUTING.md",
+    "verdict": "considered-fine",
+    "note": "documentation accurately describes the intended publishing model"
+   },
+   {
+    "file": "README.md",
+    "verdict": "findings"
+   },
+   {
+    "file": "docs/misc/architecture-notes.md",
+    "verdict": "considered-fine",
+    "note": "design documentation reviewed against implementation"
+   },
+   {
+    "file": "scripts/channel-install/install-common.sh",
+    "verdict": "findings"
+   },
+   {
+    "file": "scripts/channel-install/install-edge.sh",
+    "verdict": "findings",
+    "note": "documents and enters the affected piped installer path"
+   },
+   {
+    "file": "scripts/channel-install/install-nightly.sh",
+    "verdict": "findings",
+    "note": "documents and enters the affected piped installer path"
+   },
+   {
+    "file": "scripts/channel-install/install-stable.sh",
+    "verdict": "findings",
+    "note": "documents and enters the affected piped installer path"
+   },
+   {
+    "file": "scripts/channel-install/install-testing.sh",
+    "verdict": "findings",
+    "note": "documents and enters the affected piped installer path"
+   },
+   {
+    "file": "scripts/gen_landing.py",
+    "verdict": "findings"
+   },
+   {
+    "file": "scripts/publish-pkg-repo.sh",
+    "verdict": "considered-fine",
+    "note": "six-script generation and explicit staging are consistent"
+   },
+   {
+    "file": "scripts/rc.d/pfblockerng_repo_generate.sh",
+    "verdict": "considered-fine",
+    "note": "only attribution comments changed; behavior reviewed as a dependency"
+   },
+   {
+    "file": "tests/shell/publish_pkg_repo_spec.sh",
+    "verdict": "considered-fine",
+    "note": "62 shellspec examples passed"
+   },
+   {
+    "file": "tests/smoke/test_repo_install.py",
+    "verdict": "findings",
+    "note": "new direct-stdin smoke path cannot detect R1 or R2's pipeline/cwd failures"
+   },
+   {
+    "file": "tests/test_channel_install.py",
+    "verdict": "findings",
+    "note": "does not cover stale marked conf or a failing pkg info query"
+   },
+   {
+    "file": "tests/test_gen_landing.py",
+    "verdict": "findings",
+    "note": "asserts the pipeline text and successful input but not fetch-side failure"
+   }
+  ]
+ },
+ "resolutions": [],
+ "run_configuration": {
+  "harness": "pi/0.84.2",
+  "process": {
+   "pid": 86614,
+   "hostname": "Andres-MacBook-Pro.local",
+   "wall_time": "2026-08-24T14:59:43.886Z",
+   "monotonic_time_origin_ms": 1787582412195.967
+  },
+  "client": "leveret-runner-pi",
+  "model": "openai-codex/gpt-5.6-sol",
+  "thinking": "high",
+  "auth": "subscription-oauth",
+  "auth_source": "OAuth",
+  "system_prompt": {
+   "version": "2",
+   "sha256": "7e7732b5e0f26153acf92d9a2b6b7ff929aa9da70fd761a0f7e0654ab876e4a0"
+  },
+  "capabilities": {
+   "graph": true,
+   "lsp": false,
+   "probe": true,
+   "tool_schema_sha256": "e1e5364484caeca62373ad0189fd3614eee472fb63daff34377303c918fc0837",
+   "tool_source_sha256": "1e7abd981943acdf5cad0e0a932d86eb05035f63d39ce5481a990cb70dff8715",
+   "tool_inventory": [
+    "codegraph_affected",
+    "codegraph_explore",
+    "codegraph_impact",
+    "codegraph_node",
+    "leveret_ast_search",
+    "leveret_context",
+    "leveret_diff",
+    "leveret_find",
+    "leveret_grep",
+    "leveret_ls",
+    "leveret_memory",
+    "leveret_probe",
+    "leveret_read",
+    "leveret_scan"
+   ],
+   "lsp_error": "LEVERET_SERENA_BUNDLE is unset; no packaged LSP bundle is available"
+  },
+  "tools": {
+   "review": {
+    "leveret_scan": {
+     "calls": 2,
+     "errors": 0,
+     "duration_ms": 9934
+    },
+    "leveret_probe": {
+     "calls": 13,
+     "errors": 1,
+     "duration_ms": 49739
+    },
+    "leveret_context": {
+     "calls": 2,
+     "errors": 0,
+     "duration_ms": 698
+    },
+    "leveret_diff": {
+     "calls": 2,
+     "errors": 0,
+     "duration_ms": 84
+    },
+    "leveret_memory": {
+     "calls": 2,
+     "errors": 0,
+     "duration_ms": 2
+    },
+    "leveret_grep": {
+     "calls": 10,
+     "errors": 0,
+     "duration_ms": 856
+    },
+    "leveret_read": {
+     "calls": 17,
+     "errors": 0,
+     "duration_ms": 80
+    },
+    "codegraph_explore": {
+     "calls": 6,
+     "errors": 0,
+     "duration_ms": 7966
+    },
+    "leveret_find": {
+     "calls": 1,
+     "errors": 0,
+     "duration_ms": 22
+    },
+    "leveret_ls": {
+     "calls": 2,
+     "errors": 0,
+     "duration_ms": 3
+    },
+    "codegraph_affected": {
+     "calls": 1,
+     "errors": 0,
+     "duration_ms": 242
+    }
+   },
+   "verify": {
+    "leveret_diff": {
+     "calls": 2,
+     "errors": 0,
+     "duration_ms": 95
+    },
+    "leveret_memory": {
+     "calls": 2,
+     "errors": 0,
+     "duration_ms": 3
+    },
+    "leveret_read": {
+     "calls": 11,
+     "errors": 0,
+     "duration_ms": 23
+    },
+    "leveret_probe": {
+     "calls": 10,
+     "errors": 1,
+     "duration_ms": 2773
+    },
+    "leveret_grep": {
+     "calls": 1,
+     "errors": 0,
+     "duration_ms": 66
+    },
+    "codegraph_affected": {
+     "calls": 1,
+     "errors": 0,
+     "duration_ms": 248
+    }
+   }
+  },
+  "tool_calls": [],
+  "tool_calls_capture": "missing-console-elision"
+ },
+ "_capture": {
+  "status": "partial",
+  "source": "OMP background-job console artifact 47",
+  "retained": [
+   "report",
+   "verdicts",
+   "coverage",
+   "run_configuration.tools"
+  ],
+  "missing": [
+   "run_configuration.tool_calls detail elided by console transport"
+  ],
+  "note": "Aggregate tool counts remain authoritative; unavailable detail must render as unknown, never zero."
+ }
+}

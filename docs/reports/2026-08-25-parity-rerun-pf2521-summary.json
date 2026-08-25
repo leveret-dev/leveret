@@ -1,0 +1,641 @@
+{
+ "report": [
+  {
+   "id": "R1",
+   "file": "scripts/smoke-on-box.sh",
+   "line": 418,
+   "title": "on-box smoke images are never removed after the workload",
+   "tier": "major",
+   "severity": "error",
+   "scope": "in-diff",
+   "evidence": "Current code removes each target only before pulling (lines 217-228), pulls into /root/images subdirectories (lines 271-273), then replaces the process with `exec sh scripts/run-smoke.sh \"$@\"` at line 418. `run-smoke.sh` contains no image-directory cleanup, while docs/misc/local-smoke-debian.md:170-171 promises deletion when the workload exits.",
+   "suggested_fix": "Install an EXIT cleanup trap before pulling, invoke run-smoke.sh without exec while preserving its status, and remove both image directories on success, failure, or interruption.",
+   "evidence_ids": [
+    "call_ea0XaOAlPNAwRaZSrovBi8BI|fc_01a0d626fc0df2d8016a8c5a548cb887d281a2723796bd065c",
+    "call_eoVhIWEyBCHwOfrrLRGoGTBH|fc_01a0d626fc0df2d8016a8c5a01e9c487d280b04cce51bbf791",
+    "call_F9ZvGQ58COeYUIU6ywIugGXS|fc_01a0d626fc0df2d8016a8c5a91cce887d2b2dce73349a8fdec",
+    "call_a77HcjNICOLx8lcrrBfHUL0S|fc_01a0d626fc0df2d8016a8c5a548cc887d2a9cf6e7f5a1ed7d0"
+   ]
+  },
+  {
+   "id": "R2",
+   "file": "pyproject.toml",
+   "line": 10,
+   "title": "the derived Python matrix cannot run a non-3.11 leg",
+   "tier": "major",
+   "severity": "error",
+   "scope": "in-diff",
+   "evidence": "Executed `uv sync --locked --group dev --python 3.12`; it exited 2 with `Using CPython 3.12.14` and `incompatible with the project's Python requirement: ==3.11.*`. test.yml:131-136 passes every derived matrix version to this command, and the matrix reader's own fixture explicitly derives both 3.11 and 3.12 from py311/py312.",
+   "suggested_fix": "Make requires-python and uv.lock cover every supported matrix minor while retaining .python-version as the local default; add a guard that exercises all derived Python versions.",
+   "evidence_ids": [
+    "call_PWK2MqOKsZolBgPZaeCTxmH1|fc_01a0d626fc0df2d8016a8c5a41488487d281bce884e6d651ad",
+    "call_0Her1Im63wCSb7fyhsJkTSbl|fc_01a0d626fc0df2d8016a8c5a01e9e087d28fe65ff1045f0738",
+    "call_tNZf7Dn4OZFOd8P9HZjIe9Lt|fc_01a0d626fc0df2d8016a8c5a548ce087d296712d11fa24ad15",
+    "call_vsOKY6dzzdGck7C3r7ENefdB|fc_01a0d626fc0df2d8016a8c5a548cd087d2be988b252f6c05c1",
+    "call_s1jenfX2TCj62IM1szCA1nYa|fc_01a0d626fc0df2d8016a8c5a548cd887d28ef5f96dc4b3b952"
+   ]
+  }
+ ],
+ "verdicts": [
+  {
+   "id": "R1",
+   "grade": "actionable"
+  },
+  {
+   "id": "R2",
+   "grade": "actionable"
+  },
+  {
+   "id": "L1",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L2",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L3",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L4",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L5",
+   "grade": "priced-noise",
+   "reason": "The job intentionally checks out and executes PR scripts and tests with only contents/packages read permission; matrix interpolation adds no authority or executable-code capability beyond that existing trust boundary."
+  },
+  {
+   "id": "L6",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L7",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L8",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L9",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L10",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L11",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L12",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L13",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L14",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L15",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L16",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L17",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L18",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L19",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L20",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L21",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L22",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L23",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  },
+  {
+   "id": "L24",
+   "grade": "priced-noise",
+   "reason": "Repository ruling prices mutable GitHub Action release tags at zero absent a concrete exploit path beyond tag mutability."
+  }
+ ],
+ "coverage": {
+  "lenses": [
+   {
+    "lens": "correctness-hostile-inputs",
+    "outcome": "2 concerns: persistent image storage and rejection of a supported non-3.11 matrix value"
+   },
+   {
+    "lens": "contract-conformance",
+    "outcome": "2 concerns: cleanup contradicts the runbook; exact Python requirement narrows the derived matrix contract"
+   },
+   {
+    "lens": "test-honesty",
+    "outcome": "2 concerns lack regression coverage for post-exit image cleanup and a second Python matrix minor; 93 focused pytest cases and 186 shellspec examples passed"
+   },
+   {
+    "lens": "blast-radius",
+    "outcome": "traced gates_for/is_vendor_gate/run_gate/main, local-smoke and smoke-on-box entry paths, _oras_pull, PFB_BOXES/PFB_GIT_REMOTE/MATRIX_REF, uv dependency groups, and deleted container/vendor interfaces. External consumers include select-box.sh, read-version-matrix.sh, run-smoke.sh and local-smoke channel/tier tests; active-reference searches found no remaining consumers of the deleted runner-image scripts"
+   },
+   {
+    "lens": "leads-triage",
+    "outcome": "24 leads dismissed: L1-L4 and L6-L24 are mutable action tags explicitly suppressed by repository ruling; L5's shell value is derived from py_flavor through a numeric-only regex, not attacker-controlled free text"
+   }
+  ],
+  "files": [
+   {
+    "file": ".agents/context/smoke.md",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".agents/policy/testing.md",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".agents/skills/subsystem-sweep/SKILL.md",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".dockerignore",
+    "verdict": "considered-fine",
+    "note": "intentional deletion with the retired image build"
+   },
+   {
+    "file": ".githooks/pre-commit",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/docker/VERSION",
+    "verdict": "considered-fine",
+    "note": "intentional deletion with the retired image series"
+   },
+   {
+    "file": ".github/docker/check-chromium.py",
+    "verdict": "considered-fine",
+    "note": "intentional deletion with the VM image"
+   },
+   {
+    "file": ".github/docker/ci-requirements.txt",
+    "verdict": "considered-fine",
+    "note": "pins moved to pyproject.toml and uv.lock"
+   },
+   {
+    "file": ".github/docker/ci-runner-vm.Dockerfile",
+    "verdict": "considered-fine",
+    "note": "intentional deletion"
+   },
+   {
+    "file": ".github/docker/ci-runner.Dockerfile",
+    "verdict": "considered-fine",
+    "note": "intentional deletion"
+   },
+   {
+    "file": ".github/workflows/agent-config.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/workflows/build-image.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/workflows/build-pkg-linux.yml",
+    "verdict": "findings"
+   },
+   {
+    "file": ".github/workflows/ci-images.yml",
+    "verdict": "considered-fine",
+    "note": "intentional deletion"
+   },
+   {
+    "file": ".github/workflows/context-budget.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/workflows/hsts-refresh.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/workflows/image-refresh.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/workflows/module-durations.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/workflows/nightly-failure-alert.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/workflows/nightly.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/workflows/pkg-render-site.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/workflows/pkg-republish.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/workflows/psl-refresh.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/workflows/release-published.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/workflows/release.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/workflows/repo-install.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/workflows/smoke-single.yml",
+    "verdict": "findings"
+   },
+   {
+    "file": ".github/workflows/smoke.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/workflows/test-version-matrix.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/workflows/test.yml",
+    "verdict": "findings"
+   },
+   {
+    "file": ".github/workflows/tld-refresh.yml",
+    "verdict": "findings"
+   },
+   {
+    "file": ".github/workflows/top1m-healthcheck.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".github/workflows/ui-tests.yml",
+    "verdict": "findings"
+   },
+   {
+    "file": ".github/workflows/version-tracker.yml",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": ".python-version",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "AGENTS.md",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "CONTRIBUTING.md",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "docs/misc/ci-image-bump-runbook.md",
+    "verdict": "considered-fine",
+    "note": "intentional deletion"
+   },
+   {
+    "file": "docs/misc/local-smoke-debian.md",
+    "verdict": "findings"
+   },
+   {
+    "file": "legacy/benchmarks/requirements.txt",
+    "verdict": "considered-fine",
+    "note": "pins moved to the bench dependency group"
+   },
+   {
+    "file": "pyproject.toml",
+    "verdict": "findings"
+   },
+   {
+    "file": "scripts/agent/run-gates.sh",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "scripts/ci-vendor.sh",
+    "verdict": "considered-fine",
+    "note": "intentional deletion"
+   },
+   {
+    "file": "scripts/local-smoke.sh",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "scripts/run-in-docker.sh",
+    "verdict": "considered-fine",
+    "note": "intentional deletion; active-reference search clean"
+   },
+   {
+    "file": "scripts/smoke-on-box.sh",
+    "verdict": "findings"
+   },
+   {
+    "file": "tests/shell/agent_run_gates_git_spec.sh",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "tests/shell/agent_run_gates_spec.sh",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "tests/shell/ci_vendor_spec.sh",
+    "verdict": "considered-fine",
+    "note": "deleted with ci-vendor.sh"
+   },
+   {
+    "file": "tests/shell/local_smoke_container_spec.sh",
+    "verdict": "considered-fine",
+    "note": "deleted with containerized local smoke"
+   },
+   {
+    "file": "tests/shell/local_smoke_spec.sh",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "tests/shell/precommit_ci_image_spec.sh",
+    "verdict": "considered-fine",
+    "note": "deleted with CI-image routing"
+   },
+   {
+    "file": "tests/shell/precommit_composer_vendor_spec.sh",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "tests/shell/precommit_hostile_path_spec.sh",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "tests/shell/run_in_docker_spec.sh",
+    "verdict": "considered-fine",
+    "note": "deleted with run-in-docker.sh"
+   },
+   {
+    "file": "tests/shell/smoke_on_box_spec.sh",
+    "verdict": "findings"
+   },
+   {
+    "file": "tests/skip-allowlist.txt",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "tests/smoke/conftest.py",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "tests/smoke/requirements.txt",
+    "verdict": "considered-fine",
+    "note": "dependencies moved to pyproject.toml"
+   },
+   {
+    "file": "tests/smoke/ui/__init__.py",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "tests/smoke/ui/conftest.py",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "tests/smoke/ui/webui.py",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "tests/test_benchmarks_ci_deps.py",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "tests/test_check_skip_allowlist.py",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "tests/test_ci_refresh_composer_vendor.py",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "tests/test_ci_runner_images.py",
+    "verdict": "considered-fine",
+    "note": "deleted with runner images"
+   },
+   {
+    "file": "tests/test_ci_tool_pins.py",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "tests/test_issue2231_workflow_hygiene.py",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "tests/test_issue2246_lan_gated_qcow_cache.py",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "tests/test_shard_union.py",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "tests/test_shell_ci_routing.py",
+    "verdict": "considered-fine"
+   },
+   {
+    "file": "uv.lock",
+    "verdict": "considered-fine",
+    "note": "locked environment synced successfully in a temporary project environment"
+   }
+  ]
+ },
+ "resolutions": [],
+ "run_configuration": {
+  "harness": "pi/0.84.2",
+  "process": {
+   "pid": 89980,
+   "hostname": "Andres-MacBook-Pro.local",
+   "wall_time": "2026-08-24T14:53:55.691Z",
+   "monotonic_time_origin_ms": 1787582423176.406
+  },
+  "client": "leveret-runner-pi",
+  "model": "openai-codex/gpt-5.6-sol",
+  "thinking": "high",
+  "auth": "subscription-oauth",
+  "auth_source": "OAuth",
+  "system_prompt": {
+   "version": "2",
+   "sha256": "7e7732b5e0f26153acf92d9a2b6b7ff929aa9da70fd761a0f7e0654ab876e4a0"
+  },
+  "capabilities": {
+   "graph": true,
+   "lsp": false,
+   "probe": true,
+   "tool_schema_sha256": "e1e5364484caeca62373ad0189fd3614eee472fb63daff34377303c918fc0837",
+   "tool_source_sha256": "1e7abd981943acdf5cad0e0a932d86eb05035f63d39ce5481a990cb70dff8715",
+   "tool_inventory": [
+    "codegraph_affected",
+    "codegraph_explore",
+    "codegraph_impact",
+    "codegraph_node",
+    "leveret_ast_search",
+    "leveret_context",
+    "leveret_diff",
+    "leveret_find",
+    "leveret_grep",
+    "leveret_ls",
+    "leveret_memory",
+    "leveret_probe",
+    "leveret_read",
+    "leveret_scan"
+   ],
+   "lsp_error": "LEVERET_SERENA_BUNDLE is unset; no packaged LSP bundle is available"
+  },
+  "tools": {
+   "review": {
+    "leveret_scan": {
+     "calls": 1,
+     "errors": 0,
+     "duration_ms": 6245
+    },
+    "leveret_diff": {
+     "calls": 1,
+     "errors": 0,
+     "duration_ms": 56
+    },
+    "leveret_context": {
+     "calls": 2,
+     "errors": 1,
+     "duration_ms": 664
+    },
+    "leveret_read": {
+     "calls": 14,
+     "errors": 0,
+     "duration_ms": 23
+    },
+    "leveret_probe": {
+     "calls": 9,
+     "errors": 0,
+     "duration_ms": 78603
+    },
+    "codegraph_affected": {
+     "calls": 1,
+     "errors": 0,
+     "duration_ms": 168
+    },
+    "codegraph_explore": {
+     "calls": 4,
+     "errors": 0,
+     "duration_ms": 3636
+    },
+    "leveret_grep": {
+     "calls": 16,
+     "errors": 0,
+     "duration_ms": 1741
+    },
+    "leveret_memory": {
+     "calls": 1,
+     "errors": 0,
+     "duration_ms": 1
+    }
+   },
+   "verify": {
+    "leveret_diff": {
+     "calls": 1,
+     "errors": 0,
+     "duration_ms": 50
+    },
+    "leveret_memory": {
+     "calls": 1,
+     "errors": 0,
+     "duration_ms": 1
+    },
+    "leveret_read": {
+     "calls": 20,
+     "errors": 0,
+     "duration_ms": 49
+    },
+    "leveret_grep": {
+     "calls": 7,
+     "errors": 0,
+     "duration_ms": 223
+    },
+    "leveret_find": {
+     "calls": 1,
+     "errors": 0,
+     "duration_ms": 37
+    },
+    "leveret_probe": {
+     "calls": 6,
+     "errors": 3,
+     "duration_ms": 198
+    }
+   }
+  },
+  "tool_calls": [],
+  "tool_calls_capture": "missing-console-elision"
+ },
+ "_capture": {
+  "status": "partial",
+  "source": "OMP background-job console artifact 38",
+  "retained": [
+   "report",
+   "verdicts",
+   "coverage",
+   "run_configuration.tools"
+  ],
+  "missing": [
+   "run_configuration.tool_calls detail elided by console transport"
+  ],
+  "note": "Aggregate tool counts remain authoritative; unavailable detail must render as unknown, never zero."
+ }
+}
