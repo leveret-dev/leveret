@@ -64,9 +64,9 @@
   "Two-dot and three-dot canonical diffs were mechanically confirmed byte-identical for both cases."
  ],
  "capture_limitations": [
-  "Direct runner invocation did not set LEVERET_TRACE_DIR, so #51 native audit sessions were not persisted.",
-  "OMP console transport retained final output but elided the middle of detailed tool_calls arrays; recovered summaries preserve complete findings, verdicts, coverage, configuration, and aggregate tool metrics.",
-  "Future #69 runs must write result JSON and audit traces directly rather than recover console output."
+  "The complete final runner JSON, including detailed tool_calls, was recovered from OMP raw background-job logs.",
+  "Direct runner invocation did not set LEVERET_TRACE_DIR, so #51 native audit sessions, assistant attempts, and full tool arguments/results were not persisted.",
+  "Future #69 runs must write result JSON and audit traces directly rather than rely on console-log recovery."
  ],
  "scoring": {
   "accepted_coderabbit_findings": 12,

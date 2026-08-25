@@ -4,8 +4,8 @@ Generated mechanically from runner JSON. Semantic finding overlap and defect val
 
 | run | findings | actionable | priced-noise | false-positive | dropped | tool calls | errors | timeouts | diff calls | diff bytes | detail | correction |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| 2026-08-25-parity-rerun-pf2444-summary | 4 | 4 | 0 | 0 | 0 | 85 | 2 | unknown | 4 | unknown | aggregate-only | no |
-| 2026-08-25-parity-rerun-pf2521-summary | 2 | 2 | 24 | 0 | 0 | 85 | 4 | unknown | 2 | unknown | aggregate-only | no |
+| 2026-08-25-parity-rerun-pf2444-summary | 4 | 4 | 0 | 0 | 0 | 85 | 2 | 0 | 4 | 1319788 | complete | no |
+| 2026-08-25-parity-rerun-pf2521-summary | 2 | 2 | 24 | 0 | 0 | 85 | 4 | 0 | 2 | 2155836 | complete | no |
 
 ## 2026-08-25-parity-rerun-pf2444-summary
 
