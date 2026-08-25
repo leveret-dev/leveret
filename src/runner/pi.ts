@@ -40,7 +40,14 @@ import { pathIsInside } from "../path.js";
 import { readWorkItem, type WorkItem } from "../work-item.js";
 import { cacheRunSchema } from "../review-cache.js";
 import {
-  SPECIALIZED_SCHEDULER,
+  discoveryScheduler,
+  experimentVariableIdentity,
+  loadModelRouting,
+  stableSha256,
+  type DiscoveryScheduler,
+} from "./experiment.js";
+import {
+  SPECIALIZED_DISCOVERY,
   TARGETED_VERIFIER_TOOLS,
   discoveryMode,
   phaseToolIdentity,
@@ -59,6 +66,8 @@ export interface PiRunnerParams {
   provider?: string;
   maxTime?: string;
   discoveryMode?: string;
+  discoveryScheduler?: string;
+  discoveryConcurrency?: string;
 }
 
 export interface PiRuntimeConfig {
@@ -67,6 +76,7 @@ export interface PiRuntimeConfig {
   thinking: string;
   deadlineMs: number;
   discoveryMode: DiscoveryMode;
+  discoveryScheduler: DiscoveryScheduler;
 }
 export type WorkItemContext =
   | { mode: "diff-only"; availability: "unavailable" }
@@ -99,6 +109,7 @@ export function piRuntimeConfig(params: PiRunnerParams, env: Record<string, stri
     thinking: params.effort ?? env.LEVERET_RUNNER_EFFORT ?? "high",
     deadlineMs,
     discoveryMode: discoveryMode(params.discoveryMode ?? env.LEVERET_DISCOVERY_MODE),
+    discoveryScheduler: discoveryScheduler(params.discoveryScheduler ?? env.LEVERET_DISCOVERY_SCHEDULER, params.discoveryConcurrency ?? env.LEVERET_DISCOVERY_CONCURRENCY),
   };
 }
 
@@ -230,6 +241,8 @@ export interface RunPhaseOptions {
   audit?: AuditWriter;
   createSession?: typeof createAgentSession;
   attemptCounter?: { count: number };
+  signal?: AbortSignal;
+  thinking?: string;
 }
 
 export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
@@ -259,11 +272,12 @@ export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
       tools: options.tools.map((tool) => ({ name: tool.name, description: tool.description, parameters: tool.parameters })),
       resources: { extensions: [], skills: [], prompts: [], themes: [], agents_files: [] },
     }, { phase: options.phase, attempt });
+    const phaseThinking = options.thinking ?? options.runtime.thinking;
     await options.audit?.record("provider", "request_metadata", {
       provider: options.model.provider,
       model: options.model.id,
       api: options.model.api,
-      thinking: options.runtime.thinking,
+      thinking: phaseThinking,
       prompt_sha256: createHash("sha256").update(options.prompt).digest("hex"),
       system_prompt_sha256: createHash("sha256").update(options.systemPrompt).digest("hex"),
     }, { phase: options.phase, attempt });
@@ -272,7 +286,7 @@ export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
       agentDir: process.env.LEVERET_PI_AGENT_DIR ?? getAgentDir(),
       modelRuntime: options.modelRuntime,
       model: options.model,
-      thinkingLevel: options.runtime.thinking as "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
+      thinkingLevel: phaseThinking as "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
       tools: toolNames,
       customTools: options.tools,
       resourceLoader,
@@ -355,11 +369,15 @@ export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
         backgroundAudit(options.audit?.record("lifecycle", event.type, event, { phase: options.phase, attempt, sessionId: session.sessionId, turn }));
       }
     });
+    const abortHandler = () => { void session.abort().catch(() => {}); };
+    options.signal?.addEventListener("abort", abortHandler, { once: true });
     try {
+      if (options.signal?.aborted) throw options.signal.reason ?? new Error("Pi phase was aborted");
       const remainingMs = phaseDeadline - Date.now();
       if (remainingMs <= 0) throw new Error(`Pi phase exceeded ${options.runtime.deadlineMs}ms and was aborted`);
+      const aborted = new Promise<never>((_, reject) => options.signal?.addEventListener("abort", () => reject(options.signal?.reason ?? new Error("Pi phase was aborted")), { once: true }));
       await withDeadline(
-        session.prompt(options.prompt, { expandPromptTemplates: false }),
+        Promise.race([session.prompt(options.prompt, { expandPromptTemplates: false }), aborted]),
         remainingMs,
         () => session.abort(),
       );
@@ -373,8 +391,9 @@ export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
       }
     } catch (error) {
       await options.audit?.record("lifecycle", "attempt_failed", { error, assistant_text: assistantText }, { phase: options.phase, attempt, sessionId: session.sessionId });
-      if (/exceeded .*ms/.test(String(error)) || attempt === 2) throw error;
+      if (options.signal?.aborted || /exceeded .*ms/.test(String(error)) || attempt === 2) throw error;
     } finally {
+      options.signal?.removeEventListener("abort", abortHandler);
       unsubscribe();
       session.dispose();
       if (persistNativeSession) {
@@ -405,6 +424,8 @@ function cliParams(argv: string[]): PiRunnerParams {
     else if (arg === "--provider" || arg.startsWith("--provider=")) params.provider = value();
     else if (arg === "--max-time" || arg.startsWith("--max-time=")) params.maxTime = value();
     else if (arg === "--discovery-mode" || arg.startsWith("--discovery-mode=")) params.discoveryMode = value();
+    else if (arg === "--discovery-scheduler" || arg.startsWith("--discovery-scheduler=")) params.discoveryScheduler = value();
+    else if (arg === "--discovery-concurrency" || arg.startsWith("--discovery-concurrency=")) params.discoveryConcurrency = value();
     else throw new Error(`unknown Pi runner argument: ${arg}`);
   }
   return params;
@@ -434,7 +455,14 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
     modelRuntime,
   });
   if (!resolved.model) throw new Error(resolved.error ?? `Pi model not found: ${runtime.provider}/${runtime.model}`);
-  const model = resolved.model;
+  const routing = await loadModelRouting(
+    repo,
+    process.env.LEVERET_MODEL_ROUTING,
+    process.env.LEVERET_MODEL_ROUTING_SHA256,
+    { provider: resolved.model.provider, model: resolved.model.id, effort: runtime.thinking as "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" },
+    modelRuntime,
+  );
+  if (runtime.discoveryMode === "single" && routing.config.mode === "routed") throw new Error("per-phase model routing requires specialized/v1 discovery");
 
   let serena: Awaited<ReturnType<typeof connectSerena>> | undefined;
   let lspError: string | undefined;
@@ -568,17 +596,15 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
       onToolOutcome: (toolCallId, outcome) => toolOutcomes.set(toolCallId, outcome),
     });
     await audit?.writeCapabilities({
-      provider_visibility: {
-        [resolved.model.provider]: {
-          assembled_request_payload: "unavailable-from-pinned-sdk",
-          effective_system_prompt: "captured",
-          phase_prompts: "captured",
-          response_metadata: "captured",
-          returned_text_and_reasoning: "captured",
-          hidden_provider_reasoning: "unavailable",
-        },
-      },
-      model: `${resolved.model.provider}/${resolved.model.id}`,
+      provider_visibility: Object.fromEntries([...new Set(Object.values(routing.routes).map((route) => route.provider))].map((provider) => [provider, {
+        assembled_request_payload: "unavailable-from-pinned-sdk",
+        effective_system_prompt: "captured",
+        phase_prompts: "captured",
+        response_metadata: "captured",
+        returned_text_and_reasoning: "captured",
+        hidden_provider_reasoning: "unavailable",
+      }])),
+      model_routing: { schema: routing.config.schema, mode: routing.config.mode, sha256: routing.sha256, source: routing.source, routes: routing.routes },
       tool_capabilities: { ...bundle.capabilities, evidence_pack: evidencePack.schema, guidance: guidance.schema },
     });
     const metrics: ToolMetric[] = [];
@@ -595,7 +621,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
     const legRuns: Array<Record<string, unknown>> = [];
     const discoveryStartedAt = performance.now();
     let reviewOutput: ReviewOutput;
-    let singleDiscoveryIdentity: { system_prompt_sha256: string; tools: { names: string[]; schema_sha256: string } } | undefined;
+    let singleDiscoveryIdentity: { prompt_sha256: string; system_prompt_sha256: string; tools: { names: string[]; schema_sha256: string } } | undefined;
     if (runtime.discoveryMode === "single") {
       const discoveryInput = singleDiscoveryInput(evidencePack, guidance);
       const reviewPrompt = [
@@ -614,6 +640,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
       const discoveryTools = bundle.tools.filter((tool) => tool.name !== "leveret_scan");
       const discoverySystemPrompt = buildPiSystemPrompt(discoveryTools.map((tool) => tool.name));
       singleDiscoveryIdentity = {
+        prompt_sha256: createHash("sha256").update(reviewPrompt).digest("hex"),
         system_prompt_sha256: createHash("sha256").update(discoverySystemPrompt).digest("hex"),
         tools: phaseToolIdentity(discoveryTools),
       };
@@ -624,7 +651,8 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
         runtimeDir,
         runtime,
         modelRuntime,
-        model: resolved.model,
+        model: routing.models.verifier,
+        thinking: routing.routes.verifier.effort,
         systemPrompt: discoverySystemPrompt,
         tools: discoveryTools,
         metrics,
@@ -638,13 +666,13 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
         evidencePack,
         guidance,
         workItemContext,
-        async (plan) => {
+        async (plan, _index, signal) => {
           const tools = selectPhaseTools(bundle!.tools, plan.definition.requiredTools, plan.definition.optionalTools);
           const toolIdentity = phaseToolIdentity(tools);
           const legSystemPrompt = `${buildPiSystemPrompt(toolIdentity.names)}\n\n${plan.definition.systemPrompt}`;
           const attempts = { count: 0 };
           const startedAt = performance.now();
-          const metricStart = metrics.length;
+          const route = routing.routes[plan.definition.id];
           const output = await runPhase({
             phase: `discovery-${plan.definition.id}`,
             prompt: plan.prompt,
@@ -652,7 +680,9 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
             runtimeDir,
             runtime,
             modelRuntime,
-            model,
+            model: routing.models[plan.definition.id],
+            thinking: route.effort,
+            signal,
             systemPrompt: legSystemPrompt,
             tools,
             metrics,
@@ -667,13 +697,15 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
             input_sha256: plan.inputSha256,
             system_prompt_sha256: createHash("sha256").update(legSystemPrompt).digest("hex"),
             tools: toolIdentity,
+            route,
             attempts: attempts.count,
             duration_ms: Math.max(0, performance.now() - startedAt),
-            worker_compute_ms: metrics.slice(metricStart).reduce((total, metric) => total + metric.duration_ms, 0),
+            worker_compute_ms: metrics.filter((metric) => metric.phase === `discovery-${plan.definition.id}`).reduce((total, metric) => total + metric.duration_ms, 0),
             assigned_files: plan.assignedFiles,
           });
           return output;
         },
+        runtime.discoveryScheduler,
       );
       validateDiscoveryEvidence(
         specialized,
@@ -682,6 +714,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
           metrics.filter((metric) => metric.phase === `discovery-${plan.definition.id}`).map((metric) => metric.toolCallId),
         ])) as Partial<Record<DiscoveryLegId, string[]>>,
       );
+      legRuns.sort((a, b) => SPECIALIZED_DISCOVERY.requiredLegs.indexOf(a.id as DiscoveryLegId) - SPECIALIZED_DISCOVERY.requiredLegs.indexOf(b.id as DiscoveryLegId));
       reviewOutput = parseReviewOutput(specializedReviewOutput(specialized));
       for (const run of legRuns) {
         const output = specialized.outputs.find((item) => item.plan.definition.id === run.id)?.output;
@@ -758,7 +791,8 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
       runtimeDir,
       runtime,
       modelRuntime,
-      model: resolved.model,
+      model: routing.models.verifier,
+      thinking: routing.routes.verifier.effort,
       systemPrompt: verifierSystemPrompt,
       tools: verifierTools,
       metrics,
@@ -781,7 +815,8 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
         runtimeDir,
         runtime,
         modelRuntime,
-        model: resolved.model,
+        model: routing.models.verifier,
+        thinking: routing.routes.verifier.effort,
         systemPrompt: verifierSystemPrompt,
         tools: verifierTools,
         metrics,
@@ -815,18 +850,36 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
         };
       });
     }
-    const authCheck = await modelRuntime.checkAuth(resolved.model.provider).catch(() => undefined);
+    const verifierRoute = routing.routes.verifier;
+    const authCheck = await modelRuntime.checkAuth(verifierRoute.provider).catch(() => undefined);
     const subscriptionOAuth = authCheck?.type === "oauth"
-      && modelRuntime.getProvider(resolved.model.provider)?.auth.oauth?.isSubscription === true;
+      && modelRuntime.getProvider(verifierRoute.provider)?.auth.oauth?.isSubscription === true;
+    const runIdentities = {
+      prompt_sha256: stableSha256({
+        discovery: specialized
+          ? specialized.plans.map((plan) => ({ id: plan.definition.id, definition_sha256: plan.definition.definitionSha256, input_sha256: plan.inputSha256 }))
+          : singleDiscoveryIdentity,
+        verifier: { prompt_sha256: createHash("sha256").update(verifyPrompt).digest("hex"), system_prompt_sha256: createHash("sha256").update(verifierSystemPrompt).digest("hex") },
+      }),
+      tool_sha256: stableSha256({
+        discovery: specialized ? legRuns.map((leg) => ({ id: leg.id, tools: leg.tools })) : singleDiscoveryIdentity?.tools,
+        verifier: verifierToolIdentity,
+      }),
+      policy_sha256: stableSha256({ system_prompt_version: PI_SYSTEM_PROMPT_VERSION, discovery_contract: specialized ? SPECIALIZED_DISCOVERY : "single", verifier_role: "targeted-verifier" }),
+      card_sha256: guidance.provenance.cardSetSha256,
+      rule_sha256: guidance.provenance.ruleSetSha256,
+      cache_sha256: stableSha256(cacheRun),
+    };
     const out = verify as Record<string, unknown>;
     out.run_configuration = {
       harness: `pi/${PI_VERSION}`,
       process: { pid: process.pid, hostname: hostname(), wall_time: new Date().toISOString(), monotonic_time_origin_ms: performance.timeOrigin },
       client: "leveret-runner-pi",
-      model: `${resolved.model.provider}/${resolved.model.id}`,
-      thinking: runtime.thinking,
+      model: `${verifierRoute.provider}/${verifierRoute.model}`,
+      thinking: verifierRoute.effort,
       auth: classifyAuth(authCheck?.type, subscriptionOAuth),
       system_prompt: { version: PI_SYSTEM_PROMPT_VERSION, sha256: createHash("sha256").update(verifierSystemPrompt).digest("hex"), role: "targeted-verifier" },
+      identities: runIdentities,
       evidence_pack: {
         availability: "available",
         schema: evidencePack.schema,
@@ -856,25 +909,42 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
             bytes: workItemContext.bytes,
           }
         : workItemContext,
+      model_routing: {
+        schema: routing.config.schema,
+        mode: routing.config.mode,
+        sha256: routing.sha256,
+        source: routing.source,
+        routes: routing.routes,
+      },
+      experiment_variables: {
+        discovery_mode: runtime.discoveryMode,
+        scheduler: runtime.discoveryMode === "single" ? null : runtime.discoveryScheduler,
+        routing_sha256: routing.sha256,
+        identity_sha256: experimentVariableIdentity(runtime.discoveryMode, runtime.discoveryScheduler, routing.sha256),
+      },
       discovery: specialized
         ? {
             mode: runtime.discoveryMode,
-            scheduler: SPECIALIZED_SCHEDULER,
+            contract: SPECIALIZED_DISCOVERY,
+            scheduler: specialized.execution.scheduler,
             definition_hashes: Object.fromEntries(specialized.plans.map((plan) => [plan.definition.id, plan.definition.definitionSha256])),
             legs: legRuns,
             normalized_concerns: specialized.concerns,
             verifier: {
               system_prompt_sha256: createHash("sha256").update(verifierSystemPrompt).digest("hex"),
               tools: verifierToolIdentity,
+              route: verifierRoute,
             },
             required_leg_status: "complete",
-            wall_duration_ms: discoveryDurationMs,
-            worker_compute_ms: legRuns.reduce((total, leg) => total + Number(leg.worker_compute_ms ?? 0), 0),
+            wall_duration_ms: specialized.execution.wall_duration_ms,
+            worker_duration_ms: specialized.execution.worker_duration_ms,
+            summed_worker_compute_ms: specialized.execution.summed_worker_compute_ms,
           }
         : {
             mode: "single",
-            scheduler: { id: "single", strategy: "single" },
+            scheduler: null,
             ...singleDiscoveryIdentity!,
+            route: verifierRoute,
             wall_duration_ms: discoveryDurationMs,
           },
       capabilities: { ...bundle.capabilities, ...(lspError ? { lsp_error: lspError } : {}) },
@@ -883,11 +953,12 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
       cache: cacheRun,
       timings: {
         preparation_ms: preparationDurationMs,
+        discovery_ms: discoveryDurationMs,
         model_ms: discoveryDurationMs + verificationDurationMs,
         verification_ms: verificationDurationMs,
         publication_ms: null,
         wall_ms: Math.max(0, performance.now() - wallStartedAt),
-        summed_worker_compute_ms: metrics.reduce((total, metric) => total + metric.duration_ms, 0),
+        summed_worker_compute_ms: (specialized?.execution.summed_worker_compute_ms ?? discoveryDurationMs) + verificationDurationMs,
       },
     };
     out.post_walk_leads = {

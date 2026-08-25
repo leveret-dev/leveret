@@ -372,37 +372,42 @@ PR text. The corpus validates mechanically as 12 accepted targets plus the rejec
 #2521 GNU-tar control. A repaired head or failed precondition is invalid, never a
 miss.
 
-`npm run bench:replay` groups rows by frozen range, resolves/fetches the exact base
-and head SHA, and creates a throwaway detached worktree. It validates every
-precondition before scanning or invoking a model, then runs the existing `scan()`
-and standardized Pi runner. `diff-only` explicitly omits work-item context;
-`review-context` requires the frozen snapshot. Trial IDs are deterministic across N
-identical trials and unique by corpus, range, mode, and trial number. Private raw
-runner output, events, capabilities, and result remain outside both repositories in
-the canonical #51 run directory selected by `LEVERET_TRACE_DIR` /
-`LEVERET_RUN_ID`. Missing commits/base/context, head mismatch, precondition failure,
-runner/result/audit incompleteness, and declared capability mismatch are structured
-invalid outcomes. `npm run bench:replay-scan` preserves the old deterministic
-scan-only historical harness.
+`npm run bench:experiment-plan -- --corpus bench/corpus.v1.json --experiment
+<experiment.json>` validates a strict `leveret.replay-experiment/v1` manifest and
+prints the complete run plan without invoking a model. Every configuration pins
+the corpus, context/discovery/scheduler/routing variables, prompt/tool/policy/card/
+rule/cache hashes, reference hardware, one cold trial, and exactly four warm trial
+IDs. Discovery and scheduling remain independent variables; routing is a
+separately hash-pinned host file outside the checkout.
 
-Finalized #51 runs are the report input. `npm run bench:report -- --corpus
-bench/corpus.v1.json --json <source.json> [--markdown <report.md>] <run-dir...>`
-writes a versioned deterministic JSON source record first; Markdown renders only
-that record. It keeps generation concerns, verification and correction attempts,
-final verdicts/report, actual publication events, tool/schema failures, context
-mode, exact range, configuration/capability identity, validity, and every target's
-state separate. Missing detail is `null`/`unknown`, never zero or clean. Target
-overlap comes only from explicit `leveret.replay-adjudication/v1` records; titles
-are never used as a semantic scorer.
+`npm run bench:replay -- <repo> --corpus bench/corpus.v1.json --experiment
+<experiment.json> --routing <outside-checkout.json> --routing-sha256 <hash>` is the
+paid boundary. It validates frozen commits and executable preconditions before
+calling the standardized runner, persists complete and failed outcomes, and
+rejects actual run identities that differ from the manifest. No command runs paid
+trials automatically after landing.
 
-Metrics:
+Finalized #51 runs feed `npm run bench:report -- --corpus
+bench/corpus.v1.json --json <source.json> [--markdown <report.md>] <run-dir...>`.
+JSON is the deterministic source; Markdown only renders it. Runs remain grouped by
+the exact experiment configuration and retain generation, verification,
+publication, validity, tool/schema failures, stage/wall/worker timings, cold/warm
+cache metrics, tokens/cost when supplied, and extra-real/beyond-diff counts.
+Missing detail stays `null`/`unknown`, never zero or clean. Semantic target states
+come only from explicit adjudication, never titles.
 
-- **Recall** against CodeRabbit's *accepted* findings (the ones that produced fixes).
-- **False-positive rate**: pipeline output the replaying human/agent judges
-  not-actionable, compared against CodeRabbit's own noise rate on the same threads.
-- **Beyond-diff catches**: findings in files outside the PR diff (the code-graph
-  pillar earning its keep).
-
-Pass = recall at least matching CodeRabbit's accepted set on the corpus without a
-worse false-positive rate. Only then does pfBlockerNG issue #2599 (retiring
-CodeRabbit, wiring the fourth review leg) unpark.
+The immutable thresholds live only in `bench/parity-gate.v1.json`.
+The frozen 2026-08-25 valid reruns published six independently accepted findings:
+one overlapped the 12-target set and five were extra-real; all six were in-diff.
+The gate therefore freezes extra-real at five and beyond-diff at zero.
+`npm run bench:parity -- --corpus bench/corpus.v1.json --report <source.json>
+--adjudication <independent.json> --experiment <experiment.json> --json
+<decision.json> [--markdown <decision.md>]` consumes those four JSON inputs and
+emits one `pass | fail | blocked` decision with evidence per gate. It requires
+4/5 generation and 3/5 publication for every accepted mechanism, at least 90%
+independently adjudicated precision, at least 95% completed-run reliability, no
+frozen-baseline extra-real or beyond-diff regression, no priced-noise or rejected
+GNU-tar publication, and a warm-cache median no greater than ten minutes on the
+declared hardware. Cold time and summed worker compute are separate evidence.
+Missing, mixed, invalid, or under-five data blocks. CodeRabbit retirement remains
+blocked unless every candidate gate passes.

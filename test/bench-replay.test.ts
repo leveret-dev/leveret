@@ -57,12 +57,12 @@ describe("frozen full replay", () => {
     const target = row([{ kind: "contains", path: "target.txt", text: "defect-present" }]);
     const context = await runTrial(plan(fixture.base, fixture.head, "review-context"), [target], { repo: fixture.repo, traceRoot: join(fixture.root, "traces"), runner, scanFn: (async () => scanResult) as never });
     expect(context).toMatchObject({ status: "invalid", reason: { code: "missing-context" } });
-    const diff = await runTrial(plan(fixture.base, fixture.head), [target], { repo: fixture.repo, traceRoot: join(fixture.root, "traces"), runner, scanFn: (async () => scanResult) as never, discoveryMode: "specialized-serial/v1" });
+    const diff = await runTrial(plan(fixture.base, fixture.head), [target], { repo: fixture.repo, traceRoot: join(fixture.root, "traces"), runner, scanFn: (async () => scanResult) as never, discoveryMode: "specialized/v1" });
     expect(diff.status).toBe("complete");
     expect(runner).toHaveBeenCalledTimes(1);
     expect(runner.mock.calls[0]![0].env.LEVERET_WORK_ITEM).toBeUndefined();
     expect(runner.mock.calls[0]![0].env.LEVERET_LEADS).toBeUndefined();
-    expect(runner.mock.calls[0]![0].env.LEVERET_DISCOVERY_MODE).toBe("specialized-serial/v1");
+    expect(runner.mock.calls[0]![0].env.LEVERET_DISCOVERY_MODE).toBe("specialized/v1");
     expect(runner.mock.calls[0]![0].env.LEVERET_TARGET_IDS).toBeUndefined();
     expect(runner.mock.calls[0]![0].env.LEVERET_EVIDENCE_PACK_SHA256).toMatch(/^[a-f0-9]{64}$/);
     expect(runner.mock.calls[0]![0].env.LEVERET_GUIDANCE_SHA256).toMatch(/^[a-f0-9]{64}$/);

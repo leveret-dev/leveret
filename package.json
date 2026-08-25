@@ -12,8 +12,10 @@
   },
   "scripts": {
     "bench:replay": "tsx bench/replay.mts",
+    "bench:experiment-plan": "tsx bench/replay.mts --plan",
     "bench:replay-scan": "tsx bench/replay-scan.mts",
     "bench:report": "tsx bench/report.mts",
+    "bench:parity": "tsx bench/parity.mts",
     "build": "tsc",
     "dev": "tsx src/server.ts",
     "test": "vitest run"

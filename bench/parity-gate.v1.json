@@ -1,0 +1,26 @@
+{
+  "schema": "leveret.parity-gate/v1",
+  "corpus": {
+    "schema": "leveret.replay-corpus/v1",
+    "sha256": "0f9678d2fde91a64f31eef0c537a1b878d71f89ad844316f17da813fea12cc89",
+    "accepted_mechanisms": 12,
+    "rejected_controls": 1,
+    "rejected_control_ids": [
+      "pfblockerng-2521-r3803609633"
+    ]
+  },
+  "trials_per_configuration": 5,
+  "thresholds": {
+    "generation_trials_per_mechanism": 4,
+    "publication_trials_per_mechanism": 3,
+    "publication_precision": 0.9,
+    "completed_run_reliability": 0.95,
+    "warm_cache_median_wall_ms": 600000,
+    "known_priced_noise_published": 0
+  },
+  "frozen_baseline": {
+    "extra_real_count": 5,
+    "beyond_diff_count": 0
+  },
+  "retirement_target": "CodeRabbit"
+}

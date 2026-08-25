@@ -190,13 +190,13 @@ describe("rendering", () => {
   it("publishes Pi capability degradation instead of hiding it in the raw artifact", () => {
     const output: VerifyOutput = {
       ...verifyOutput,
-      run_configuration: { capabilities: { lsp: false, probe: false, lsp_error: "bundle missing" }, discovery: { mode: "specialized-serial/v1" } },
+      run_configuration: { capabilities: { lsp: false, probe: false, lsp_error: "bundle missing" }, discovery: { mode: "specialized/v1" } },
     };
     const md = renderWalkthrough(output, scanResult);
     expect(md).toContain("LSP: unavailable — startup failed");
     expect(md).not.toContain("bundle missing");
     expect(md).toContain("Behavioral probe: unavailable");
-    expect(md).toContain("Discovery: specialized-serial/v1.");
+    expect(md).toContain("Discovery: specialized/v1.");
   });
 
   it("inline comments cover only in-diff findings, tier-tagged", () => {

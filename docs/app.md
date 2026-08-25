@@ -198,17 +198,17 @@ The pieces, top to bottom:
   with delta scanning against the base: only findings the change introduced
   survive, with everything dropped accounted for.
 - **The runner.** `leveret-runner-pi` defaults to the production `single`
-  discovery phase (five lenses and cross-file blast radius). Both discovery modes
-  complete without scan, semantic-rule, mutation, or hunt leads. Only then does the
-  runner build one bounded, mission-routed post-walk stream and pass it to the
-  existing targeted verifier with the discovery concerns. The verifier tries to
-  refute every concern and supplied lead and drops unverifiable claims. The explicit
-  `specialized-serial/v1` experiment runs three packaged discovery legs serially;
-  it remains opt-in. Leveret supplies every system prompt and exact tool allowlist;
-  project settings, prompts, extensions, skills and context files are never loaded.
-  Your provider credentials live only here; the App layer and child tools never see
-  them. The walkthrough records lead/overflow accounting, the client, model, prompt
-  hash, live capabilities, and tool metrics.
+  discovery phase (five lenses and cross-file blast radius). The opt-in
+  `specialized/v1` mode runs exactly three packaged discovery legs. Its scheduler
+  is a separate host-owned variable: `serial/v1` remains the default and
+  `bounded-concurrent/v1` changes only when the same three inputs start. Model
+  routing is independently hash-pinned outside the checkout and changes only the
+  provider/model/effort assigned to each leg and verifier. All discovery completes
+  before the bounded post-walk stream enters targeted verification. Project
+  settings, prompts, extensions, skills, work-item data, and repository content
+  cannot select modes, schedules, routes, prompts, or tools. The walkthrough
+  records exact routes, hashes, per-worker duration, wall time, summed worker
+  compute, lead/overflow accounting, capabilities, and tool metrics.
 - **The review.** In-diff findings become inline comments grouped by tier;
   out-of-diff findings, reminders, coverage, and the engine table land in the
   walkthrough summary.
@@ -262,19 +262,21 @@ command is the escape hatch for other harnesses; it receives
 `LEVERET_REPO`, `LEVERET_BASE`, `LEVERET_CHANGE_MANIFEST`,
 `LEVERET_EVIDENCE_PACK` and its required `LEVERET_EVIDENCE_PACK_SHA256`,
 `LEVERET_GUIDANCE` and its required `LEVERET_GUIDANCE_SHA256`,
-`LEVERET_WORK_ITEM`, `LEVERET_GRAPH`, `LEVERET_DISCOVERY_MODE`, optional
+`LEVERET_WORK_ITEM`, `LEVERET_GRAPH`, `LEVERET_DISCOVERY_MODE`,
+`LEVERET_DISCOVERY_SCHEDULER`, `LEVERET_DISCOVERY_CONCURRENCY`, the paired
+`LEVERET_MODEL_ROUTING` / `LEVERET_MODEL_ROUTING_SHA256`, optional
 `LEVERET_PRIOR`, `LEVERET_TRACE_DIR`, and `LEVERET_RUN_ID`, and must print the
 verify-output JSON (see `agents/verify.md`).
 
-Discovery mode is host-owned. Only `single` and the experimental
-`specialized-serial/v1` scheduler are accepted; pull-request or repository content
-cannot select a mode, leg, prompt, or tool. Both modes withhold scan, semantic-rule,
-mutation, residual-question, corpus-target, and post-walk leads until discovery
-finishes. One bounded post-walk stream then enters verification; every supplied
-lead has one disposition, every overflow ID is reported, and publication remains a
-separate lifecycle state. Specialized discovery remains opt-in until measured
-quality gates justify adoption. Frozen replay accepts the same value through
-`--discovery-mode` and passes only that host selection to the runner.
+Discovery mode is host-owned: only `single` and opt-in `specialized/v1` are
+accepted. Scheduling is separately host-owned: `serial/v1` is the specialized
+default; `bounded-concurrent/v1` uses a bound from one through three and invokes
+the same required legs once with stable output order. Routing config must remain
+outside the reviewed checkout, match its declared SHA-256, and resolve every
+route through the runner's existing model catalog before any call. Repository or
+work-item data cannot select any of these variables. Specialized discovery,
+concurrency, and routing remain experiments until the frozen parity decision
+passes.
 
 `LEVERET_EVIDENCE_PACK` names a mode-0600 `leveret.evidence-pack/v1` JSON file
 outside the reviewed checkout. It is the single bounded handoff for changed-file

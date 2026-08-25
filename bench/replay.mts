@@ -28,6 +28,7 @@ import {
   stableJson,
   type LastCompleted,
 } from "../src/review-cache.js";
+import { experimentManifestSchema, type ExperimentConfiguration, type ExperimentManifest } from "../src/runner/experiment.js";
 
 export const CORPUS_SCHEMA = "leveret.replay-corpus/v1" as const;
 export const REPLAY_RESULT_SCHEMA = "leveret.replay-result/v1" as const;
@@ -137,6 +138,7 @@ export async function executePreconditions(repo: string, preconditions: Precondi
 
 export interface TrialPlan {
   schema: typeof REPLAY_RESULT_SCHEMA; id: string; corpus_sha256: string; range_id: string; repository: string; pull_request: number; base: string; head: string; range: string; mode: ContextMode; trial: number; target_ids: string[]; work_item_path: string | null; work_item_sha256: string | null;
+  experiment?: { configuration: ExperimentConfiguration; trial_id: string; cache_state: "cold" | "warm" };
 }
 export function planTrials(loaded: LoadedCorpus, modes: ContextMode[], trials: number): TrialPlan[] {
   if (!Number.isSafeInteger(trials) || trials <= 0) throw new Error("trials must be a positive integer");
@@ -154,6 +156,44 @@ export function planTrials(loaded: LoadedCorpus, modes: ContextMode[], trials: n
     }
   }
   assertUnique(plans.map((plan) => plan.id), "trial id");
+  return plans;
+}
+
+export async function loadExperimentManifest(path: string, loaded: LoadedCorpus): Promise<ExperimentManifest> {
+  const manifest = experimentManifestSchema.parse(JSON.parse(await readFile(resolve(path), "utf8")));
+  if (manifest.corpus.sha256 !== loaded.corpus.identity.sha256) throw new Error("experiment corpus SHA-256 does not match the loaded corpus");
+  return manifest;
+}
+
+export function planExperimentTrials(loaded: LoadedCorpus, manifest: ExperimentManifest): TrialPlan[] {
+  const grouped = new Map<string, CorpusRow[]>();
+  for (const row of loaded.corpus.rows) grouped.set(row.frozen.range_id, [...(grouped.get(row.frozen.range_id) ?? []), row]);
+  const groups = [...grouped.values()].sort((a, b) => a[0]!.frozen.range_id.localeCompare(b[0]!.frozen.range_id));
+  const plans: TrialPlan[] = [];
+  for (const configuration of manifest.configurations) for (let trial = 0; trial < configuration.trial_ids.length; trial++) for (const rows of groups) {
+    const row = rows[0]!;
+    const item = loaded.workItems[row.frozen.range_id];
+    const trialId = configuration.trial_ids[trial]!;
+    const key = `${configuration.configuration_sha256}:${row.frozen.range_id}:${trialId}`;
+    plans.push({
+      schema: REPLAY_RESULT_SCHEMA,
+      id: digest(key).slice(0, 24),
+      corpus_sha256: loaded.corpus.identity.sha256,
+      range_id: row.frozen.range_id,
+      repository: row.repository,
+      pull_request: row.pull_request,
+      base: row.frozen.base,
+      head: row.frozen.head,
+      range: row.frozen.range,
+      mode: configuration.context_mode,
+      trial: trial + 1,
+      target_ids: rows.map((candidate) => candidate.id).sort(),
+      work_item_path: configuration.context_mode === "review-context" ? item?.path ?? null : null,
+      work_item_sha256: configuration.context_mode === "review-context" ? item?.sha256 ?? null : null,
+      experiment: { configuration, trial_id: trialId, cache_state: trialId === configuration.cold_trial_id ? "cold" : "warm" },
+    });
+  }
+  assertUnique(plans.map((plan) => plan.id), "experiment trial run id");
   return plans;
 }
 
@@ -177,17 +217,38 @@ function commandRunner(command: string): ReplayRunner {
   return async ({ cwd, env }) => { const result = await runStreaming(file, args, cwd, { env, timeoutMs: 100 * 60_000, maxBuffer: 64 * 1024 * 1024 }); return { code: result.code, stdout: result.stdout, stderr: result.stderr, signal: result.signal, timedOut: result.timedOut }; };
 }
 
-export type InvalidCode = "missing-commit" | "base-mismatch" | "head-mismatch" | "missing-context" | "failed-precondition" | "runner-failure" | "incomplete-result" | "capability-mismatch" | "incomplete-audit" | "orchestration-failure";
+export type InvalidCode = "missing-commit" | "base-mismatch" | "head-mismatch" | "missing-context" | "failed-precondition" | "runner-failure" | "incomplete-result" | "capability-mismatch" | "configuration-mismatch" | "incomplete-audit" | "orchestration-failure";
 export interface InvalidReplay { schema: typeof REPLAY_RESULT_SCHEMA; plan: TrialPlan; status: "invalid"; phase: "preparation" | "precondition" | "scan" | "runner" | "audit"; reason: { code: InvalidCode; detail: string }; preconditions: PreconditionResult[]; audit_run_dir: string | null }
 export interface CompleteReplay { schema: typeof REPLAY_RESULT_SCHEMA; plan: TrialPlan; status: "complete"; preconditions: PreconditionResult[]; audit_run_dir: string }
 export type ReplayOutcome = InvalidReplay | CompleteReplay;
-export interface RunTrialOptions { repo: string; traceRoot?: string; cacheRoot?: string; cache?: boolean; profilePath?: string; runner?: ReplayRunner; runnerCommand?: string; scanFn?: ReplayScan; expectedCapabilities?: Record<string, unknown>; discoveryMode?: "single" | "specialized-serial/v1" }
+export interface RunTrialOptions { repo: string; traceRoot?: string; cacheRoot?: string; cache?: boolean; profilePath?: string; runner?: ReplayRunner; runnerCommand?: string; scanFn?: ReplayScan; expectedCapabilities?: Record<string, unknown>; discoveryMode?: "single" | "specialized/v1"; discoveryScheduler?: "serial/v1" | "bounded-concurrent/v1"; discoveryConcurrency?: number; routingPath?: string; routingSha256?: string }
 function resultRecord(value: unknown): Record<string, unknown> | null { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null; }
 function completeResult(value: unknown): value is Record<string, unknown> { const record = resultRecord(value); return !!record && Array.isArray(record.verdicts) && Array.isArray(record.report) && !!resultRecord(record.coverage) && !!resultRecord(record.run_configuration); }
 function capabilitiesMatch(result: Record<string, unknown>, expected: Record<string, unknown>): boolean { const configuration = resultRecord(result.run_configuration); const actual = resultRecord(configuration?.capabilities); return !!actual && Object.entries(expected).every(([key, value]) => JSON.stringify(actual[key]) === JSON.stringify(value)); }
+function experimentConfigurationGaps(result: Record<string, unknown>, configuration: ExperimentConfiguration): string[] {
+  const run = resultRecord(result.run_configuration);
+  const discovery = resultRecord(run?.discovery);
+  const routing = resultRecord(run?.model_routing);
+  const identities = resultRecord(run?.identities);
+  const gaps: string[] = [];
+  if (discovery?.mode !== configuration.discovery_mode) gaps.push("discovery mode");
+  if (JSON.stringify(discovery?.scheduler ?? null) !== JSON.stringify(configuration.discovery_mode === "single" ? null : configuration.scheduler)) gaps.push("scheduler");
+  if (routing?.sha256 !== configuration.routing.sha256 || routing?.schema !== configuration.routing.schema) gaps.push("routing");
+  if (JSON.stringify(identities) !== JSON.stringify(configuration.identities)) gaps.push("prompt/tool/policy/card/rule/cache identities");
+  return gaps;
+}
 function invalid(plan: TrialPlan, phase: InvalidReplay["phase"], code: InvalidCode, detail: string, preconditions: PreconditionResult[] = [], auditRunDir: string | null = null): InvalidReplay { return { schema: REPLAY_RESULT_SCHEMA, plan, status: "invalid", phase, reason: { code, detail }, preconditions, audit_run_dir: auditRunDir }; }
 
 export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunTrialOptions): Promise<ReplayOutcome> {
+  if (plan.experiment) {
+    const configuration = plan.experiment.configuration;
+    if (!options.routingPath || options.routingSha256 !== configuration.routing.sha256) {
+      return invalid(plan, "preparation", "configuration-mismatch", "experiment runs require the pinned external model-routing file and exact SHA-256");
+    }
+    if (options.discoveryMode && options.discoveryMode !== configuration.discovery_mode) return invalid(plan, "preparation", "configuration-mismatch", "runner discovery mode differs from experiment manifest");
+    if (options.discoveryScheduler && options.discoveryScheduler !== configuration.scheduler.id) return invalid(plan, "preparation", "configuration-mismatch", "runner scheduler differs from experiment manifest");
+    if (options.discoveryConcurrency && options.discoveryConcurrency !== configuration.scheduler.concurrency_bound) return invalid(plan, "preparation", "configuration-mismatch", "runner concurrency differs from experiment manifest");
+  }
   const repo = await realpath(options.repo);
   if (!await resolveCommit(repo, plan.base)) return invalid(plan, "preparation", "missing-commit", `base commit unavailable: ${plan.base}`);
   if (!await resolveCommit(repo, plan.head)) return invalid(plan, "preparation", "missing-commit", `head commit unavailable: ${plan.head}`);
@@ -378,18 +439,54 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
           optional_dependency_sandbox: "disabled",
         })}\n`);
         const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("LEVERET_TRACE_")));
-        const env = { ...inherited, ...traceEnvironment, LEVERET_REPO: checkout, LEVERET_BASE: plan.base, LEVERET_CHANGE_MANIFEST: evidencePath, LEVERET_EVIDENCE_PACK: evidencePackFile.path, LEVERET_EVIDENCE_PACK_SHA256: evidencePackFile.sha256, LEVERET_GUIDANCE: guidanceFile.path, LEVERET_GUIDANCE_SHA256: guidanceFile.sha256, LEVERET_CACHE_RUN: cacheRunPath, LEVERET_GRAPH: graph.ok ? "1" : "0", LEVERET_TRACE_DIR: audit!.partialDir, LEVERET_RUN_ID: runId, LEVERET_DATA: traceRoot, LEVERET_DISCOVERY_MODE: options.discoveryMode ?? "single", ...(workItemPath ? { LEVERET_WORK_ITEM: workItemPath } : {}) };
+        const experimentConfiguration = plan.experiment?.configuration;
+        const selectedDiscoveryMode = experimentConfiguration?.discovery_mode ?? options.discoveryMode ?? "single";
+        const selectedScheduler = experimentConfiguration?.scheduler.id ?? options.discoveryScheduler ?? "serial/v1";
+        const selectedConcurrency = experimentConfiguration?.scheduler.concurrency_bound ?? options.discoveryConcurrency ?? 1;
+        const env = {
+          ...inherited,
+          ...traceEnvironment,
+          LEVERET_REPO: checkout,
+          LEVERET_BASE: plan.base,
+          LEVERET_CHANGE_MANIFEST: evidencePath,
+          LEVERET_EVIDENCE_PACK: evidencePackFile.path,
+          LEVERET_EVIDENCE_PACK_SHA256: evidencePackFile.sha256,
+          LEVERET_GUIDANCE: guidanceFile.path,
+          LEVERET_GUIDANCE_SHA256: guidanceFile.sha256,
+          LEVERET_CACHE_RUN: cacheRunPath,
+          LEVERET_GRAPH: graph.ok ? "1" : "0",
+          LEVERET_TRACE_DIR: audit!.partialDir,
+          LEVERET_RUN_ID: runId,
+          LEVERET_DATA: traceRoot,
+          LEVERET_DISCOVERY_MODE: selectedDiscoveryMode,
+          LEVERET_DISCOVERY_SCHEDULER: selectedScheduler,
+          LEVERET_DISCOVERY_CONCURRENCY: String(selectedConcurrency),
+          ...(options.routingPath ? { LEVERET_MODEL_ROUTING: resolve(options.routingPath), LEVERET_MODEL_ROUTING_SHA256: options.routingSha256! } : {}),
+          ...(workItemPath ? { LEVERET_WORK_ITEM: workItemPath } : {}),
+        };
         const runner = options.runner ?? commandRunner(options.runnerCommand ?? process.env.LEVERET_RUNNER ?? `${process.execPath} ${resolve(harnessRoot, "dist/runner/pi.js")}`);
-        await audit!.record("lifecycle", "runner_started", { context_mode: plan.mode, discovery_mode: options.discoveryMode ?? "single", environment_names: Object.keys(env).sort() });
+        await audit!.record("lifecycle", "runner_started", { context_mode: plan.mode, discovery_mode: selectedDiscoveryMode, discovery_scheduler: selectedScheduler, discovery_concurrency: selectedConcurrency, experiment: plan.experiment ?? null, environment_names: Object.keys(env).sort() });
         const result = await runner({ cwd: runnerDir, env });
         await audit!.record("result", "runner_output_received", { raw: result.stdout, code: result.code, signal: result.signal ?? null, timed_out: result.timedOut ?? false });
         if (result.code !== 0) { failure = invalid(plan, "runner", "runner-failure", `runner exited ${result.code}${result.signal ? ` (${result.signal})` : ""}: ${result.stderr.slice(0, 500)}`, preconditions); return; }
         try { parsed = JSON.parse(result.stdout) as Record<string, unknown>; } catch (error) { failure = invalid(plan, "runner", "incomplete-result", `runner output is not JSON: ${String(error)}`, preconditions); return; }
         if (!completeResult(parsed)) { failure = invalid(plan, "runner", "incomplete-result", "runner result lacks verdicts, report, coverage, or run_configuration", preconditions); return; }
         if (options.expectedCapabilities && !capabilitiesMatch(parsed, options.expectedCapabilities)) { failure = invalid(plan, "runner", "capability-mismatch", "runner capabilities differ from the declared configuration", preconditions); return; }
+        if (plan.experiment) {
+          const gaps = experimentConfigurationGaps(parsed, plan.experiment.configuration);
+          if (gaps.length > 0) { failure = invalid(plan, "runner", "configuration-mismatch", `runner output differs from experiment manifest: ${gaps.join(", ")}`, preconditions); return; }
+        }
         await audit!.record("result", "runner_output_parsed", parsed);
         await audit!.writeResult(parsed);
         const runConfiguration = parsed.run_configuration as Record<string, unknown>;
+        if (plan.experiment) runConfiguration.experiment = {
+          schema: "leveret.replay-experiment-run/v1",
+          configuration_id: plan.experiment.configuration.id,
+          configuration_sha256: plan.experiment.configuration.configuration_sha256,
+          trial_id: plan.experiment.trial_id,
+          cache_state: plan.experiment.cache_state,
+          reference_hardware: plan.experiment.configuration.reference_hardware,
+        };
         const cacheConfiguration = {
           schema: "leveret.review-cache-run/v1",
           enabled: cache!.enabled,
@@ -450,18 +547,43 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
 function option(args: string[], name: string, fallback?: string): string | undefined { const index = args.indexOf(name); return index < 0 ? fallback : args[index + 1]; }
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
+  const corpusPath = option(args, "--corpus", join(dirname(fileURLToPath(import.meta.url)), "corpus.v1.json"))!;
+  const loaded = await loadCorpus(corpusPath);
+  const experimentPath = option(args, "--experiment");
+  const experiment = experimentPath ? await loadExperimentManifest(experimentPath, loaded) : undefined;
+  if (args.includes("--plan")) {
+    if (!experiment) throw new Error("experiment planning requires --experiment manifest.json");
+    process.stdout.write(`${JSON.stringify({ schema: "leveret.replay-plan/v1", corpus: experiment.corpus, configurations: experiment.configurations, runs: planExperimentTrials(loaded, experiment) }, null, 2)}\n`);
+    return;
+  }
   const repo = args[0];
-  if (!repo || repo.startsWith("--")) throw new Error("usage: replay.mts <repo> [--corpus path] [--mode diff-only|review-context|both] [--discovery-mode single|specialized-serial/v1] [--trials N] [--profile path] [--trace-root path] [--cache-root path] [--no-cache] [--runner command] [--capabilities expected.json]");
-  const loaded = await loadCorpus(option(args, "--corpus", join(dirname(fileURLToPath(import.meta.url)), "corpus.v1.json"))!);
+  if (!repo || repo.startsWith("--")) throw new Error("usage: replay.mts <repo> [--experiment manifest.json --routing routing.json --routing-sha256 HASH] [--corpus path] [--mode diff-only|review-context|both] [--discovery-mode single|specialized/v1] [--discovery-scheduler serial/v1|bounded-concurrent/v1] [--discovery-concurrency 1..3] [--trials N] [--profile path] [--trace-root path] [--cache-root path] [--no-cache] [--runner command] [--capabilities expected.json]");
   const modeArg = option(args, "--mode", "both");
   const modes: ContextMode[] = modeArg === "both" ? ["diff-only", "review-context"] : modeArg === "diff-only" || modeArg === "review-context" ? [modeArg] : (() => { throw new Error(`invalid mode: ${modeArg}`); })();
   const capabilitiesPath = option(args, "--capabilities");
   const expectedCapabilities = capabilitiesPath ? resultRecord(JSON.parse(await readFile(capabilitiesPath, "utf8"))) ?? (() => { throw new Error("capabilities file must contain an object"); })() : undefined;
   const discoveryMode = option(args, "--discovery-mode", "single");
-  if (discoveryMode !== "single" && discoveryMode !== "specialized-serial/v1") throw new Error(`invalid discovery mode: ${discoveryMode}`);
-  for (const plan of planTrials(loaded, modes, Number(option(args, "--trials", "1")))) {
+  if (discoveryMode !== "single" && discoveryMode !== "specialized/v1") throw new Error(`invalid discovery mode: ${discoveryMode}`);
+  const discoveryScheduler = option(args, "--discovery-scheduler", "serial/v1");
+  if (discoveryScheduler !== "serial/v1" && discoveryScheduler !== "bounded-concurrent/v1") throw new Error(`invalid discovery scheduler: ${discoveryScheduler}`);
+  const discoveryConcurrency = Number(option(args, "--discovery-concurrency", discoveryScheduler === "serial/v1" ? "1" : "3"));
+  const plans = experiment ? planExperimentTrials(loaded, experiment) : planTrials(loaded, modes, Number(option(args, "--trials", "1")));
+  for (const plan of plans) {
     const rows = loaded.corpus.rows.filter((row) => row.frozen.range_id === plan.range_id);
-    process.stdout.write(`${JSON.stringify(await runTrial(plan, rows, { repo, traceRoot: option(args, "--trace-root"), cacheRoot: option(args, "--cache-root"), cache: !args.includes("--no-cache"), profilePath: option(args, "--profile"), runnerCommand: option(args, "--runner"), expectedCapabilities, discoveryMode }))}\n`);
+    process.stdout.write(`${JSON.stringify(await runTrial(plan, rows, {
+      repo,
+      traceRoot: option(args, "--trace-root"),
+      cacheRoot: option(args, "--cache-root"),
+      cache: !args.includes("--no-cache"),
+      profilePath: option(args, "--profile"),
+      runnerCommand: option(args, "--runner"),
+      expectedCapabilities,
+      discoveryMode: experiment ? undefined : discoveryMode,
+      discoveryScheduler: experiment ? undefined : discoveryScheduler,
+      discoveryConcurrency: experiment ? undefined : discoveryConcurrency,
+      routingPath: option(args, "--routing"),
+      routingSha256: option(args, "--routing-sha256"),
+    }))}\n`);
   }
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch((error) => { console.error(error instanceof Error ? error.message : error); process.exit(1); });

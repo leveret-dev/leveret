@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { discoveryScheduler, runScheduled, type DiscoveryScheduler } from "./experiment.js";
 import { Type, type TSchema } from "typebox";
 import { z } from "zod";
 import type { ChangeManifest } from "../change-evidence.js";
@@ -7,13 +8,12 @@ import type { EvidencePack, FileDisposition, FileKind } from "../evidence-pack.j
 import type { GuidanceResult } from "../semantic-checks.js";
 import type { WorkItemContext } from "./pi.js";
 
-export type DiscoveryMode = "single" | "specialized-serial/v1";
+export type DiscoveryMode = "single" | "specialized/v1";
 export type DiscoveryLegId = "correctness" | "test-honesty" | "contract-operability";
 
-export const SPECIALIZED_SCHEDULER = {
-  id: "specialized-serial/v1",
+export const SPECIALIZED_DISCOVERY = {
+  id: "specialized/v1",
   version: 1,
-  strategy: "serial",
   requiredLegs: ["correctness", "test-honesty", "contract-operability"],
   verifier: { id: "targeted-verifier", count: 1 },
 } as const;
@@ -147,7 +147,7 @@ export const SPECIALIZED_LEG_DEFINITIONS: readonly DiscoveryLegDefinition[] = SO
 
 export function discoveryMode(value: string | undefined): DiscoveryMode {
   const mode = value ?? "single";
-  if (mode !== "single" && mode !== SPECIALIZED_SCHEDULER.id) throw new Error(`invalid discovery mode: ${mode}`);
+  if (mode !== "single" && mode !== SPECIALIZED_DISCOVERY.id) throw new Error(`invalid discovery mode: ${mode}`);
   return mode;
 }
 
@@ -225,7 +225,7 @@ export function buildDiscoveryLegPlans(
     const omittedCards = guidance.selectedCards.filter((card) => !cards.includes(card));
     const input = {
       schema: "leveret.specialized-discovery-input/v1",
-      scheduler: SPECIALIZED_SCHEDULER,
+      discovery: SPECIALIZED_DISCOVERY,
       leg: { id: definition.id, version: definition.version, definition_sha256: definition.definitionSha256 },
       range: { base: manifest.base, head: manifest.head, range: manifest.range },
       manifest: { files: manifestFiles, truncated: manifest.truncated, errorCount: manifest.errors.length },
@@ -346,6 +346,7 @@ export interface SpecializedDiscoveryResult {
   outputs: Array<{ plan: DiscoveryLegPlan; output: LocalDiscoveryOutput }>;
   concerns: NormalizedConcern[];
   assignments: FileAssignment[];
+  execution: { scheduler: DiscoveryScheduler; worker_duration_ms: number[]; wall_duration_ms: number; summed_worker_compute_ms: number };
 }
 
 export function validateDiscoveryEvidence(result: SpecializedDiscoveryResult, evidenceIdsByLeg: Partial<Record<DiscoveryLegId, readonly string[]>>): void {
@@ -366,15 +367,15 @@ export async function runSpecializedDiscovery(
   evidencePack: EvidencePack,
   guidance: GuidanceResult,
   workItem: WorkItemContext,
-  invoke: (plan: DiscoveryLegPlan, index: number) => Promise<unknown>,
+  invoke: (plan: DiscoveryLegPlan, index: number, signal: AbortSignal) => Promise<unknown>,
+  scheduler: DiscoveryScheduler = discoveryScheduler(undefined, undefined),
 ): Promise<SpecializedDiscoveryResult> {
   const plans = buildDiscoveryLegPlans(manifest, evidencePack, guidance, workItem);
-  const outputs: SpecializedDiscoveryResult["outputs"] = [];
-  for (let index = 0; index < plans.length; index++) {
-    const plan = plans[index]!;
-    outputs.push({ plan, output: parseDiscoveryLegOutput(plan, await invoke(plan, index)) });
-  }
-
+  const scheduled = await runScheduled(plans, scheduler, async (plan, index, signal) => ({
+    plan,
+    output: parseDiscoveryLegOutput(plan, await invoke(plan, index, signal)),
+  }));
+  const outputs = scheduled.outputs;
   const byMechanism = new Map<string, NormalizedConcern>();
   for (const { plan, output } of outputs) for (const concern of output.concerns) {
     const localId = `${plan.definition.namespace}:${concern.id}`;
@@ -403,7 +404,18 @@ export async function runSpecializedDiscovery(
       local_concern_ids: [localId],
     });
   }
-  return { plans, outputs, concerns: [...byMechanism.values()], assignments: assignDiscoveryFiles(manifest, evidencePack) };
+  return {
+    plans,
+    outputs,
+    concerns: [...byMechanism.values()],
+    assignments: assignDiscoveryFiles(manifest, evidencePack),
+    execution: {
+      scheduler,
+      worker_duration_ms: scheduled.worker_duration_ms,
+      wall_duration_ms: scheduled.wall_duration_ms,
+      summed_worker_compute_ms: scheduled.summed_worker_compute_ms,
+    },
+  };
 }
 
 export function specializedReviewOutput(result: SpecializedDiscoveryResult): {

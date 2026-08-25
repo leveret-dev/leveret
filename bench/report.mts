@@ -10,7 +10,7 @@ import { parseAssistantJson } from "../src/runner/pi.js";
 interface ToolCall { phase?: string; toolName?: string; isError?: boolean; outcome?: string; nonzero_exit?: boolean; output_bytes?: number }
 interface FindingSummary { id: string; tier: string; file: string; line: number; title: string }
 export interface CacheMetric { artifact: string; outcome: string; key: string; duration_ms: number; bytes: number | null; reason: string }
-export interface TimingMetrics { preparation_ms: number | null; model_ms: number | null; verification_ms: number | null; publication_ms: number | null; wall_ms: number | null; summed_worker_compute_ms: number | null }
+export interface TimingMetrics { preparation_ms: number | null; discovery_ms: number | null; model_ms: number | null; verification_ms: number | null; publication_ms: number | null; wall_ms: number | null; summed_worker_compute_ms: number | null }
 export interface RunSummary {
   name: string; model: string; thinking: string; prompt: string; discovery: string; findings: FindingSummary[]; grades: Record<string, number>; coverage: Record<string, number>; toolCalls: number; toolErrors: number; timeouts: number | null; nonzeroExits: number | null; diffCalls: number; diffBytes: number | null; toolDetailComplete: boolean; schemaCorrection: boolean; timings: TimingMetrics; cache: CacheMetric[];
 }
@@ -63,6 +63,7 @@ export function summarizeResult(name: string, input: unknown): RunSummary {
     schemaCorrection: "verify-correction" in aggregate || toolCalls.some((call) => call.phase === "verify-correction"),
     timings: {
       preparation_ms: nullableNumber(timings.preparation_ms),
+      discovery_ms: nullableNumber(timings.discovery_ms),
       model_ms: nullableNumber(timings.model_ms),
       verification_ms: nullableNumber(timings.verification_ms),
       publication_ms: nullableNumber(timings.publication_ms),
@@ -106,6 +107,7 @@ export interface ReplayRunRecord {
   validity: { status: "valid" | "invalid"; reasons: string[] };
   context_mode: "diff-only" | "review-context" | "unknown";
   exact_range: { base: string; head: string; range: string } | null;
+  experiment: { schema: string; configuration_id: string; configuration_sha256: string; trial_id: string; cache_state: "cold" | "warm"; reference_hardware: string } | null;
   configuration: unknown;
   capabilities: unknown;
   generation: { concerns: unknown[] | null; attempt_events: EventRecord[] };
@@ -115,8 +117,10 @@ export interface ReplayRunRecord {
   post_walk_leads: {
     metrics: Record<string, number | null> | null;
     overflow: { count: number; bytes: number; ids: string[] } | null;
+    extra_real_count: number | null;
+    beyond_diff_count: number | null;
   };
-  metrics: { timings: TimingMetrics | null; cache: CacheMetric[] };
+  metrics: { timings: TimingMetrics | null; cache: CacheMetric[]; cache_hit_rate: number | null; tokens: { input: number; output: number; total: number } | null; cost_usd: number | null };
   failures: { tool: EventRecord[]; schema: EventRecord[]; gaps: string[]; error: string | null };
   coverage: unknown;
   targets: ReplayTargetRecord[];
@@ -125,6 +129,7 @@ export interface ReplayReportRecord {
   schema: typeof REPLAY_REPORT_SCHEMA;
   corpus: { schema: string; name: string; sha256: string; accepted: number; rejected_controls: number; ranges: string[] };
   scoring: { recall_denominator: number; rejected_controls_excluded: number; invalid_runs_excluded: true; semantic_overlap_source: "explicit-adjudication-only" };
+  experiment_groups: Array<{ configuration_id: string; configuration_sha256: string; run_ids: string[] }>;
   runs: ReplayRunRecord[];
 }
 
@@ -157,6 +162,51 @@ function parsedPhaseOutput(events: EventRecord[], phase: string): Record<string,
     return null;
   }
 }
+
+function experimentRecord(configuration: Record<string, unknown> | null, plan: Record<string, unknown> | null): ReplayRunRecord["experiment"] {
+  const direct = resultRecord(configuration?.experiment);
+  if (direct
+    && direct.schema === "leveret.replay-experiment-run/v1"
+    && typeof direct.configuration_id === "string"
+    && typeof direct.configuration_sha256 === "string"
+    && typeof direct.trial_id === "string"
+    && (direct.cache_state === "cold" || direct.cache_state === "warm")
+    && typeof direct.reference_hardware === "string") return direct as unknown as NonNullable<ReplayRunRecord["experiment"]>;
+  const planned = resultRecord(plan?.experiment);
+  const plannedConfiguration = resultRecord(planned?.configuration);
+  if (planned
+    && plannedConfiguration
+    && typeof plannedConfiguration.id === "string"
+    && typeof plannedConfiguration.configuration_sha256 === "string"
+    && typeof planned.trial_id === "string"
+    && (planned.cache_state === "cold" || planned.cache_state === "warm")
+    && typeof plannedConfiguration.reference_hardware === "string") {
+    return {
+      schema: "leveret.replay-experiment-run/v1",
+      configuration_id: plannedConfiguration.id,
+      configuration_sha256: plannedConfiguration.configuration_sha256,
+      trial_id: planned.trial_id,
+      cache_state: planned.cache_state,
+      reference_hardware: plannedConfiguration.reference_hardware,
+    };
+  }
+  return null;
+}
+
+function usageMetrics(events: EventRecord[]): { tokens: { input: number; output: number; total: number } | null; cost_usd: number | null } {
+  const usages = events.filter((event) => event.event === "response_metadata").map(payload).map((item) => resultRecord(item?.usage)).filter((item): item is Record<string, unknown> => item !== null);
+  if (usages.length === 0) return { tokens: null, cost_usd: null };
+  const input = usages.map((usage) => nullableNumber(usage.input ?? usage.inputTokens));
+  const output = usages.map((usage) => nullableNumber(usage.output ?? usage.outputTokens));
+  const tokens = input.every((value) => value !== null) && output.every((value) => value !== null)
+    ? { input: input.reduce((sum, value) => sum + value!, 0), output: output.reduce((sum, value) => sum + value!, 0), total: [...input, ...output].reduce((sum, value) => sum + value!, 0) }
+    : null;
+  const costs = usages.map((usage) => {
+    const cost = resultRecord(usage.cost);
+    return nullableNumber(cost?.total ?? usage.cost_usd);
+  });
+  return { tokens, cost_usd: costs.every((value) => value !== null) ? costs.reduce((sum, value) => sum + value!, 0) : null };
+}
 async function finalizedRun(runDir: string, loaded: LoadedCorpus, adjudications: AdjudicationRecord[]): Promise<ReplayRunRecord> {
   await verifyChecksums(runDir);
   const manifest = record(await readJsonIfPresent(join(runDir, "manifest.json")), `${runDir}/manifest.json`);
@@ -174,7 +224,7 @@ async function finalizedRun(runDir: string, loaded: LoadedCorpus, adjudications:
   const configuration = result ? resultRecord(result.run_configuration) : null;
   const discovery = configuration ? resultRecord(configuration.discovery) : null;
   const discoveryConcerns = optionalArray(discovery?.normalized_concerns);
-  const generationConcerns = discovery?.mode === "specialized-serial/v1" ? discoveryConcerns : optionalArray(reviewOutput?.concerns);
+  const generationConcerns = discovery?.mode === "specialized/v1" ? discoveryConcerns : optionalArray(reviewOutput?.concerns);
   const reasons: string[] = [];
   if (manifest.status !== "complete") reasons.push(`manifest status is ${String(manifest.status ?? "unknown")}`);
   if (manifest.completeness !== "complete") reasons.push(`manifest completeness is ${String(manifest.completeness ?? "unknown")}`);
@@ -197,6 +247,7 @@ async function finalizedRun(runDir: string, loaded: LoadedCorpus, adjudications:
   const postWalkStream = postWalk ? resultRecord(postWalk.stream) : null;
   const postWalkMetrics = postWalkAccounting ? resultRecord(postWalkAccounting.metrics) : null;
   const postWalkOverflow = postWalkStream ? resultRecord(postWalkStream.overflow) : null;
+  const stopGate = postWalk ? resultRecord(postWalk.stop_gate_inputs) : null;
   const timingRecord = configuration ? resultRecord(configuration.timings) : null;
   const cacheRecord = configuration ? resultRecord(configuration.cache) : null;
   const cacheMetrics = optionalArray(cacheRecord?.artifacts)?.map((value): CacheMetric => {
@@ -205,15 +256,20 @@ async function finalizedRun(runDir: string, loaded: LoadedCorpus, adjudications:
   }) ?? [];
   const timingMetrics: TimingMetrics | null = timingRecord ? {
     preparation_ms: nullableNumber(timingRecord.preparation_ms),
+    discovery_ms: nullableNumber(timingRecord.discovery_ms),
     model_ms: nullableNumber(timingRecord.model_ms),
     verification_ms: nullableNumber(timingRecord.verification_ms),
     publication_ms: nullableNumber(timingRecord.publication_ms),
     wall_ms: nullableNumber(timingRecord.wall_ms),
     summed_worker_compute_ms: nullableNumber(timingRecord.summed_worker_compute_ms),
   } : null;
+  const usage = usageMetrics(events);
+  const cacheCount = cacheMetrics.length;
+  const cacheHitRate = cacheCount > 0 ? cacheMetrics.filter((metric) => metric.outcome === "hit").length / cacheCount : null;
   return {
     run_id: runId, audit_path: basename(resolve(runDir)), validity: { status: valid ? "valid" : "invalid", reasons }, context_mode: contextMode,
     exact_range: rows[0] ? { base: rows[0].frozen.base, head: rows[0].frozen.head, range: rows[0].frozen.range } : null,
+    experiment: experimentRecord(configuration, planRecord),
     configuration: result?.run_configuration ?? null, capabilities,
     generation: { concerns: generationConcerns, attempt_events: generationAttempts },
     verification: { verdicts: optionalArray(result?.verdicts), attempts: verificationAttempts, correction_attempted: result ? verificationAttempts.some((event) => event.phase === "verify-correction") : null },
@@ -228,8 +284,10 @@ async function finalizedRun(runDir: string, loaded: LoadedCorpus, adjudications:
         && Array.isArray(postWalkOverflow.ids)
         ? { count: postWalkOverflow.count, bytes: postWalkOverflow.bytes, ids: postWalkOverflow.ids.map(String) }
         : null,
+      extra_real_count: nullableNumber(stopGate?.extra_real_count),
+      beyond_diff_count: nullableNumber(stopGate?.beyond_diff_count),
     },
-    metrics: { timings: timingMetrics, cache: cacheMetrics },
+    metrics: { timings: timingMetrics, cache: cacheMetrics, cache_hit_rate: cacheHitRate, tokens: usage.tokens, cost_usd: usage.cost_usd },
     failures: { tool: events.filter((event) => event.event === "execution_end" && payload(event)?.is_error === true).map(eventCopy), schema: events.filter((event) => event.event === "attempt_parse_failed").map(eventCopy), gaps: Array.isArray(manifest.gaps) ? manifest.gaps.map(String) : [], error: typeof manifest.error === "string" ? manifest.error : null },
     coverage: result?.coverage ?? null, targets,
   };
@@ -241,22 +299,30 @@ export async function buildReplayReport(loaded: LoadedCorpus, runDirs: string[],
   const runs: ReplayRunRecord[] = [];
   for (const path of runDirs) runs.push(await finalizedRun(resolve(path), loaded, adjudications));
   runs.sort((a, b) => a.run_id.localeCompare(b.run_id));
+  const grouped = new Map<string, { configuration_id: string; configuration_sha256: string; run_ids: string[] }>();
+  for (const run of runs) if (run.experiment) {
+    const group = grouped.get(run.experiment.configuration_sha256) ?? { configuration_id: run.experiment.configuration_id, configuration_sha256: run.experiment.configuration_sha256, run_ids: [] };
+    group.run_ids.push(run.run_id);
+    grouped.set(run.experiment.configuration_sha256, group);
+  }
+  const experimentGroups = [...grouped.values()].sort((a, b) => a.configuration_sha256.localeCompare(b.configuration_sha256));
   return {
     schema: REPLAY_REPORT_SCHEMA,
     corpus: { schema: loaded.corpus.schema, name: loaded.corpus.identity.name, sha256: loaded.corpus.identity.sha256, accepted, rejected_controls: rejected, ranges: [...new Set(loaded.corpus.rows.map((row) => row.frozen.range))].sort() },
     scoring: { recall_denominator: accepted, rejected_controls_excluded: rejected, invalid_runs_excluded: true, semantic_overlap_source: "explicit-adjudication-only" },
+    experiment_groups: experimentGroups,
     runs,
   };
 }
 
 export function renderReplayReport(report: ReplayReportRecord): string {
-  const lines = ["# Leveret frozen replay report", "", `Corpus: \`${report.corpus.name}\` (\`${report.corpus.sha256}\`)`, "", `Accepted recall denominator: ${report.scoring.recall_denominator}; rejected controls excluded: ${report.scoring.rejected_controls_excluded}.`, "", "| run | validity | mode | range | concerns | verified | final report | published | post-walk supplied | adopted | priced | refuted | ignored | overflow | tool failures | schema failures |", "| --- | --- | --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"];
+  const lines = ["# Leveret frozen replay report", "", `Corpus: \`${report.corpus.name}\` (\`${report.corpus.sha256}\`)`, "", `Accepted recall denominator: ${report.scoring.recall_denominator}; rejected controls excluded: ${report.scoring.rejected_controls_excluded}.`, "", "| run | config | trial | cache | validity | mode | range | concerns | verified | final report | preparation ms | discovery ms | verification ms | publication ms | wall ms | worker compute ms | cache hit rate | tokens | cost USD | extra-real | beyond-diff | tool failures | schema failures |", "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"];
   for (const run of report.runs) {
-    const post = run.post_walk_leads.metrics;
-    lines.push(`| ${cell(run.run_id)} | ${run.validity.status} | ${run.context_mode} | ${cell(run.exact_range?.range ?? "unknown")} | ${metric(run.generation.concerns?.length ?? null)} | ${metric(run.verification.verdicts?.length ?? null)} | ${metric(run.final_report?.length ?? null)} | ${run.publication.attempted ? "yes" : "no"} | ${metric(post?.supplied ?? null)} | ${metric(post?.adopted ?? null)} | ${metric(post?.priced ?? null)} | ${metric(post?.refuted ?? null)} | ${metric(post?.ignored ?? null)} | ${metric(run.post_walk_leads.overflow?.count ?? null)} | ${run.failures.tool.length} | ${run.failures.schema.length} |`);
+    const timings = run.metrics.timings;
+    lines.push(`| ${cell(run.run_id)} | ${cell(run.experiment?.configuration_id ?? "unknown")} | ${cell(run.experiment?.trial_id ?? "unknown")} | ${cell(run.experiment?.cache_state ?? "unknown")} | ${run.validity.status} | ${run.context_mode} | ${cell(run.exact_range?.range ?? "unknown")} | ${metric(run.generation.concerns?.length ?? null)} | ${metric(run.verification.verdicts?.length ?? null)} | ${metric(run.final_report?.length ?? null)} | ${metric(timings?.preparation_ms ?? null)} | ${metric(timings?.discovery_ms ?? null)} | ${metric(timings?.verification_ms ?? null)} | ${metric(timings?.publication_ms ?? null)} | ${metric(timings?.wall_ms ?? null)} | ${metric(timings?.summed_worker_compute_ms ?? null)} | ${metric(run.metrics.cache_hit_rate)} | ${metric(run.metrics.tokens?.total ?? null)} | ${metric(run.metrics.cost_usd)} | ${metric(run.post_walk_leads.extra_real_count)} | ${metric(run.post_walk_leads.beyond_diff_count)} | ${run.failures.tool.length} | ${run.failures.schema.length} |`);
   }
   for (const run of report.runs) {
-    lines.push("", `## ${cell(run.run_id)}`, "", `- Validity: ${run.validity.status}${run.validity.reasons.length ? ` — ${run.validity.reasons.map(cell).join("; ")}` : ""}`, `- Context: ${run.context_mode}`, `- Configuration: ${run.configuration === null ? "unknown" : `\`${cell(JSON.stringify(run.configuration))}\``}`, `- Capabilities: ${run.capabilities === null ? "unknown" : `\`${cell(JSON.stringify(run.capabilities))}\``}`, "", "### Target states", "");
+    lines.push("", `## ${cell(run.run_id)}`, "", `- Experiment: ${run.experiment ? `\`${cell(JSON.stringify(run.experiment))}\`` : "unknown"}`, `- Validity: ${run.validity.status}${run.validity.reasons.length ? ` — ${run.validity.reasons.map(cell).join("; ")}` : ""}`, `- Context: ${run.context_mode}`, `- Configuration: ${run.configuration === null ? "unknown" : `\`${cell(JSON.stringify(run.configuration))}\``}`, `- Capabilities: ${run.capabilities === null ? "unknown" : `\`${cell(JSON.stringify(run.capabilities))}\``}`, "", "### Target states", "");
     if (run.targets.length === 0) lines.push("- unknown"); else for (const target of run.targets) lines.push(`- \`${cell(target.id)}\` (${target.disposition}): **${target.state}** — ${cell(target.state_reason)}`);
   }
   return `${lines.join("\n")}\n`;

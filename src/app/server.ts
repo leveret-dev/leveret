@@ -147,7 +147,14 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
           model: process.env.LEVERET_RUNNER_MODEL ?? "gpt-5.6-sol",
           provider: process.env.LEVERET_RUNNER_PROVIDER ?? "openai",
           thinking: process.env.LEVERET_RUNNER_EFFORT ?? "high",
-          discovery: process.env.LEVERET_DISCOVERY_MODE ?? "single",
+          discovery: {
+            mode: process.env.LEVERET_DISCOVERY_MODE ?? "single",
+            scheduler: process.env.LEVERET_DISCOVERY_SCHEDULER ?? "serial/v1",
+            concurrency_bound: Number(process.env.LEVERET_DISCOVERY_CONCURRENCY ?? 1),
+          },
+          model_routing: process.env.LEVERET_MODEL_ROUTING
+            ? { source: "host-file-outside-checkout", sha256: process.env.LEVERET_MODEL_ROUTING_SHA256 ?? null }
+            : { source: "runner-default-fixed", sha256: null },
           cache: { enabled: process.env.LEVERET_CACHE !== "0", root: join(DATA_DIR, "cache", "review-v1"), owner: "host" },
           trace: audit?.config,
         },

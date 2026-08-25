@@ -108,7 +108,7 @@ describe("benchmark report", () => {
       },
     });
     expect(summary.cache).toEqual([expect.objectContaining({ artifact: "scan-result", outcome: "hit", bytes: 42, reason: expect.stringContaining("checksums") })]);
-    expect(summary.timings).toEqual({ preparation_ms: 3, model_ms: 4, verification_ms: 2, publication_ms: null, wall_ms: 7, summed_worker_compute_ms: 5 });
+    expect(summary.timings).toEqual({ preparation_ms: 3, discovery_ms: null, model_ms: 4, verification_ms: 2, publication_ms: null, wall_ms: 7, summed_worker_compute_ms: 5 });
   });
 
   it("keeps generation and actual publication separate and renders absent detail as unknown", () => {
@@ -116,12 +116,14 @@ describe("benchmark report", () => {
       schema: "leveret.replay-report/v1",
       corpus: { schema: "leveret.replay-corpus/v1", name: "fixture", sha256: "a".repeat(64), accepted: 12, rejected_controls: 1, ranges: [] },
       scoring: { recall_denominator: 12, rejected_controls_excluded: 1, invalid_runs_excluded: true, semantic_overlap_source: "explicit-adjudication-only" },
+      experiment_groups: [],
       runs: [{
         run_id: "run-1",
         audit_path: "/private/run-1",
         validity: { status: "valid", reasons: [] },
         context_mode: "diff-only",
         exact_range: null,
+        experiment: null,
         configuration: null,
         capabilities: null,
         generation: { concerns: [{ id: "C1" }], attempt_events: [] },
@@ -131,15 +133,17 @@ describe("benchmark report", () => {
         post_walk_leads: {
           metrics: { supplied: 4, adopted: 1, priced: 1, refuted: 1, ignored: 1 },
           overflow: { count: 2, bytes: 100, ids: ["L5", "L6"] },
+          extra_real_count: null,
+          beyond_diff_count: null,
         },
-        metrics: { timings: null, cache: [] },
+        metrics: { timings: null, cache: [], cache_hit_rate: null, tokens: null, cost_usd: null },
         failures: { tool: [], schema: [], gaps: [], error: null },
         coverage: null,
         targets: [],
       }],
     };
     const markdown = renderReplayReport(source);
-    expect(markdown).toContain("| run-1 | valid | diff-only | unknown | 1 | unknown | 1 | no | 4 | 1 | 1 | 1 | 1 | 2 | 0 | 0 |");
+    expect(markdown).toContain("| run-1 | unknown | unknown | unknown | valid | diff-only | unknown | 1 | unknown | 1 |");
     expect(markdown).toContain("- Configuration: unknown");
     expect(markdown).toContain("- Capabilities: unknown");
   });

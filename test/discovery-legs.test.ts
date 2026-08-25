@@ -4,7 +4,7 @@ import type { ChangeManifest } from "../src/change-evidence.js";
 import type { EvidencePack } from "../src/evidence-pack.js";
 import type { GuidanceResult } from "../src/semantic-checks.js";
 import {
-  SPECIALIZED_SCHEDULER,
+  SPECIALIZED_DISCOVERY,
   SPECIALIZED_LEG_DEFINITIONS,
   TARGETED_VERIFIER_TOOLS,
   assignDiscoveryFiles,
@@ -55,12 +55,12 @@ const guidance = {
 const coverageFor = (files: string[], unexamined = new Set<string>()) => files.map((file) => ({ file, state: unexamined.has(file) ? "unexamined" as const : "examined" as const, ...(unexamined.has(file) ? { note: "fixture omission" } : {}), evidence_ids: [] }));
 const tools = ["leveret_diff", "leveret_read", "leveret_grep", "leveret_find", "leveret_ast_search", "leveret_probe", "leveret_scan", "leveret_context", "leveret_memory", "codegraph_explore", "lsp_find_declaration", "lsp_find_referencing_symbols"].map((name) => ({ name, label: name, description: name, parameters: {}, execute: vi.fn() })) as unknown as ToolDefinition[];
 
-describe("specialized serial discovery", () => {
-  it("keeps host-owned mode selection on single unless explicitly selected", () => {
+describe("specialized discovery", () => {
+  it("keeps discovery and scheduling host-owned and separate", () => {
     expect(discoveryMode(undefined)).toBe("single");
-    expect(piRuntimeConfig({}, {}).discoveryMode).toBe("single");
-    expect(piRuntimeConfig({ discoveryMode: "specialized-serial/v1" }, {}).discoveryMode).toBe("specialized-serial/v1");
-    expect(SPECIALIZED_SCHEDULER).toMatchObject({ strategy: "serial", requiredLegs: ["correctness", "test-honesty", "contract-operability"], verifier: { count: 1 } });
+    expect(piRuntimeConfig({}, {})).toMatchObject({ discoveryMode: "single", discoveryScheduler: { id: "serial/v1", concurrency_bound: 1 } });
+    expect(piRuntimeConfig({ discoveryMode: "specialized/v1", discoveryScheduler: "bounded-concurrent/v1", discoveryConcurrency: "2" }, {})).toMatchObject({ discoveryMode: "specialized/v1", discoveryScheduler: { id: "bounded-concurrent/v1", concurrency_bound: 2 } });
+    expect(SPECIALIZED_DISCOVERY).toMatchObject({ requiredLegs: ["correctness", "test-honesty", "contract-operability"], verifier: { count: 1 } });
     expect(() => discoveryMode("from-pr")).toThrow(/invalid discovery mode/);
   });
 
