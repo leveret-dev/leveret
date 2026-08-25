@@ -130,6 +130,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
           model: process.env.LEVERET_RUNNER_MODEL ?? "gpt-5.6-sol",
           provider: process.env.LEVERET_RUNNER_PROVIDER ?? "openai",
           thinking: process.env.LEVERET_RUNNER_EFFORT ?? "high",
+          discovery: process.env.LEVERET_DISCOVERY_MODE ?? "single",
           trace: audit?.config,
         },
         trusted_base: { source: baseRef, sha: base, profile },

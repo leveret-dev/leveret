@@ -35,6 +35,7 @@ describe("benchmark report", () => {
   it("derives metrics and Markdown entirely from runner JSON", () => {
     const summary = summarizeResult("fixture", result);
     expect(summary).toMatchObject({
+      discovery: "single",
       findings: [{ id: "R1", title: "real defect" }],
       grades: { actionable: 1, "priced-noise": 1 },
       coverage: { findings: 1, "considered-fine": 1 },
@@ -49,6 +50,7 @@ describe("benchmark report", () => {
     });
     const markdown = renderBenchmarkReport([summary]);
     expect(markdown).toContain("Generated mechanically from runner JSON");
+    expect(markdown).toContain("- Discovery: `single`");
     expect(markdown).toContain("| fixture | 1 | 1 | 1 | 0 | 0 | 3 | 1 | 1 | 1 | 1 | 1000 | complete | yes |");
     expect(markdown).toContain("`src/a.ts:4` — real defect (R1)");
     expect(markdown).toContain("Semantic finding overlap and defect validity are intentionally not inferred");

@@ -36,6 +36,7 @@ export interface VerifyOutput {
       lsp_error?: string;
       serena_version?: string;
     };
+    discovery?: { mode?: string };
   };
 }
 
@@ -107,6 +108,8 @@ export function renderWalkthrough(
     );
   }
   const capabilities = v.run_configuration?.capabilities;
+  const discoveryMode = v.run_configuration?.discovery?.mode;
+  if (discoveryMode) s.push("", `Discovery: ${discoveryMode}.`);
   if (capabilities) {
     s.push(
       "",

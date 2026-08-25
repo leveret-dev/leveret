@@ -389,7 +389,7 @@ describe("run trace", () => {
       prompt: "review",
       repo: data,
       runtimeDir: data,
-      runtime: { model: "test", provider: "test", thinking: "off", deadlineMs: 10_000 },
+      runtime: { model: "test", provider: "test", thinking: "off", deadlineMs: 10_000, discoveryMode: "single" },
       modelRuntime: {} as never,
       model: { provider: "test", id: "test", api: "openai-responses" } as never,
       systemPrompt: "system",

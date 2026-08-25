@@ -10,7 +10,7 @@ import { parseAssistantJson } from "../src/runner/pi.js";
 interface ToolCall { phase?: string; toolName?: string; isError?: boolean; outcome?: string; nonzero_exit?: boolean; output_bytes?: number }
 interface FindingSummary { id: string; tier: string; file: string; line: number; title: string }
 export interface RunSummary {
-  name: string; model: string; thinking: string; prompt: string; findings: FindingSummary[]; grades: Record<string, number>; coverage: Record<string, number>; toolCalls: number; toolErrors: number; timeouts: number | null; nonzeroExits: number | null; diffCalls: number; diffBytes: number | null; toolDetailComplete: boolean; schemaCorrection: boolean;
+  name: string; model: string; thinking: string; prompt: string; discovery: string; findings: FindingSummary[]; grades: Record<string, number>; coverage: Record<string, number>; toolCalls: number; toolErrors: number; timeouts: number | null; nonzeroExits: number | null; diffCalls: number; diffBytes: number | null; toolDetailComplete: boolean; schemaCorrection: boolean;
 }
 function record(value: unknown, label: string): Record<string, unknown> { if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`); return value as Record<string, unknown>; }
 function array(value: unknown, label: string): unknown[] { if (!Array.isArray(value)) throw new Error(`${label} must be an array`); return value; }
@@ -40,8 +40,9 @@ export function summarizeResult(name: string, input: unknown): RunSummary {
   const detailComplete = aggregateCalls === 0 || aggregateCalls === toolCalls.length;
   const detailedDiffCalls = toolCalls.filter((call) => call.toolName === "leveret_diff");
   const detailedNonzeroComplete = toolCalls.every((call) => typeof call.nonzero_exit === "boolean");
+  const discovery = configuration.discovery && typeof configuration.discovery === "object" && !Array.isArray(configuration.discovery) ? configuration.discovery as Record<string, unknown> : {};
   return {
-    name, model: String(configuration.model ?? "unknown"), thinking: String(configuration.thinking ?? "unknown"), prompt: `${String(prompt.version ?? "unknown")} / ${String(prompt.sha256 ?? "unknown")}`, findings, grades, coverage,
+    name, model: String(configuration.model ?? "unknown"), thinking: String(configuration.thinking ?? "unknown"), prompt: `${String(prompt.version ?? "unknown")} / ${String(prompt.sha256 ?? "unknown")}`, discovery: String(discovery.mode ?? "single"), findings, grades, coverage,
     toolCalls: aggregateCalls || toolCalls.length,
     toolErrors: aggregateCalls ? aggregateErrors : toolCalls.filter((call) => call.isError === true).length,
     timeouts: detailComplete ? toolCalls.filter((call) => call.outcome === "timeout").length : null,
@@ -59,7 +60,7 @@ export function renderBenchmarkReport(runs: RunSummary[]): string {
   const lines = ["# Leveret replay summary", "", "Generated mechanically from runner JSON. Semantic finding overlap and defect validity are intentionally not inferred.", "", "| run | findings | actionable | priced-noise | false-positive | dropped | tool calls | errors | nonzero exits | timeouts | diff calls | diff bytes | detail | correction |", "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |"];
   for (const run of runs) lines.push(`| ${cell(run.name)} | ${run.findings.length} | ${run.grades.actionable ?? 0} | ${run.grades["priced-noise"] ?? 0} | ${run.grades["false-positive"] ?? 0} | ${run.grades.dropped ?? 0} | ${run.toolCalls} | ${run.toolErrors} | ${metric(run.nonzeroExits)} | ${metric(run.timeouts)} | ${run.diffCalls} | ${metric(run.diffBytes)} | ${run.toolDetailComplete ? "complete" : "aggregate-only"} | ${run.schemaCorrection ? "yes" : "no"} |`);
   for (const run of runs) {
-    lines.push("", `## ${cell(run.name)}`, "", `- Model: \`${cell(run.model)}\` (${cell(run.thinking)})`, `- System prompt: \`${cell(run.prompt)}\``, `- Coverage: ${Object.entries(run.coverage).map(([verdict, count]) => `${verdict}=${count}`).join(", ") || "none"}`, "", "### Published findings", "");
+    lines.push("", `## ${cell(run.name)}`, "", `- Model: \`${cell(run.model)}\` (${cell(run.thinking)})`, `- System prompt: \`${cell(run.prompt)}\``, `- Discovery: \`${cell(run.discovery)}\``, `- Coverage: ${Object.entries(run.coverage).map(([verdict, count]) => `${verdict}=${count}`).join(", ") || "none"}`, "", "### Published findings", "");
     if (run.findings.length === 0) lines.push("- None"); else for (const finding of run.findings) lines.push(`- **[${cell(finding.tier)}]** \`${cell(finding.file)}:${finding.line}\` — ${cell(finding.title)} (${cell(finding.id)})`);
   }
   return `${lines.join("\n")}\n`;
@@ -133,12 +134,16 @@ async function finalizedRun(runDir: string, loaded: LoadedCorpus, adjudications:
   const rangeId = typeof planRecord?.range_id === "string" ? planRecord.range_id : null;
   const rows = rangeId ? loaded.corpus.rows.filter((row) => row.frozen.range_id === rangeId) : [];
   const reviewOutput = parsedPhaseOutput(events, "review");
+  const configuration = result ? resultRecord(result.run_configuration) : null;
+  const discovery = configuration ? resultRecord(configuration.discovery) : null;
+  const discoveryConcerns = optionalArray(discovery?.normalized_concerns);
+  const generationConcerns = discovery?.mode === "specialized-serial/v1" ? discoveryConcerns : optionalArray(reviewOutput?.concerns);
   const reasons: string[] = [];
   if (manifest.status !== "complete") reasons.push(`manifest status is ${String(manifest.status ?? "unknown")}`);
   if (manifest.completeness !== "complete") reasons.push(`manifest completeness is ${String(manifest.completeness ?? "unknown")}`);
   if (!result) reasons.push("result is absent");
   else if (!Array.isArray(result.verdicts) || !Array.isArray(result.report) || !result.coverage || !result.run_configuration) reasons.push("result is incomplete");
-  if (!Array.isArray(reviewOutput?.concerns)) reasons.push("generation output is absent");
+  if (!generationConcerns) reasons.push("generation output is absent");
   if (rows.length === 0) reasons.push("audit run has no matching frozen corpus range");
   const valid = reasons.length === 0;
   const adjudicationByTarget = new Map(adjudications.filter((item) => item.run_id === runId).map((item) => [item.target_id, item]));
@@ -146,7 +151,7 @@ async function finalizedRun(runDir: string, loaded: LoadedCorpus, adjudications:
     const adjudication = adjudicationByTarget.get(row.id);
     return { id: row.id, disposition: row.disposition, external_id: row.external_id, external_url: row.external_url, source: row.source, state: valid ? adjudication?.state ?? "not-examined" : "tool-failure", state_reason: valid ? adjudication?.note ?? "no explicit semantic adjudication supplied" : reasons.join("; "), concern_ids: adjudication?.concern_ids ?? [], finding_ids: adjudication?.finding_ids ?? [] };
   }).sort((a, b) => a.id.localeCompare(b.id));
-  const generationAttempts = events.filter((event) => event.event === "attempt_started" && event.phase === "review").map(eventCopy);
+  const generationAttempts = events.filter((event) => event.event === "attempt_started" && (event.phase === "review" || event.phase?.startsWith("discovery-"))).map(eventCopy);
   const verificationAttempts = events.filter((event) => event.event === "attempt_started" && (event.phase === "verify" || event.phase === "verify-correction")).map(eventCopy);
   const publicationEvents = events.filter((event) => event.event === "publication_started" || event.event === "publication_completed" || event.event === "publication_failed").map(eventCopy);
   const capabilities = manifest.capabilities ?? null;
@@ -154,7 +159,7 @@ async function finalizedRun(runDir: string, loaded: LoadedCorpus, adjudications:
     run_id: runId, audit_path: basename(resolve(runDir)), validity: { status: valid ? "valid" : "invalid", reasons }, context_mode: contextMode,
     exact_range: rows[0] ? { base: rows[0].frozen.base, head: rows[0].frozen.head, range: rows[0].frozen.range } : null,
     configuration: result?.run_configuration ?? null, capabilities,
-    generation: { concerns: optionalArray(reviewOutput?.concerns), attempt_events: generationAttempts },
+    generation: { concerns: generationConcerns, attempt_events: generationAttempts },
     verification: { verdicts: optionalArray(result?.verdicts), attempts: verificationAttempts, correction_attempted: result ? verificationAttempts.some((event) => event.phase === "verify-correction") : null },
     final_report: optionalArray(result?.report), publication: { attempted: publicationEvents.some((event) => event.event === "publication_started"), events: publicationEvents },
     failures: { tool: events.filter((event) => event.event === "execution_end" && payload(event)?.is_error === true).map(eventCopy), schema: events.filter((event) => event.event === "attempt_parse_failed").map(eventCopy), gaps: Array.isArray(manifest.gaps) ? manifest.gaps.map(String) : [], error: typeof manifest.error === "string" ? manifest.error : null },

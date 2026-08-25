@@ -171,7 +171,7 @@ export type InvalidCode = "missing-commit" | "base-mismatch" | "head-mismatch" |
 export interface InvalidReplay { schema: typeof REPLAY_RESULT_SCHEMA; plan: TrialPlan; status: "invalid"; phase: "preparation" | "precondition" | "scan" | "runner" | "audit"; reason: { code: InvalidCode; detail: string }; preconditions: PreconditionResult[]; audit_run_dir: string | null }
 export interface CompleteReplay { schema: typeof REPLAY_RESULT_SCHEMA; plan: TrialPlan; status: "complete"; preconditions: PreconditionResult[]; audit_run_dir: string }
 export type ReplayOutcome = InvalidReplay | CompleteReplay;
-export interface RunTrialOptions { repo: string; traceRoot?: string; profilePath?: string; runner?: ReplayRunner; runnerCommand?: string; scanFn?: ReplayScan; expectedCapabilities?: Record<string, unknown> }
+export interface RunTrialOptions { repo: string; traceRoot?: string; profilePath?: string; runner?: ReplayRunner; runnerCommand?: string; scanFn?: ReplayScan; expectedCapabilities?: Record<string, unknown>; discoveryMode?: "single" | "specialized-serial/v1" }
 function resultRecord(value: unknown): Record<string, unknown> | null { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null; }
 function completeResult(value: unknown): value is Record<string, unknown> { const record = resultRecord(value); return !!record && Array.isArray(record.verdicts) && Array.isArray(record.report) && !!resultRecord(record.coverage) && !!resultRecord(record.run_configuration); }
 function capabilitiesMatch(result: Record<string, unknown>, expected: Record<string, unknown>): boolean { const configuration = resultRecord(result.run_configuration); const actual = resultRecord(configuration?.capabilities); return !!actual && Object.entries(expected).every(([key, value]) => JSON.stringify(actual[key]) === JSON.stringify(value)); }
@@ -264,9 +264,9 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
         if (plan.mode === "review-context") { workItemPath = join(runnerDir, "work-item.json"); await copyFile(plan.work_item_path!, workItemPath); await audit!.record("app", "work_item_materialized", { schema: "leveret.work-item/v1", sha256: plan.work_item_sha256, path_role: "outside-checkout runner input" }); }
         else await audit!.record("app", "work_item_omitted", { context_mode: "diff-only" });
         const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("LEVERET_TRACE_")));
-        const env = { ...inherited, ...traceEnvironment, LEVERET_REPO: checkout, LEVERET_BASE: plan.base, LEVERET_CHANGE_MANIFEST: evidencePath, LEVERET_EVIDENCE_PACK: evidencePackFile.path, LEVERET_EVIDENCE_PACK_SHA256: evidencePackFile.sha256, LEVERET_GUIDANCE: guidanceFile.path, LEVERET_GUIDANCE_SHA256: guidanceFile.sha256, LEVERET_GRAPH: graph.ok ? "1" : "0", LEVERET_TRACE_DIR: audit!.partialDir, LEVERET_RUN_ID: runId, LEVERET_DATA: traceRoot, ...(workItemPath ? { LEVERET_WORK_ITEM: workItemPath } : {}) };
+        const env = { ...inherited, ...traceEnvironment, LEVERET_REPO: checkout, LEVERET_BASE: plan.base, LEVERET_CHANGE_MANIFEST: evidencePath, LEVERET_EVIDENCE_PACK: evidencePackFile.path, LEVERET_EVIDENCE_PACK_SHA256: evidencePackFile.sha256, LEVERET_GUIDANCE: guidanceFile.path, LEVERET_GUIDANCE_SHA256: guidanceFile.sha256, LEVERET_GRAPH: graph.ok ? "1" : "0", LEVERET_TRACE_DIR: audit!.partialDir, LEVERET_RUN_ID: runId, LEVERET_DATA: traceRoot, LEVERET_DISCOVERY_MODE: options.discoveryMode ?? "single", ...(workItemPath ? { LEVERET_WORK_ITEM: workItemPath } : {}) };
         const runner = options.runner ?? commandRunner(options.runnerCommand ?? process.env.LEVERET_RUNNER ?? `${process.execPath} ${resolve(harnessRoot, "dist/runner/pi.js")}`);
-        await audit!.record("lifecycle", "runner_started", { context_mode: plan.mode, environment_names: Object.keys(env).sort() });
+        await audit!.record("lifecycle", "runner_started", { context_mode: plan.mode, discovery_mode: options.discoveryMode ?? "single", environment_names: Object.keys(env).sort() });
         const result = await runner({ cwd: runnerDir, env });
         await audit!.record("result", "runner_output_received", { raw: result.stdout, code: result.code, signal: result.signal ?? null, timed_out: result.timedOut ?? false });
         if (result.code !== 0) { failure = invalid(plan, "runner", "runner-failure", `runner exited ${result.code}${result.signal ? ` (${result.signal})` : ""}: ${result.stderr.slice(0, 500)}`, preconditions); return; }
@@ -296,15 +296,17 @@ function option(args: string[], name: string, fallback?: string): string | undef
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const repo = args[0];
-  if (!repo || repo.startsWith("--")) throw new Error("usage: replay.mts <repo> [--corpus path] [--mode diff-only|review-context|both] [--trials N] [--profile path] [--trace-root path] [--runner command] [--capabilities expected.json]");
+  if (!repo || repo.startsWith("--")) throw new Error("usage: replay.mts <repo> [--corpus path] [--mode diff-only|review-context|both] [--discovery-mode single|specialized-serial/v1] [--trials N] [--profile path] [--trace-root path] [--runner command] [--capabilities expected.json]");
   const loaded = await loadCorpus(option(args, "--corpus", join(dirname(fileURLToPath(import.meta.url)), "corpus.v1.json"))!);
   const modeArg = option(args, "--mode", "both");
   const modes: ContextMode[] = modeArg === "both" ? ["diff-only", "review-context"] : modeArg === "diff-only" || modeArg === "review-context" ? [modeArg] : (() => { throw new Error(`invalid mode: ${modeArg}`); })();
   const capabilitiesPath = option(args, "--capabilities");
   const expectedCapabilities = capabilitiesPath ? resultRecord(JSON.parse(await readFile(capabilitiesPath, "utf8"))) ?? (() => { throw new Error("capabilities file must contain an object"); })() : undefined;
+  const discoveryMode = option(args, "--discovery-mode", "single");
+  if (discoveryMode !== "single" && discoveryMode !== "specialized-serial/v1") throw new Error(`invalid discovery mode: ${discoveryMode}`);
   for (const plan of planTrials(loaded, modes, Number(option(args, "--trials", "1")))) {
     const rows = loaded.corpus.rows.filter((row) => row.frozen.range_id === plan.range_id);
-    process.stdout.write(`${JSON.stringify(await runTrial(plan, rows, { repo, traceRoot: option(args, "--trace-root"), profilePath: option(args, "--profile"), runnerCommand: option(args, "--runner"), expectedCapabilities }))}\n`);
+    process.stdout.write(`${JSON.stringify(await runTrial(plan, rows, { repo, traceRoot: option(args, "--trace-root"), profilePath: option(args, "--profile"), runnerCommand: option(args, "--runner"), expectedCapabilities, discoveryMode }))}\n`);
   }
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch((error) => { console.error(error instanceof Error ? error.message : error); process.exit(1); });

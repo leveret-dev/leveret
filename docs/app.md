@@ -197,11 +197,13 @@ The pieces, top to bottom:
   capability — the reviewed repo needs nothing), and runs the deterministic engines
   with delta scanning against the base: only findings the change introduced
   survive, with everything dropped accounted for.
-- **The runner.** `leveret-runner-pi` drives two agent phases through a pinned Pi
-  runtime — the review agent (five lenses, cross-file blast radius via the graph)
-  and the verification agent (tries to refute every concern; unverifiable claims
-  are dropped). Leveret supplies an explicit system prompt and tool allowlist;
-  project settings, prompts, extensions, skills and context files are never loaded.
+- **The runner.** `leveret-runner-pi` defaults to the production `single`
+  discovery phase (five lenses and cross-file blast radius) followed by a
+  verification phase that tries to refute every concern and drops unverifiable
+  claims. The explicit `specialized-serial/v1` experiment instead runs three
+  packaged discovery legs serially, then the same verifier with a targeted tool
+  set. Leveret supplies every system prompt and exact tool allowlist; project
+  settings, prompts, extensions, skills and context files are never loaded.
   Your provider credentials live only here; the App layer and child tools never see
   them. The walkthrough records the client, model, prompt hash, live capabilities,
   and tool metrics.
@@ -246,6 +248,7 @@ node dist/app/server.js
 | `--effort` | `LEVERET_RUNNER_EFFORT` | `high` |
 | `--provider` | `LEVERET_RUNNER_PROVIDER` | `openai` |
 | `--max-time` | `LEVERET_RUNNER_MAX_TIME` | `30m` per phase |
+| `--discovery-mode` | `LEVERET_DISCOVERY_MODE` | `single` |
 
 Pi runs from in-memory settings and a host-owned, per-attempt session store with a
 Leveret-owned resource loader and an exact tool allowlist. No project-local
@@ -257,9 +260,17 @@ command is the escape hatch for other harnesses; it receives
 `LEVERET_REPO`, `LEVERET_BASE`, `LEVERET_CHANGE_MANIFEST`,
 `LEVERET_EVIDENCE_PACK` and its required `LEVERET_EVIDENCE_PACK_SHA256`,
 `LEVERET_GUIDANCE` and its required `LEVERET_GUIDANCE_SHA256`,
-`LEVERET_WORK_ITEM`, `LEVERET_GRAPH`, optional `LEVERET_PRIOR`,
-`LEVERET_TRACE_DIR`, and `LEVERET_RUN_ID`, and must print the
+`LEVERET_WORK_ITEM`, `LEVERET_GRAPH`, `LEVERET_DISCOVERY_MODE`, optional
+`LEVERET_PRIOR`, `LEVERET_TRACE_DIR`, and `LEVERET_RUN_ID`, and must print the
 verify-output JSON (see `agents/verify.md`).
+
+Discovery mode is host-owned. Only `single` and the experimental
+`specialized-serial/v1` scheduler are accepted; pull-request or repository content
+cannot select a mode, leg, prompt, or tool. The specialized scheduler withholds
+scan, semantic-rule, mutation, corpus-target, and post-walk leads during its three
+discovery legs. It remains opt-in until measured quality gates justify adoption.
+Frozen replay accepts the same value through `--discovery-mode` and passes only
+that host selection to the runner.
 
 `LEVERET_EVIDENCE_PACK` names a mode-0600 `leveret.evidence-pack/v1` JSON file
 outside the reviewed checkout. It is the single bounded handoff for changed-file
