@@ -1,0 +1,135 @@
+{
+  "schema": "leveret.work-item/v1",
+  "kind": "pull-request",
+  "captured_at": "2026-08-18T11:29:10.000Z",
+  "fields": {
+    "event": {
+      "value": "pull_request",
+      "availability": "present",
+      "original_bytes": 12,
+      "presented_bytes": 12,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "event"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "delivery_id": {
+      "value": null,
+      "availability": "missing",
+      "original_bytes": 0,
+      "presented_bytes": 0,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "delivery_id"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "installation_id": {
+      "value": null,
+      "availability": "missing",
+      "provenance": {
+        "source": "historical-replay",
+        "path": "installation.id"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "repository": {
+      "value": "pfBlockerNG/pfBlockerNG",
+      "availability": "present",
+      "original_bytes": 23,
+      "presented_bytes": 23,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "repository.full_name"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "number": {
+      "value": 2521,
+      "availability": "present",
+      "provenance": {
+        "source": "historical-replay",
+        "path": "pull_request.number"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "action": {
+      "value": null,
+      "availability": "missing",
+      "original_bytes": 0,
+      "presented_bytes": 0,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "action"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "title": {
+      "value": "ci: run the gates on the runner instead of in a container image",
+      "availability": "present",
+      "original_bytes": 63,
+      "presented_bytes": 63,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "pull_request.title"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "body": {
+      "value": "Runs CI on the runner again and deletes the container images. Owner decision, 2026-08-18.\n\nNet: **72 files, +1802 / −4785**.\n\n## Why\n\nThe `ci-runner` images solved real problems — pinned tool versions out of workflow YAML, one toolchain for local and CI — but the machinery around them re-implemented by hand what Docker already does from content. A tag that is a *name* rather than a content hash needs `.github/docker/VERSION`, 73 literal pins that must move in one commit, a marker fingerprint restating the build inputs, and an overwrite guard to keep the name immutable. That marker was found wrong four separate times while landing #2502 — `composer.json`, `composer.lock`, `.dockerignore`, and two vacuous guards over it — every time because it restated by hand what the Dockerfiles already declare.\n\n## What runs where now\n\n- **Python** — declared in `pyproject.toml` `[dependency-groups]` (`dev`, `smoke`, `bench`) with a committed `uv.lock`; `astral-sh/setup-uv` with caching, then `uv sync --locked`. `.python-version` pins 3.11 to match the appliance. This is a tightening, not just a move: `.github/docker/ci-requirements.txt` pinned 13 direct packages, and locking resolves **32** — 19 transitive packages were free to move a gate with no diff, which is the drift that file's own comment says it exists to prevent. `uv sync --locked` fails rather than silently resolving something else.\n- **PHP** — `shivammathur/setup-php` on the matrix versions from `read-matrix`, unchanged as a matrix.\n- **ShellCheck, shellspec, actionlint, gh, oras** — pinned, checksum-verified downloads, restored from the pre-container shapes at `111297097^` rather than reinvented, so the decisions behind them (#2185, #2194, #2198, #2202) survive.\n- **kcov** — the `cache/restore` + build + `cache/save` trio, keyed on `kcov-${KCOV_COMMIT}-${runner.os}-${runner.arch}-${runner-image-id}`, with the save gated on the build succeeding so a failed compile cannot poison the key.\n- **Composer** — `composer install` with its cache keyed on `hashFiles('composer.lock')`, so the download #2502 took off the critical path does not simply return to it.\n- **Locally** — `scripts/agent/run-gates.sh` and `.githooks/pre-commit` invoke tools directly; `scripts/run-in-docker.sh` is gone. The leased smoke boxes run the leg against their own toolchain, and `scripts/smoke-on-box.sh` refuses loudly when a tool is missing rather than falling back.\n\n## Two things the image did silently\n\nBoth restored explicitly rather than discovered in CI later:\n\n- Hosted runners ship `/dev/kvm` but leave `runner` outside the `kvm` group — the container's `--device` hid it, so every VM job now installs a udev rule.\n- `de_DE.UTF-8` does not exist on `ubuntu-latest`. `tests/shell/pfblockerng_adr26_locale_spec.sh` **self-skips** when the locale is absent, so without a `locale-gen` step ADR-26's collation contract would have gone untested while the suite read green (#2318). The review leg left that test deliberately red rather than weaken it.\n\n## Guards\n\nGuards that only ever policed image identity are deleted. Guards protecting something still true were retargeted and re-proved by mutation — including `test_ci_tool_pins.py`, which inverts: the pins legitimately live in workflow YAML again, so it now enforces that every `*_VERSION`/`*_SHA256` pin has exactly one value across all workflows. That found `SHELLSPEC_SHA256` duplicated across 2 sites and `ORAS_SHA256` across 6.\n\n## Accepted regressions\n\nNamed as decisions, not discoveries:\n\n- **Local/CI toolchain parity** is now \"pinned to agree\" rather than identical by construction (#2350, ADR-47). A local green can diverge from CI.\n- **Tool versions live in workflow YAML again** — the #2185 drift source. Mitigated by keeping every install pinned and checksum-verified, and by the one-value-per-pin guard above.\n- **Composer resolves from the network per job**, mitigated by the cache; a cold cache still reaches `api.github.com`.\n- Container `--init` (#2396) and `--cap-add=NET_ADMIN` (#2261) coverage is gone with containers. If a `container:` job ever returns, both guards must come back.\n\n## Verification\n\n- `scripts/agent/run-gates.sh` → `GATES: PASS`, **run entirely on the host**, 18 gates including `uv run pytest`, `uv run mypy tests/`, `shellspec --shell dash`.\n- Full suite on the host: 5504 passed. The one intermittent failure seen during this work was a genuine test synchronisation defect, fixed separately in #2519 — not papered over here.\n- `actionlint` clean across all 23 workflows; `check_version_literals.py` rc=0.\n- The eight smoke boxes were provisioned and verified: `uv=0.12.3 oras=1.3.3 qemu=10.0.11` on `pfb-box-1` … `pfb-box-8`.\n\n## Not done here\n\nThe published GHCR packages are left in place; older series are referenced by merged history and deleting them would only break reproducibility of old commits.\n\nPart of #2513",
+      "availability": "present",
+      "original_bytes": 4915,
+      "presented_bytes": 4915,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "pull_request.body"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "author_login": {
+      "value": "andrebrait",
+      "availability": "present",
+      "original_bytes": 10,
+      "presented_bytes": 10,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "pull_request.user.login"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "base_ref": {
+      "value": "devel",
+      "availability": "present",
+      "original_bytes": 5,
+      "presented_bytes": 5,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "pull_request.base.ref"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "base_sha": {
+      "value": "03d1e963f0e8fb4c4673b0fef6b12134ff7a037f",
+      "availability": "present",
+      "original_bytes": 40,
+      "presented_bytes": 40,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "pull_request.base.sha"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "head_sha": {
+      "value": "b312a6def6d5b2c440431314081e4d9095d3dd6c",
+      "availability": "present",
+      "original_bytes": 40,
+      "presented_bytes": 40,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "pull_request.head.sha"
+      },
+      "trust": "untrusted-evidence"
+    }
+  }
+}

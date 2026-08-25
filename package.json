@@ -11,6 +11,8 @@
     "leveret-prefetch-serena": "dist/runner/prefetch-serena.js"
   },
   "scripts": {
+    "bench:replay": "tsx bench/replay.mts",
+    "bench:replay-scan": "tsx bench/replay-scan.mts",
     "bench:report": "tsx bench/report.mts",
     "build": "tsc",
     "dev": "tsx src/server.ts",

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import { readFile, readdir } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { readFile, readdir, stat } from "node:fs/promises";
+import { basename, isAbsolute, join } from "node:path";
 import { AUDIT_SCHEMA_VERSION, validateAuditEvent, verifyChecksums } from "./audit.js";
 
-interface EventRecord {
+export interface EventRecord {
   schema: number;
   run_id: string;
   wall_time: string;
@@ -22,6 +22,13 @@ interface EventRecord {
   payload?: unknown;
   payload_ref?: { sha256: string };
   _stream?: string;
+}
+
+export interface AuditEventReadOptions {
+  names?: string[];
+  deduplicate?: boolean;
+  maxBytes?: number;
+  maxEvents?: number;
 }
 
 async function manifests(root: string): Promise<string[]> {
@@ -47,17 +54,31 @@ async function eventStreams(root: string, prefix = ""): Promise<string[]> {
   return found.sort();
 }
 
-async function events(runDir: string, names?: string[], deduplicate = true): Promise<EventRecord[]> {
+/** Read a finalized run's event streams with deterministic ordering and hard resource bounds. */
+export async function readAuditEvents(runDir: string, options: AuditEventReadOptions = {}): Promise<EventRecord[]> {
+  const maxBytes = options.maxBytes ?? 64 * 1024 * 1024;
+  const maxEvents = options.maxEvents ?? 100_000;
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || !Number.isSafeInteger(maxEvents) || maxEvents <= 0) {
+    throw new Error("audit event bounds must be positive safe integers");
+  }
   const result: EventRecord[] = [];
-  for (const name of names ?? await eventStreams(runDir)) {
+  let bytes = 0;
+  for (const name of options.names ?? await eventStreams(runDir)) {
+    if (isAbsolute(name) || name.split(/[\\/]/).includes("..") || !name.endsWith(".ndjson")) throw new Error(`invalid audit stream name: ${name}`);
     try {
-      for (const line of (await readFile(join(runDir, name), "utf8")).split("\n").filter(Boolean)) result.push({ ...(JSON.parse(line) as EventRecord), _stream: name });
+      const path = join(runDir, name);
+      bytes += (await stat(path)).size;
+      if (bytes > maxBytes) throw new Error(`audit event streams exceed ${maxBytes} bytes`);
+      for (const line of (await readFile(path, "utf8")).split("\n").filter(Boolean)) {
+        result.push({ ...(JSON.parse(line) as EventRecord), _stream: name });
+        if (result.length > maxEvents) throw new Error(`audit event streams exceed ${maxEvents} events`);
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new Error(`invalid audit stream ${name}: ${String(error)}`);
     }
   }
   const sorted = result.sort((a, b) => a.wall_time.localeCompare(b.wall_time) || a.producer.localeCompare(b.producer) || a.sequence - b.sequence);
-  if (!deduplicate) return sorted;
+  if (options.deduplicate === false) return sorted;
   const unique = new Map<string, EventRecord>();
   for (const event of sorted) {
     const key = `${event.producer}:${event.sequence}`;
@@ -68,7 +89,7 @@ async function events(runDir: string, names?: string[], deduplicate = true): Pro
 }
 
 async function validateEvents(runDir: string, runId: string): Promise<number> {
-  const records = await events(runDir, undefined, false);
+  const records = await readAuditEvents(runDir, { deduplicate: false });
   const sequences = new Map<string, Set<number>>();
   const unique = new Set<string>();
   for (const event of records) {
@@ -141,7 +162,7 @@ export async function inspectAudit(argv: string[], write: (line: string) => void
     write(JSON.stringify({ run_id: manifest.run_id, status: manifest.status, checksums: "valid", events: eventCount, session_entries: sessionEntries, completeness: manifest.completeness ?? ((manifest.gaps?.length) ? "incomplete" : "complete"), gaps: manifest.gaps ?? [] }));
     return;
   }
-  const records = await events(path);
+  const records = await readAuditEvents(path);
   if (command === "summary") {
     for (const event of records) write([event.wall_time, event.producer, event.phase ?? "-", event.attempt ?? "-", event.category, event.event].join("\t"));
     return;

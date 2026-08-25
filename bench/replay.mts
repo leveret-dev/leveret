@@ -1,55 +1,266 @@
-// Replay historical PRs through the deterministic layer (DESIGN.md "Replay mechanics").
-// Usage: npx tsx bench/replay.mts <repo> <profile|-> <pr...>
-// Writes bench/results/pr<N>.json: {pr, head, base, files, result}.
-// Read-only against <repo> except fetch + throwaway detached worktrees under /tmp.
-import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
+import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
-import { scan, changedFiles } from "../src/scan.js";
+import { z } from "zod";
+import { auditConfig, createAuditRun, withAuditTrace } from "../src/audit.js";
+import { runStreaming } from "../src/exec.js";
+import { ensureGraph } from "../src/app/graph.js";
+import { scan } from "../src/scan.js";
+import { parseWorkItem, type WorkItem } from "../src/work-item.js";
 
-const [repo, profileArg, ...prs] = process.argv.slice(2);
-if (!repo || !profileArg || prs.length === 0) {
-  console.error("usage: replay.mts <repo> <profile|-> <pr...>");
-  process.exit(2);
+export const CORPUS_SCHEMA = "leveret.replay-corpus/v1" as const;
+export const REPLAY_RESULT_SCHEMA = "leveret.replay-result/v1" as const;
+export type ContextMode = "diff-only" | "review-context";
+
+const sha = z.string().regex(/^[a-f0-9]{40}$/);
+const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
+const lineRange = z.object({ start: z.number().int().positive(), end: z.number().int().positive() }).strict().refine((value) => value.end >= value.start, "line range end precedes start");
+const textPrecondition = z.object({ kind: z.enum(["contains", "not_contains"]), path: z.string().min(1).max(500), text: z.string().min(1).max(16 * 1024), lines: lineRange.optional() }).strict();
+const hashPrecondition = z.object({ kind: z.literal("sha256"), path: z.string().min(1).max(500), sha256 }).strict();
+export const preconditionSchema = z.union([textPrecondition, hashPrecondition]);
+
+export const corpusRowSchema = z.object({
+  id: z.string().regex(/^pfblockerng-(2444|2521)-r\d+$/),
+  repository: z.literal("pfBlockerNG/pfBlockerNG"),
+  pull_request: z.number().int().positive(),
+  pull_request_url: z.url(),
+  external_id: z.string().regex(/^discussion_r\d+$/),
+  external_url: z.url(),
+  disposition: z.enum(["accepted", "rejected"]),
+  disposition_provenance: z.object({ kind: z.enum(["maintainer-reply", "executed-control"]), url: z.url(), note: z.string().min(1) }).strict(),
+  original_commit_id: sha,
+  frozen: z.object({ range_id: z.string().min(1), base: sha, head: sha, range: z.string().min(82) }).strict(),
+  source: z.object({ file: z.string().min(1), lines: lineRange, mechanism: z.string().min(1) }).strict(),
+  scorer_notes: z.string().min(1),
+  preconditions: z.array(preconditionSchema).min(1).max(8),
+  work_item: z.object({ path: z.string().min(1), schema: z.literal("leveret.work-item/v1"), sha256 }).strict(),
+}).strict();
+
+export const corpusSchema = z.object({ schema: z.literal(CORPUS_SCHEMA), version: z.literal(1), identity: z.object({ name: z.literal("pfblockerng-coderabbit-original-commit"), sha256 }).strict(), rows: z.array(corpusRowSchema).length(13) }).strict();
+
+export type CorpusRow = z.infer<typeof corpusRowSchema>;
+export type Precondition = z.infer<typeof preconditionSchema>;
+export type ReplayCorpus = z.infer<typeof corpusSchema>;
+export interface LoadedCorpus { corpus: ReplayCorpus; path: string; workItems: Record<string, { path: string; workItem: WorkItem; sha256: string }> }
+
+const EXPECTED_RANGES: Record<number, { base: string; head: string }> = {
+  2444: { base: "8f08d6e4d7145a89fc4e15133d595e7a9825d673", head: "ed359c691e8002acaeb0a296bc69bf9ab1bbc97a" },
+  2521: { base: "03d1e963f0e8fb4c4673b0fef6b12134ff7a037f", head: "b312a6def6d5b2c440431314081e4d9095d3dd6c" },
+};
+const digest = (value: string | Buffer): string => createHash("sha256").update(value).digest("hex");
+export function corpusIdentity(corpus: ReplayCorpus): string { return digest(JSON.stringify({ ...corpus, identity: { ...corpus.identity, sha256: "" } })); }
+function assertUnique(values: string[], label: string): void { if (new Set(values).size !== values.length) throw new Error(`duplicate corpus ${label}`); }
+function requireInside(root: string, path: string, label: string): void {
+  const rel = relative(root, path);
+  if (rel === "" || (!rel.startsWith(`..${sep}`) && rel !== ".." && !isAbsolute(rel))) return;
+  throw new Error(`${label} escapes its root`);
 }
-const profilePath = profileArg === "-" ? undefined : profileArg;
-const outDir = join(dirname(fileURLToPath(import.meta.url)), "results");
-mkdirSync(outDir, { recursive: true });
 
-const git = (cwd: string, ...args: string[]) =>
-  execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
-
-git(repo, "worktree", "prune"); // clear stale registrations from crashed runs
-
-for (const pr of prs) {
-  const wt = `/tmp/leveret-bench-${pr}`;
-  git(repo, "fetch", "-q", "origin", `pull/${pr}/head`);
-  const head = git(repo, "rev-parse", "FETCH_HEAD");
-  const base = git(repo, "merge-base", head, "origin/devel");
-  // A leftover worktree must be unregistered through git; rmSync alone orphans
-  // the registration and the next add fails "missing but already registered".
-  try {
-    git(repo, "worktree", "remove", "--force", wt);
-  } catch {
-    rmSync(wt, { recursive: true, force: true });
-    git(repo, "worktree", "prune");
+export async function loadCorpus(path: string): Promise<LoadedCorpus> {
+  const corpusPath = resolve(path);
+  const corpus = corpusSchema.parse(JSON.parse(await readFile(corpusPath, "utf8")));
+  if (corpusIdentity(corpus) !== corpus.identity.sha256) throw new Error("corpus identity hash mismatch");
+  assertUnique(corpus.rows.map((row) => row.id), "row id");
+  assertUnique(corpus.rows.map((row) => row.external_id), "external id");
+  assertUnique(corpus.rows.map((row) => row.external_url), "external URL");
+  assertUnique(corpus.rows.map((row) => row.disposition_provenance.url), "disposition provenance URL");
+  const accepted = corpus.rows.filter((row) => row.disposition === "accepted").length;
+  const rejected = corpus.rows.filter((row) => row.disposition === "rejected").length;
+  if (accepted !== 12 || rejected !== 1) throw new Error(`corpus must contain 12 accepted and 1 rejected row; got ${accepted} and ${rejected}`);
+  const corpusDir = dirname(corpusPath);
+  const workItems: LoadedCorpus["workItems"] = {};
+  for (const row of corpus.rows) {
+    const expected = EXPECTED_RANGES[row.pull_request];
+    if (!expected || row.frozen.base !== expected.base || row.frozen.head !== expected.head || row.original_commit_id !== expected.head) throw new Error(`${row.id} does not use the frozen original-commit range`);
+    if (row.pull_request_url !== `https://github.com/pfBlockerNG/pfBlockerNG/pull/${row.pull_request}` || !row.external_url.startsWith(`${row.pull_request_url}#${row.external_id}`) || !row.disposition_provenance.url.startsWith(`${row.pull_request_url}#discussion_r`)) throw new Error(`${row.id} has inconsistent external identity`);
+    const itemPath = resolve(corpusDir, row.work_item.path);
+    requireInside(corpusDir, itemPath, `${row.id} work-item path`);
+    const content = await readFile(itemPath, "utf8");
+    const itemHash = digest(content);
+    if (itemHash !== row.work_item.sha256) throw new Error(`${row.id} work-item hash mismatch`);
+    const workItem = parseWorkItem(content);
+    if (workItem.fields.repository.value !== row.repository || workItem.fields.number.value !== row.pull_request || workItem.fields.base_sha.value !== row.frozen.base || workItem.fields.head_sha.value !== row.frozen.head) throw new Error(`${row.id} work-item identity mismatch`);
+    if (workItem.fields.title.availability !== "present" || workItem.fields.body.availability !== "present" || Object.values(workItem.fields).some((field) => field.provenance.source !== "historical-replay")) throw new Error(`${row.id} work-item is not a complete historical snapshot`);
+    const previous = workItems[row.frozen.range_id];
+    if (previous && (previous.path !== itemPath || previous.sha256 !== itemHash)) throw new Error(`${row.id} range uses a different work-item snapshot`);
+    workItems[row.frozen.range_id] = { path: itemPath, workItem, sha256: itemHash };
   }
-  git(repo, "worktree", "add", "-q", "--detach", wt, head);
+  if (Object.keys(workItems).length !== 2) throw new Error("corpus must group into exactly two frozen ranges");
+  return { corpus, path: corpusPath, workItems };
+}
+
+export interface PreconditionResult { precondition: Precondition; ok: boolean; detail: string }
+export async function executePreconditions(repo: string, preconditions: Precondition[]): Promise<PreconditionResult[]> {
+  const root = await realpath(repo);
+  const results: PreconditionResult[] = [];
+  for (const precondition of preconditions) {
+    try {
+      const candidate = resolve(root, precondition.path);
+      requireInside(root, candidate, "precondition path");
+      const actual = await realpath(candidate);
+      requireInside(root, actual, "precondition target");
+      const content = await readFile(actual);
+      if (precondition.kind === "sha256") {
+        const actualHash = digest(content);
+        results.push({ precondition, ok: actualHash === precondition.sha256, detail: actualHash });
+        continue;
+      }
+      const whole = content.toString("utf8");
+      const selected = precondition.lines ? whole.split("\n").slice(precondition.lines.start - 1, precondition.lines.end).join("\n") : whole;
+      const found = selected.includes(precondition.text);
+      results.push({ precondition, ok: precondition.kind === "contains" ? found : !found, detail: found ? "text present" : "text absent" });
+    } catch (error) { results.push({ precondition, ok: false, detail: error instanceof Error ? error.message : String(error) }); }
+  }
+  return results;
+}
+
+export interface TrialPlan {
+  schema: typeof REPLAY_RESULT_SCHEMA; id: string; corpus_sha256: string; range_id: string; repository: string; pull_request: number; base: string; head: string; range: string; mode: ContextMode; trial: number; target_ids: string[]; work_item_path: string | null; work_item_sha256: string | null;
+}
+export function planTrials(loaded: LoadedCorpus, modes: ContextMode[], trials: number): TrialPlan[] {
+  if (!Number.isSafeInteger(trials) || trials <= 0) throw new Error("trials must be a positive integer");
+  if (new Set(modes).size !== modes.length || modes.length === 0) throw new Error("modes must be non-empty and unique");
+  const grouped = new Map<string, CorpusRow[]>();
+  for (const row of loaded.corpus.rows) grouped.set(row.frozen.range_id, [...(grouped.get(row.frozen.range_id) ?? []), row]);
+  const groups = [...grouped.values()].sort((a, b) => a[0]!.frozen.range_id.localeCompare(b[0]!.frozen.range_id));
+  const plans: TrialPlan[] = [];
+  for (const rows of groups) {
+    const row = rows[0]!;
+    const item = loaded.workItems[row.frozen.range_id];
+    for (const mode of modes) for (let trial = 1; trial <= trials; trial++) {
+      const key = `${loaded.corpus.identity.sha256}:${row.frozen.range_id}:${mode}:${trial}`;
+      plans.push({ schema: REPLAY_RESULT_SCHEMA, id: digest(key).slice(0, 24), corpus_sha256: loaded.corpus.identity.sha256, range_id: row.frozen.range_id, repository: row.repository, pull_request: row.pull_request, base: row.frozen.base, head: row.frozen.head, range: row.frozen.range, mode, trial, target_ids: rows.map((candidate) => candidate.id).sort(), work_item_path: mode === "review-context" ? item?.path ?? null : null, work_item_sha256: mode === "review-context" ? item?.sha256 ?? null : null });
+    }
+  }
+  assertUnique(plans.map((plan) => plan.id), "trial id");
+  return plans;
+}
+
+const exec = promisify(execFile);
+async function git(cwd: string, args: string[]): Promise<string> { const result = await exec("git", args, { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }); return result.stdout.trim(); }
+async function resolveCommit(repo: string, commit: string): Promise<boolean> {
+  try { return await git(repo, ["rev-parse", "--verify", `${commit}^{commit}`]) === commit; }
+  catch {
+    try { await git(repo, ["fetch", "--quiet", "origin", commit]); } catch { return false; }
+    try { return await git(repo, ["rev-parse", "--verify", `${commit}^{commit}`]) === commit; } catch { return false; }
+  }
+}
+
+export interface RunnerContext { cwd: string; env: NodeJS.ProcessEnv }
+export interface RunnerExecution { code: number; stdout: string; stderr: string; signal?: string; timedOut?: boolean }
+export type ReplayRunner = (context: RunnerContext) => Promise<RunnerExecution>;
+export type ReplayScan = typeof scan;
+function commandRunner(command: string): ReplayRunner {
+  const [file, ...args] = command.trim().split(/\s+/);
+  if (!file) throw new Error("runner command is empty");
+  return async ({ cwd, env }) => { const result = await runStreaming(file, args, cwd, { env, timeoutMs: 100 * 60_000, maxBuffer: 64 * 1024 * 1024 }); return { code: result.code, stdout: result.stdout, stderr: result.stderr, signal: result.signal, timedOut: result.timedOut }; };
+}
+
+export type InvalidCode = "missing-commit" | "base-mismatch" | "head-mismatch" | "missing-context" | "failed-precondition" | "runner-failure" | "incomplete-result" | "capability-mismatch" | "incomplete-audit" | "orchestration-failure";
+export interface InvalidReplay { schema: typeof REPLAY_RESULT_SCHEMA; plan: TrialPlan; status: "invalid"; phase: "preparation" | "precondition" | "scan" | "runner" | "audit"; reason: { code: InvalidCode; detail: string }; preconditions: PreconditionResult[]; audit_run_dir: string | null }
+export interface CompleteReplay { schema: typeof REPLAY_RESULT_SCHEMA; plan: TrialPlan; status: "complete"; preconditions: PreconditionResult[]; audit_run_dir: string }
+export type ReplayOutcome = InvalidReplay | CompleteReplay;
+export interface RunTrialOptions { repo: string; traceRoot?: string; profilePath?: string; runner?: ReplayRunner; runnerCommand?: string; scanFn?: ReplayScan; expectedCapabilities?: Record<string, unknown> }
+function resultRecord(value: unknown): Record<string, unknown> | null { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null; }
+function completeResult(value: unknown): value is Record<string, unknown> { const record = resultRecord(value); return !!record && Array.isArray(record.verdicts) && Array.isArray(record.report) && !!resultRecord(record.coverage) && !!resultRecord(record.run_configuration); }
+function capabilitiesMatch(result: Record<string, unknown>, expected: Record<string, unknown>): boolean { const configuration = resultRecord(result.run_configuration); const actual = resultRecord(configuration?.capabilities); return !!actual && Object.entries(expected).every(([key, value]) => JSON.stringify(actual[key]) === JSON.stringify(value)); }
+function invalid(plan: TrialPlan, phase: InvalidReplay["phase"], code: InvalidCode, detail: string, preconditions: PreconditionResult[] = [], auditRunDir: string | null = null): InvalidReplay { return { schema: REPLAY_RESULT_SCHEMA, plan, status: "invalid", phase, reason: { code, detail }, preconditions, audit_run_dir: auditRunDir }; }
+
+export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunTrialOptions): Promise<ReplayOutcome> {
+  const repo = await realpath(options.repo);
+  if (!await resolveCommit(repo, plan.base)) return invalid(plan, "preparation", "missing-commit", `base commit unavailable: ${plan.base}`);
+  if (!await resolveCommit(repo, plan.head)) return invalid(plan, "preparation", "missing-commit", `head commit unavailable: ${plan.head}`);
+  if (await git(repo, ["merge-base", plan.base, plan.head]) !== plan.base) return invalid(plan, "preparation", "base-mismatch", "frozen base is not the reviewed head's merge base");
+  if (plan.mode === "review-context" && (!plan.work_item_path || !plan.work_item_sha256)) return invalid(plan, "preparation", "missing-context", "review-context mode requires its frozen work-item");
+  if (plan.mode === "review-context") {
+    try { if (digest(await readFile(plan.work_item_path!)) !== plan.work_item_sha256) return invalid(plan, "preparation", "missing-context", "frozen work-item hash mismatch"); }
+    catch (error) { return invalid(plan, "preparation", "missing-context", String(error)); }
+  }
+  const root = await mkdtemp(join(tmpdir(), "leveret-replay-"));
+  const checkout = join(root, "checkout");
+  const runnerDir = join(root, "runner");
+  await mkdir(runnerDir);
+  let audit: Awaited<ReturnType<typeof createAuditRun>> = undefined;
+  let auditRunDir: string | null = null;
+  let preconditions: PreconditionResult[] = [];
   try {
-    // every bench checkout gets its graph — agents query structure, never handicapped
-    const { ensureGraph } = await import("../src/app/graph.js");
-    const graph = await ensureGraph(wt);
-    if (!graph.ok) console.error(`PR#${pr}: ${graph.detail}`);
-    const files = await changedFiles(wt, base);
-    const result = await scan({ repo: wt, base, profilePath });
-    writeFileSync(join(outDir, `pr${pr}.json`), JSON.stringify({ pr, head, base, files, result }, null, 1));
-    console.log(
-      `PR#${pr} head=${head.slice(0, 9)} files=${files.length} findings=${result.findings.length} ` +
-        `suppressed=${result.suppressed.reduce((n, s) => n + s.count, 0)} ` +
-        result.engines.map((e) => `${e.engine}:${e.status}`).join(" "),
-    );
+    await git(repo, ["worktree", "add", "--quiet", "--detach", checkout, plan.head]);
+    const actualHead = await git(checkout, ["rev-parse", "HEAD"]);
+    if (actualHead !== plan.head) return invalid(plan, "preparation", "head-mismatch", `detached HEAD is ${actualHead}`);
+    const actualBase = await git(checkout, ["merge-base", plan.base, "HEAD"]);
+    if (actualBase !== plan.base) return invalid(plan, "preparation", "base-mismatch", `resolved base is ${actualBase}`);
+    preconditions = await executePreconditions(checkout, rows.flatMap((row) => row.preconditions));
+    const failed = preconditions.find((condition) => !condition.ok);
+    if (failed) return invalid(plan, "precondition", "failed-precondition", `${failed.precondition.path}: ${failed.detail}`, preconditions);
+    const traceRoot = resolve(options.traceRoot ?? join(tmpdir(), "leveret-replay-traces"));
+    const harnessRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+    for (const rootPath of [harnessRoot, repo]) { const rel = relative(rootPath, traceRoot); if (rel === "" || (!rel.startsWith(`..${sep}`) && rel !== "..")) return invalid(plan, "preparation", "orchestration-failure", "private trace root must stay outside both repositories", preconditions); }
+    await mkdir(traceRoot, { recursive: true });
+    const runId = `replay-${plan.id}-${randomUUID()}`;
+    const traceEnvironment = { LEVERET_TRACE_ENABLED: "1", LEVERET_TRACE_ROOT: traceRoot, LEVERET_TRACE_SINKS: "private", LEVERET_TRACE_FAILURE: "fail", LEVERET_TRACE_KEEP_UNPACKED: "1" };
+    audit = await createAuditRun(auditConfig(traceRoot, traceEnvironment), runId);
+    if (!audit) return invalid(plan, "audit", "incomplete-audit", "#51 audit capture is disabled", preconditions);
+    let failure: InvalidReplay | undefined;
+    let parsed: Record<string, unknown> | undefined;
+    try {
+      await withAuditTrace(audit, async () => {
+        await audit!.record("app", "replay_started", { plan, corpus_target_ids: plan.target_ids });
+        await audit!.record("repository", "defect_preconditions_validated", { results: preconditions });
+        await audit!.record("repository", "review_diff", { base_sha: plan.base, head_sha: plan.head, range: plan.range, changed_files: (await git(checkout, ["diff", "--name-only", "-z", plan.range])).split("\0").filter(Boolean) });
+        const graph = await ensureGraph(checkout);
+        const scanResult = await (options.scanFn ?? scan)({ repo: checkout, base: plan.base, profilePath: options.profilePath, allowCustomEngines: false });
+        await audit!.record("repository", "scan_completed", { base_sha: plan.base, head_sha: plan.head, graph, scan: scanResult });
+        await audit!.writeCapabilities({ graph, scanner: { engines: scanResult.engines }, node: process.version });
+        const leadsPath = join(runnerDir, "leads.json");
+        await writeFile(leadsPath, `${JSON.stringify(scanResult, null, 1)}\n`);
+        let workItemPath: string | undefined;
+        if (plan.mode === "review-context") { workItemPath = join(runnerDir, "work-item.json"); await copyFile(plan.work_item_path!, workItemPath); await audit!.record("app", "work_item_materialized", { schema: "leveret.work-item/v1", sha256: plan.work_item_sha256, path_role: "outside-checkout runner input" }); }
+        else await audit!.record("app", "work_item_omitted", { context_mode: "diff-only" });
+        const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("LEVERET_TRACE_")));
+        const env = { ...inherited, ...traceEnvironment, LEVERET_REPO: checkout, LEVERET_BASE: plan.base, LEVERET_LEADS: leadsPath, LEVERET_GRAPH: graph.ok ? "1" : "0", LEVERET_TRACE_DIR: audit!.partialDir, LEVERET_RUN_ID: runId, LEVERET_DATA: traceRoot, ...(workItemPath ? { LEVERET_WORK_ITEM: workItemPath } : {}) };
+        const runner = options.runner ?? commandRunner(options.runnerCommand ?? process.env.LEVERET_RUNNER ?? `${process.execPath} ${resolve(harnessRoot, "dist/runner/pi.js")}`);
+        await audit!.record("lifecycle", "runner_started", { context_mode: plan.mode, environment_names: Object.keys(env).sort() });
+        const result = await runner({ cwd: runnerDir, env });
+        await audit!.record("result", "runner_output_received", { raw: result.stdout, code: result.code, signal: result.signal ?? null, timed_out: result.timedOut ?? false });
+        if (result.code !== 0) { failure = invalid(plan, "runner", "runner-failure", `runner exited ${result.code}${result.signal ? ` (${result.signal})` : ""}: ${result.stderr.slice(0, 500)}`, preconditions); return; }
+        try { parsed = JSON.parse(result.stdout) as Record<string, unknown>; } catch (error) { failure = invalid(plan, "runner", "incomplete-result", `runner output is not JSON: ${String(error)}`, preconditions); return; }
+        if (!completeResult(parsed)) { failure = invalid(plan, "runner", "incomplete-result", "runner result lacks verdicts, report, coverage, or run_configuration", preconditions); return; }
+        if (options.expectedCapabilities && !capabilitiesMatch(parsed, options.expectedCapabilities)) { failure = invalid(plan, "runner", "capability-mismatch", "runner capabilities differ from the declared configuration", preconditions); return; }
+        await audit!.record("result", "runner_output_parsed", parsed);
+        await audit!.writeResult(parsed);
+      });
+    } catch (error) { failure = invalid(plan, "runner", "orchestration-failure", error instanceof Error ? error.message : String(error), preconditions); }
+    const finalized = await audit.finalize(failure ? "failed" : "complete", failure?.reason.detail);
+    auditRunDir = finalized.runDir ?? null;
+    if (failure) return { ...failure, audit_run_dir: auditRunDir };
+    if (finalized.status !== "complete" || finalized.completeness !== "complete" || !auditRunDir) return invalid(plan, "audit", "incomplete-audit", `audit finalized ${finalized.status}/${finalized.completeness}`, preconditions, auditRunDir);
+    return { schema: REPLAY_RESULT_SCHEMA, plan, status: "complete", preconditions, audit_run_dir: auditRunDir };
+  } catch (error) {
+    try { if (audit && !auditRunDir) auditRunDir = (await audit.finalize("failed", error)).runDir ?? null; } catch { /* retain original failure */ }
+    return invalid(plan, "preparation", "orchestration-failure", error instanceof Error ? error.message : String(error), preconditions, auditRunDir);
   } finally {
-    git(repo, "worktree", "remove", "--force", wt);
+    try { await git(repo, ["worktree", "remove", "--force", checkout]); } catch { /* not registered */ }
+    await rm(root, { recursive: true, force: true });
   }
 }
+
+function option(args: string[], name: string, fallback?: string): string | undefined { const index = args.indexOf(name); return index < 0 ? fallback : args[index + 1]; }
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  const repo = args[0];
+  if (!repo || repo.startsWith("--")) throw new Error("usage: replay.mts <repo> [--corpus path] [--mode diff-only|review-context|both] [--trials N] [--profile path] [--trace-root path] [--runner command] [--capabilities expected.json]");
+  const loaded = await loadCorpus(option(args, "--corpus", join(dirname(fileURLToPath(import.meta.url)), "corpus.v1.json"))!);
+  const modeArg = option(args, "--mode", "both");
+  const modes: ContextMode[] = modeArg === "both" ? ["diff-only", "review-context"] : modeArg === "diff-only" || modeArg === "review-context" ? [modeArg] : (() => { throw new Error(`invalid mode: ${modeArg}`); })();
+  const capabilitiesPath = option(args, "--capabilities");
+  const expectedCapabilities = capabilitiesPath ? resultRecord(JSON.parse(await readFile(capabilitiesPath, "utf8"))) ?? (() => { throw new Error("capabilities file must contain an object"); })() : undefined;
+  for (const plan of planTrials(loaded, modes, Number(option(args, "--trials", "1")))) {
+    const rows = loaded.corpus.rows.filter((row) => row.frozen.range_id === plan.range_id);
+    process.stdout.write(`${JSON.stringify(await runTrial(plan, rows, { repo, traceRoot: option(args, "--trace-root"), profilePath: option(args, "--profile"), runnerCommand: option(args, "--runner"), expectedCapabilities }))}\n`);
+  }
+}
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch((error) => { console.error(error instanceof Error ? error.message : error); process.exit(1); });

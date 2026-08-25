@@ -363,22 +363,37 @@ treats subscription OAuth as a peer of the API key, never an afterthought.
 
 ## Validation gate (the benchmark)
 
-Corpus: historical pfBlockerNG review threads frozen with their accepted/dismissed
-disposition, `original_commit_id`, verified base/fork SHA, and an executable
-defect-presence precondition. Replaying a repaired final PR head is invalid, never a
+Corpus data lives in `bench/corpus.v1.json`: one strict, hashed row per root
+CodeRabbit finding, with accepted/rejected disposition provenance,
+`original_commit_id`, an exact frozen two-dot range, source range and mechanism,
+scorer notes, and bounded typed defect-presence predicates. The two committed
+`leveret.work-item/v1` snapshots are hash-pinned inputs; replay never fetches mutable
+PR text. The corpus validates mechanically as 12 accepted targets plus the rejected
+#2521 GNU-tar control. A repaired head or failed precondition is invalid, never a
 miss.
 
-Replay the standardized Pi pipeline in a throwaway detached worktree at the exact
-reviewed commit. Prefer a recorded merge base; rewritten branches may instead need
-the frozen two-dot parent documented by the corpus. A missing commit/base, failed
-precondition, incomplete structured output, or capability mismatch invalidates the
-run. The dedicated mirror remains separate from live development.
+`npm run bench:replay` groups rows by frozen range, resolves/fetches the exact base
+and head SHA, and creates a throwaway detached worktree. It validates every
+precondition before scanning or invoking a model, then runs the existing `scan()`
+and standardized Pi runner. `diff-only` explicitly omits work-item context;
+`review-context` requires the frozen snapshot. Trial IDs are deterministic across N
+identical trials and unique by corpus, range, mode, and trial number. Private raw
+runner output, events, capabilities, and result remain outside both repositories in
+the canonical #51 run directory selected by `LEVERET_TRACE_DIR` /
+`LEVERET_RUN_ID`. Missing commits/base/context, head mismatch, precondition failure,
+runner/result/audit incompleteness, and declared capability mismatch are structured
+invalid outcomes. `npm run bench:replay-scan` preserves the old deterministic
+scan-only historical harness.
 
-Runner JSON is the source of record. `npm run bench:report` mechanically renders
-factual counts, coverage, tool outcomes, and published findings from result files.
-Semantic same-mechanism overlap and defect validity remain an
-explicit adjudication layer; the renderer never asks an LLM to restate fields the
-harness already has.
+Finalized #51 runs are the report input. `npm run bench:report -- --corpus
+bench/corpus.v1.json --json <source.json> [--markdown <report.md>] <run-dir...>`
+writes a versioned deterministic JSON source record first; Markdown renders only
+that record. It keeps generation concerns, verification and correction attempts,
+final verdicts/report, actual publication events, tool/schema failures, context
+mode, exact range, configuration/capability identity, validity, and every target's
+state separate. Missing detail is `null`/`unknown`, never zero or clean. Target
+overlap comes only from explicit `leveret.replay-adjudication/v1` records; titles
+are never used as a semantic scorer.
 
 Metrics:
 

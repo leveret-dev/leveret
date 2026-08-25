@@ -1,5 +1,8 @@
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { renderBenchmarkReport, summarizeResult } from "../bench/report.mjs";
+import { buildReplayReport, renderBenchmarkReport, renderReplayReport, summarizeResult, type ReplayReportRecord } from "../bench/report.mjs";
+import { loadCorpus } from "../bench/replay.mjs";
 
 const result = {
   report: [
@@ -75,5 +78,40 @@ describe("benchmark report", () => {
       toolDetailComplete: false,
     });
     expect(renderBenchmarkReport([summary])).toContain("| aggregate | 1 | 1 | 1 | 0 | 0 | 5 | 1 | unknown | unknown | 2 | unknown | aggregate-only | no |");
+  });
+
+  it("keeps generation and actual publication separate and renders absent detail as unknown", () => {
+    const source: ReplayReportRecord = {
+      schema: "leveret.replay-report/v1",
+      corpus: { schema: "leveret.replay-corpus/v1", name: "fixture", sha256: "a".repeat(64), accepted: 12, rejected_controls: 1, ranges: [] },
+      scoring: { recall_denominator: 12, rejected_controls_excluded: 1, invalid_runs_excluded: true, semantic_overlap_source: "explicit-adjudication-only" },
+      runs: [{
+        run_id: "run-1",
+        audit_path: "/private/run-1",
+        validity: { status: "valid", reasons: [] },
+        context_mode: "diff-only",
+        exact_range: null,
+        configuration: null,
+        capabilities: null,
+        generation: { concerns: [{ id: "C1" }], attempt_events: [] },
+        verification: { verdicts: null, attempts: [], correction_attempted: null },
+        final_report: [{ id: "R1" }],
+        publication: { attempted: false, events: [] },
+        failures: { tool: [], schema: [], gaps: [], error: null },
+        coverage: null,
+        targets: [],
+      }],
+    };
+    const markdown = renderReplayReport(source);
+    expect(markdown).toContain("| run-1 | valid | diff-only | unknown | 1 | unknown | 1 | no | 0 | 0 |");
+    expect(markdown).toContain("- Configuration: unknown");
+    expect(markdown).toContain("- Capabilities: unknown");
+  });
+
+  it("excludes the rejected GNU-tar control from the recall denominator", async () => {
+    const corpus = await loadCorpus(join(dirname(fileURLToPath(import.meta.url)), "../bench/corpus.v1.json"));
+    const source = await buildReplayReport(corpus, []);
+    expect(source.corpus).toMatchObject({ accepted: 12, rejected_controls: 1 });
+    expect(source.scoring).toMatchObject({ recall_denominator: 12, rejected_controls_excluded: 1 });
   });
 });

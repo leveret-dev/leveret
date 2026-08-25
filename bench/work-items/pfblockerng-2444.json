@@ -1,0 +1,135 @@
+{
+  "schema": "leveret.work-item/v1",
+  "kind": "pull-request",
+  "captured_at": "2026-08-15T19:23:49.000Z",
+  "fields": {
+    "event": {
+      "value": "pull_request",
+      "availability": "present",
+      "original_bytes": 12,
+      "presented_bytes": 12,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "event"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "delivery_id": {
+      "value": null,
+      "availability": "missing",
+      "original_bytes": 0,
+      "presented_bytes": 0,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "delivery_id"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "installation_id": {
+      "value": null,
+      "availability": "missing",
+      "provenance": {
+        "source": "historical-replay",
+        "path": "installation.id"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "repository": {
+      "value": "pfBlockerNG/pfBlockerNG",
+      "availability": "present",
+      "original_bytes": 23,
+      "presented_bytes": 23,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "repository.full_name"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "number": {
+      "value": 2444,
+      "availability": "present",
+      "provenance": {
+        "source": "historical-replay",
+        "path": "pull_request.number"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "action": {
+      "value": null,
+      "availability": "missing",
+      "original_bytes": 0,
+      "presented_bytes": 0,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "action"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "title": {
+      "value": "pkg Pages: one install-<ch>.sh per channel that converges the box from any starting state",
+      "availability": "present",
+      "original_bytes": 89,
+      "presented_bytes": 89,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "pull_request.title"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "body": {
+      "value": "Part of #2416 (meta #2411 item 1b). Closes #2445 (conf header wording folded in). #2416 stays open until the first published cycle lands.\n\n## What\n\nOne published client entry point per channel — `<base>/install-{stable,testing,edge,nightly}.sh` — replaces the `add-repo.sh` + `migrate-channel.sh` two-step on the landing page. Each is a thin channel file (`scripts/channel-install/install-<ch>.sh`) whose shared body (`install-common.sh`) and the rc.d repo-conf hook are embedded by `gen_landing.py` at website-build time, so the published file is self-contained and runs as `fetch -qo - <base>/install-<ch>.sh | sh`.\n\nThe script is an idempotent state machine over `pkg query -g '%n' 'pfSense-pkg-pfBlockerNG*'`:\n\n| Box state | Action |\n| --- | --- |\n| nothing installed | subscribe → `pkg install -y -r pfblockerng-<ch> pfSense-pkg-pfBlockerNG` |\n| canonical, this repo, offered version | reported no-op (zero package operations) |\n| canonical, this repo other version / any other repo (Netgate, legacy `pfblockerng`, other channel) | `pkg install -y -f -r pfblockerng-<ch> pfSense-pkg-pfBlockerNG-<offered>`; cross-release-family downgrade prints a warning first, then proceeds |\n| any suffixed identity (`-devel`, `-NIGHTLY`, …) | `pkg delete -y <it>` then install canonical from the channel |\n\nEvery step is check-then-act (hook bytes, conf presence/marker, retired peer confs, installed identity/`%R`/`%v`), other project confs are retired only after the target catalogue is proven, every `pkg` call is `-y` with stdin from `/dev/null` (the script's stdin is the pipe), and the post-verify contract from `migrate-channel.sh` carries over unchanged (exactly the canonical identity, `%R` = target repo, `%v` = offered, `pkg info -l` payload present, config section preserved). Exit codes 0/1/2/4/5/6 by failure class. Offered version is picked with `pkg version -t` (#2393 residual). **Owner ruling (alpha): `add-repo.sh` and `migrate-channel.sh` are removed outright** with their tests — `install-<ch>.sh` is the sole client entry point for subscribe, install, upgrade and switch. `gen_landing.py` derives the manual-conf snippet from `build-repo-portable.py --print-conf`; `publish-pkg-repo.sh` publishes the four installers, refreshes them on the catalogue-NOOP path, and fails closed when one is missing. The rc.d hook no longer regenerates a leftover legacy `pfblockerng.conf` (#2384 residual) and the conf header reads `re-run install-<channel>.sh to change` in every remaining producer.\n\n## Proof\n\n- `tests/test_channel_install.py` (35): every state row above, idempotent second runs, resume after a partial run, reverse-catalogue-order version pick, empty catalogue / update failure leave peers untouched, verify failures, config-section loss, no-flags contract, piped run, and a direct `_pkg` stdin-isolation test.\n- `tests/test_gen_landing.py` (+11, red→green): one-line card, unpublished suppression (#2382 residual), self-contained published installer runs piped with embedded hook + common, `--client-scripts-only` writes all six.\n- `tests/shell/publish_pkg_repo_spec.sh` (red→green): six-file staging; a drift in only `install-edge.sh` still commits.\n- Guest smoke (real FreeBSD `/bin/sh` + `pkg`, file:// channel catalogues, script piped through `fetch -qo - … | sh`): fresh box ×2 channels (installed hook byte-identical to the shipped hook), legacy `-devel`, channel-to-channel down and back up, non-project-origin canonical, unpublished target refused without touching the box — each converged state re-run and asserted a no-op. #2151 (live any→any over Pages) stays the follow-up.\n\nIndependent per-step verifier gates (small tier) recorded in the session. Review round 1 (three legs + CodeRabbit) findings and their fixes are in commit `43503995`'s message; the first guest run caught a real defect (a refused run against another base re-pointed a peer conf through the hook) fixed red→green in `ed359c69`.\n\n🤖 Generated by [Claude Code](https://claude.com/claude-code), posted via @andrebrait's account on their behalf.",
+      "availability": "present",
+      "original_bytes": 4068,
+      "presented_bytes": 4068,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "pull_request.body"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "author_login": {
+      "value": "andrebrait",
+      "availability": "present",
+      "original_bytes": 10,
+      "presented_bytes": 10,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "pull_request.user.login"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "base_ref": {
+      "value": "devel",
+      "availability": "present",
+      "original_bytes": 5,
+      "presented_bytes": 5,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "pull_request.base.ref"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "base_sha": {
+      "value": "8f08d6e4d7145a89fc4e15133d595e7a9825d673",
+      "availability": "present",
+      "original_bytes": 40,
+      "presented_bytes": 40,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "pull_request.base.sha"
+      },
+      "trust": "untrusted-evidence"
+    },
+    "head_sha": {
+      "value": "ed359c691e8002acaeb0a296bc69bf9ab1bbc97a",
+      "availability": "present",
+      "original_bytes": 40,
+      "presented_bytes": 40,
+      "provenance": {
+        "source": "historical-replay",
+        "path": "pull_request.head.sha"
+      },
+      "trust": "untrusted-evidence"
+    }
+  }
+}

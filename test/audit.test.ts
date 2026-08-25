@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { auditConfig, createAuditRun, openRunnerAudit, verifyChecksums } from "../src/audit.js";
-import { inspectAudit } from "../src/audit-inspect.js";
+import { inspectAudit, readAuditEvents } from "../src/audit-inspect.js";
 import { classifyToolOutcome, runPhase } from "../src/runner/pi.js";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 
@@ -241,6 +241,9 @@ describe("run trace", () => {
     await inspectAudit(["extract", runDir, "e-retained"], (line) => extracted.push(line));
     expect(extracted).toHaveLength(1);
     expect(extracted[0]).toContain("retained");
+    const records = await readAuditEvents(runDir);
+    expect(records.filter((event) => event.event === "execution_end")).toHaveLength(1);
+    await expect(readAuditEvents(runDir, { maxEvents: 0 })).rejects.toThrow(/positive safe integers/);
   });
 
   it("rejects finite category retention for immutable archive sinks", () => {
