@@ -82,7 +82,24 @@ export interface ReplayTargetRecord {
   id: string; disposition: "accepted" | "rejected"; external_id: string; external_url: string; source: { file: string; lines: { start: number; end: number }; mechanism: string }; state: TargetState; state_reason: string; concern_ids: string[]; finding_ids: string[];
 }
 export interface ReplayRunRecord {
-  run_id: string; audit_path: string; validity: { status: "valid" | "invalid"; reasons: string[] }; context_mode: "diff-only" | "review-context" | "unknown"; exact_range: { base: string; head: string; range: string } | null; configuration: unknown; capabilities: unknown; generation: { concerns: unknown[] | null; attempt_events: EventRecord[] }; verification: { verdicts: unknown[] | null; attempts: EventRecord[]; correction_attempted: boolean | null }; final_report: unknown[] | null; publication: { attempted: boolean; events: EventRecord[] }; failures: { tool: EventRecord[]; schema: EventRecord[]; gaps: string[]; error: string | null }; coverage: unknown; targets: ReplayTargetRecord[];
+  run_id: string;
+  audit_path: string;
+  validity: { status: "valid" | "invalid"; reasons: string[] };
+  context_mode: "diff-only" | "review-context" | "unknown";
+  exact_range: { base: string; head: string; range: string } | null;
+  configuration: unknown;
+  capabilities: unknown;
+  generation: { concerns: unknown[] | null; attempt_events: EventRecord[] };
+  verification: { verdicts: unknown[] | null; attempts: EventRecord[]; correction_attempted: boolean | null };
+  final_report: unknown[] | null;
+  publication: { attempted: boolean; events: EventRecord[] };
+  post_walk_leads: {
+    metrics: Record<string, number | null> | null;
+    overflow: { count: number; bytes: number; ids: string[] } | null;
+  };
+  failures: { tool: EventRecord[]; schema: EventRecord[]; gaps: string[]; error: string | null };
+  coverage: unknown;
+  targets: ReplayTargetRecord[];
 }
 export interface ReplayReportRecord {
   schema: typeof REPLAY_REPORT_SCHEMA;
@@ -155,6 +172,11 @@ async function finalizedRun(runDir: string, loaded: LoadedCorpus, adjudications:
   const verificationAttempts = events.filter((event) => event.event === "attempt_started" && (event.phase === "verify" || event.phase === "verify-correction")).map(eventCopy);
   const publicationEvents = events.filter((event) => event.event === "publication_started" || event.event === "publication_completed" || event.event === "publication_failed").map(eventCopy);
   const capabilities = manifest.capabilities ?? null;
+  const postWalk = result ? resultRecord(result.post_walk_leads) : null;
+  const postWalkAccounting = postWalk ? resultRecord(postWalk.accounting) : null;
+  const postWalkStream = postWalk ? resultRecord(postWalk.stream) : null;
+  const postWalkMetrics = postWalkAccounting ? resultRecord(postWalkAccounting.metrics) : null;
+  const postWalkOverflow = postWalkStream ? resultRecord(postWalkStream.overflow) : null;
   return {
     run_id: runId, audit_path: basename(resolve(runDir)), validity: { status: valid ? "valid" : "invalid", reasons }, context_mode: contextMode,
     exact_range: rows[0] ? { base: rows[0].frozen.base, head: rows[0].frozen.head, range: rows[0].frozen.range } : null,
@@ -162,6 +184,17 @@ async function finalizedRun(runDir: string, loaded: LoadedCorpus, adjudications:
     generation: { concerns: generationConcerns, attempt_events: generationAttempts },
     verification: { verdicts: optionalArray(result?.verdicts), attempts: verificationAttempts, correction_attempted: result ? verificationAttempts.some((event) => event.phase === "verify-correction") : null },
     final_report: optionalArray(result?.report), publication: { attempted: publicationEvents.some((event) => event.event === "publication_started"), events: publicationEvents },
+    post_walk_leads: {
+      metrics: postWalkMetrics && Object.values(postWalkMetrics).every((value) => value === null || typeof value === "number")
+        ? postWalkMetrics as Record<string, number | null>
+        : null,
+      overflow: postWalkOverflow
+        && typeof postWalkOverflow.count === "number"
+        && typeof postWalkOverflow.bytes === "number"
+        && Array.isArray(postWalkOverflow.ids)
+        ? { count: postWalkOverflow.count, bytes: postWalkOverflow.bytes, ids: postWalkOverflow.ids.map(String) }
+        : null,
+    },
     failures: { tool: events.filter((event) => event.event === "execution_end" && payload(event)?.is_error === true).map(eventCopy), schema: events.filter((event) => event.event === "attempt_parse_failed").map(eventCopy), gaps: Array.isArray(manifest.gaps) ? manifest.gaps.map(String) : [], error: typeof manifest.error === "string" ? manifest.error : null },
     coverage: result?.coverage ?? null, targets,
   };
@@ -182,8 +215,11 @@ export async function buildReplayReport(loaded: LoadedCorpus, runDirs: string[],
 }
 
 export function renderReplayReport(report: ReplayReportRecord): string {
-  const lines = ["# Leveret frozen replay report", "", `Corpus: \`${report.corpus.name}\` (\`${report.corpus.sha256}\`)`, "", `Accepted recall denominator: ${report.scoring.recall_denominator}; rejected controls excluded: ${report.scoring.rejected_controls_excluded}.`, "", "| run | validity | mode | range | generated | verified | final report | published | tool failures | schema failures |", "| --- | --- | --- | --- | ---: | ---: | ---: | --- | ---: | ---: |"]; 
-  for (const run of report.runs) lines.push(`| ${cell(run.run_id)} | ${run.validity.status} | ${run.context_mode} | ${cell(run.exact_range?.range ?? "unknown")} | ${metric(run.generation.concerns?.length ?? null)} | ${metric(run.verification.verdicts?.length ?? null)} | ${metric(run.final_report?.length ?? null)} | ${run.publication.attempted ? "yes" : "no"} | ${run.failures.tool.length} | ${run.failures.schema.length} |`);
+  const lines = ["# Leveret frozen replay report", "", `Corpus: \`${report.corpus.name}\` (\`${report.corpus.sha256}\`)`, "", `Accepted recall denominator: ${report.scoring.recall_denominator}; rejected controls excluded: ${report.scoring.rejected_controls_excluded}.`, "", "| run | validity | mode | range | concerns | verified | final report | published | post-walk supplied | adopted | priced | refuted | ignored | overflow | tool failures | schema failures |", "| --- | --- | --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"];
+  for (const run of report.runs) {
+    const post = run.post_walk_leads.metrics;
+    lines.push(`| ${cell(run.run_id)} | ${run.validity.status} | ${run.context_mode} | ${cell(run.exact_range?.range ?? "unknown")} | ${metric(run.generation.concerns?.length ?? null)} | ${metric(run.verification.verdicts?.length ?? null)} | ${metric(run.final_report?.length ?? null)} | ${run.publication.attempted ? "yes" : "no"} | ${metric(post?.supplied ?? null)} | ${metric(post?.adopted ?? null)} | ${metric(post?.priced ?? null)} | ${metric(post?.refuted ?? null)} | ${metric(post?.ignored ?? null)} | ${metric(run.post_walk_leads.overflow?.count ?? null)} | ${run.failures.tool.length} | ${run.failures.schema.length} |`);
+  }
   for (const run of report.runs) {
     lines.push("", `## ${cell(run.run_id)}`, "", `- Validity: ${run.validity.status}${run.validity.reasons.length ? ` — ${run.validity.reasons.map(cell).join("; ")}` : ""}`, `- Context: ${run.context_mode}`, `- Configuration: ${run.configuration === null ? "unknown" : `\`${cell(JSON.stringify(run.configuration))}\``}`, `- Capabilities: ${run.capabilities === null ? "unknown" : `\`${cell(JSON.stringify(run.capabilities))}\``}`, "", "### Target states", "");
     if (run.targets.length === 0) lines.push("- unknown"); else for (const target of run.targets) lines.push(`- \`${cell(target.id)}\` (${target.disposition}): **${target.state}** — ${cell(target.state_reason)}`);

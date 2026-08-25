@@ -1,6 +1,7 @@
 import { renderResolutions } from "./incremental.js";
 import type { Finding, ScanResult } from "../findings.js";
 import type { GraphStatus } from "./graph.js";
+import type { PostWalkLeadAccounting } from "../runner/post-walk-leads.js";
 
 // Rendering the verify output + scan result into the published review: tier-grouped
 // inline comments and the what-was-checked walkthrough. Pure functions — the App's
@@ -19,6 +20,8 @@ export interface ReportItem {
   correlation?: string;
   evidence: string;
   suggested_fix?: string;
+  extra_real?: boolean | null;
+  beyond_diff?: boolean | null;
 }
 
 export interface VerifyOutput {
@@ -37,6 +40,11 @@ export interface VerifyOutput {
       serena_version?: string;
     };
     discovery?: { mode?: string };
+  };
+  post_walk_leads?: {
+    stream: { overflow: { count: number; bytes: number; ids: string[] } };
+    accounting: PostWalkLeadAccounting;
+    stop_gate_inputs?: Record<string, unknown>;
   };
 }
 
@@ -110,6 +118,14 @@ export function renderWalkthrough(
   const capabilities = v.run_configuration?.capabilities;
   const discoveryMode = v.run_configuration?.discovery?.mode;
   if (discoveryMode) s.push("", `Discovery: ${discoveryMode}.`);
+  const postWalk = v.post_walk_leads;
+  if (postWalk) {
+    const metrics = postWalk.accounting.metrics;
+    s.push(
+      "",
+      `Post-walk leads: ${metrics.generated} generated, ${metrics.routed} routed, ${metrics.supplied} supplied; ${metrics.adopted} adopted, ${metrics.verified} verified, ${metrics.refuted} refuted, ${metrics.priced} priced, ${metrics.ignored} ignored; adoption ${metrics.adoption_rate === null ? "unknown" : `${(metrics.adoption_rate * 100).toFixed(1)}%`}; ${postWalk.stream.overflow.count} overflow (${postWalk.stream.overflow.bytes} bytes).`,
+    );
+  }
   if (capabilities) {
     s.push(
       "",

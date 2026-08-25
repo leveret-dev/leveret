@@ -443,7 +443,7 @@ const lenses = [
 
 const expectations = {
   concerns: [{ id: "R1", file: "a.ts" }],
-  remainingLeadIds: ["L1"],
+  leads: [{ id: "L1", file: "a.ts" }],
   changedFiles: ["a.ts"],
   priorThreadIds: [] as string[],
 };
@@ -501,7 +501,7 @@ describe("Pi result and metrics parsing", () => {
       concerns: [{ id: "R1", file: "a.ts", lead_ids: [] }],
       coverage: { lenses, files: [{ file: "a.ts", verdict: "findings" }] },
     };
-    expect(mergeVerificationCoverage(review, validVerification()).coverage.files).toEqual([
+    expect(mergeVerificationCoverage(review, validVerification(), expectations.leads).coverage.files).toEqual([
       { file: "a.ts", verdict: "findings-priced", note: "all review concerns were priced-noise" },
     ]);
     const refuted = {
@@ -511,7 +511,7 @@ describe("Pi result and metrics parsing", () => {
         { id: "L1", grade: "false-positive", reason: "guarded" },
       ],
     };
-    expect(mergeVerificationCoverage(review, refuted).coverage.files[0].verdict).toBe("findings");
+    expect(mergeVerificationCoverage(review, refuted, expectations.leads).coverage.files[0].verdict).toBe("findings");
   });
 
   it("keeps mixed concerns as findings and permits verifier upgrades", () => {
@@ -540,10 +540,38 @@ describe("Pi result and metrics parsing", () => {
         { file: "b.ts", verdict: "findings" },
       ] },
     };
-    expect(mergeVerificationCoverage(review, verify).coverage.files.map(({ file, verdict }) => ({ file, verdict }))).toEqual([
+    expect(mergeVerificationCoverage(review, verify, expectations.leads).coverage.files.map(({ file, verdict }) => ({ file, verdict }))).toEqual([
       { file: "a.ts", verdict: "findings" },
       { file: "b.ts", verdict: "findings" },
     ]);
+  });
+
+  it("upgrades actionable and priced post-walk leads while allowing reasoned refutation to stay clean", () => {
+    const review = { concerns: [], coverage: { lenses, files: [{ file: "b.ts", verdict: "considered-fine" }] } };
+    const priced = {
+      report: [],
+      verdicts: [{ id: "L2", grade: "priced-noise", reason: "trusted repository ceiling" }],
+      coverage: { lenses, files: [{ file: "b.ts", verdict: "findings" }] },
+    };
+    const leadExpectation = { concerns: [], leads: [{ id: "L2", file: "b.ts" }], changedFiles: ["b.ts"], priorThreadIds: [] };
+    expect(verifySchemaGaps(priced, leadExpectation)).toEqual([]);
+    expect(verifySchemaGaps({ ...priced, coverage: { lenses, files: [{ file: "b.ts", verdict: "considered-fine" }] } }, leadExpectation)).toContain("coverage.files:downgraded-lead:b.ts:L2");
+    expect(mergeVerificationCoverage(review, priced, leadExpectation.leads).coverage.files[0]?.verdict).toBe("findings-priced");
+
+    const refuted = {
+      ...priced,
+      verdicts: [{ id: "L2", grade: "false-positive", reason: "guarded by the only caller" }],
+      coverage: { lenses, files: [{ file: "b.ts", verdict: "considered-fine" }] },
+    };
+    expect(verifySchemaGaps(refuted, leadExpectation)).toEqual([]);
+
+    const actionable = {
+      ...priced,
+      report: [{ id: "L2", file: "b.ts", line: 2, title: "bug", tier: "major", severity: "error", scope: "in-diff", evidence: "line 2", evidence_ids: [] }],
+      verdicts: [{ id: "L2", grade: "actionable" }],
+    };
+    expect(verifySchemaGaps(actionable, leadExpectation)).toEqual([]);
+    expect(mergeVerificationCoverage(review, actionable, leadExpectation.leads).coverage.files[0]?.verdict).toBe("findings");
   });
 
   it("kills a wedged child at its deadline", async () => {

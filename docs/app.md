@@ -198,15 +198,17 @@ The pieces, top to bottom:
   with delta scanning against the base: only findings the change introduced
   survive, with everything dropped accounted for.
 - **The runner.** `leveret-runner-pi` defaults to the production `single`
-  discovery phase (five lenses and cross-file blast radius) followed by a
-  verification phase that tries to refute every concern and drops unverifiable
-  claims. The explicit `specialized-serial/v1` experiment instead runs three
-  packaged discovery legs serially, then the same verifier with a targeted tool
-  set. Leveret supplies every system prompt and exact tool allowlist; project
-  settings, prompts, extensions, skills and context files are never loaded.
+  discovery phase (five lenses and cross-file blast radius). Both discovery modes
+  complete without scan, semantic-rule, mutation, or hunt leads. Only then does the
+  runner build one bounded, mission-routed post-walk stream and pass it to the
+  existing targeted verifier with the discovery concerns. The verifier tries to
+  refute every concern and supplied lead and drops unverifiable claims. The explicit
+  `specialized-serial/v1` experiment runs three packaged discovery legs serially;
+  it remains opt-in. Leveret supplies every system prompt and exact tool allowlist;
+  project settings, prompts, extensions, skills and context files are never loaded.
   Your provider credentials live only here; the App layer and child tools never see
-  them. The walkthrough records the client, model, prompt hash, live capabilities,
-  and tool metrics.
+  them. The walkthrough records lead/overflow accounting, the client, model, prompt
+  hash, live capabilities, and tool metrics.
 - **The review.** In-diff findings become inline comments grouped by tier;
   out-of-diff findings, reminders, coverage, and the engine table land in the
   walkthrough summary.
@@ -266,11 +268,13 @@ verify-output JSON (see `agents/verify.md`).
 
 Discovery mode is host-owned. Only `single` and the experimental
 `specialized-serial/v1` scheduler are accepted; pull-request or repository content
-cannot select a mode, leg, prompt, or tool. The specialized scheduler withholds
-scan, semantic-rule, mutation, corpus-target, and post-walk leads during its three
-discovery legs. It remains opt-in until measured quality gates justify adoption.
-Frozen replay accepts the same value through `--discovery-mode` and passes only
-that host selection to the runner.
+cannot select a mode, leg, prompt, or tool. Both modes withhold scan, semantic-rule,
+mutation, residual-question, corpus-target, and post-walk leads until discovery
+finishes. One bounded post-walk stream then enters verification; every supplied
+lead has one disposition, every overflow ID is reported, and publication remains a
+separate lifecycle state. Specialized discovery remains opt-in until measured
+quality gates justify adoption. Frozen replay accepts the same value through
+`--discovery-mode` and passes only that host selection to the runner.
 
 `LEVERET_EVIDENCE_PACK` names a mode-0600 `leveret.evidence-pack/v1` JSON file
 outside the reviewed checkout. It is the single bounded handoff for changed-file

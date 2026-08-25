@@ -23,7 +23,9 @@ flowchart TD
     R["🐇 review agent<br>five lenses,<br>cross-file blast radius"]:::agent
     V["⚖️ verification agent<br>refute or evidence,<br>three grades"]:::agent
     T[/"📋 tiered findings<br>+ walkthrough report"/]:::gh
-    D --> S -- leads --> R -- concerns --> V -- survivors only --> T
+    D --> S
+    D --> R -- concerns --> V -- survivors only --> T
+    S -- bounded post-walk leads --> V
     classDef gh fill:#6ea8fe,stroke:#3d6fd9,color:#111
     classDef tun fill:#ffc86b,stroke:#cc8f22,color:#111
     classDef core fill:#7ed6a2,stroke:#3d9e6a,color:#111
@@ -42,28 +44,30 @@ flowchart TD
    identity (a *copy* of a known-bad line still surfaces), rename tracking, and
    surfaced base-pass failures. A code graph is generated into the checkout at the
    exact reviewed commit, so agents query structure instead of grepping for it.
-2. **Three-grade filter.** Every lead ends as `actionable`, `priced-noise`
-   (true, but the repo has ruled fixing it buys nothing), or `false-positive` —
-   assigned cheapest-first by the repo profile (`.leveret.yml`: path scopes,
-   severity floors, reasoned suppressions), the memory store, and finally the
-   verification agent. Nothing is dropped silently: suppressions come back tallied
-   with their reasons.
+2. **Accounted filter.** After discovery completes, surviving deterministic leads
+   enter verification as one bounded, routed stream. Every supplied concern and lead
+   ends as `actionable`, `priced-noise`, `false-positive`, or `dropped`; profile and
+   memory suppression happens before routing. Nothing is silent: suppression,
+   exact-mechanism deduplication, overflow IDs/bytes, verifier rationale, and
+   publication state remain separate structured accounting.
 3. **Memory that learns from humans.** `.leveret/memory.jsonl`, versioned in the
    reviewed repo: fingerprint verdicts (optionally anchored to a source line — the
    memory dies when the line changes) plus **conventions** — free-text rulings
    taught by maintainers via `learn`, injected into the agent prompts as repo case
    law, able both to suppress noise and to *raise* findings that violate them.
-4. **Adversarial contracts.** The review agent runs five lenses (correctness and
-   hostile inputs, contract conformance, test honesty, blast radius, leads triage)
-   and must trace changed symbols to call sites *outside* the diff. The verification
-   agent then tries to refute every concern; claims it can neither refute nor ground
-   in executed evidence are dropped, not published.
+4. **Adversarial contracts.** The discovery walk runs five lenses (correctness and
+   hostile inputs, contract conformance, test honesty, blast radius, and explicitly
+   deferred leads triage) without deterministic lead material, and traces changed
+   symbols to call sites *outside* the diff. After the walk, the verification agent
+   tries to refute every concern and routed lead; claims it can neither refute nor
+   ground in executed evidence are dropped, not published.
 5. **Reporting.** Findings publish in importance tiers (`critical / major / minor /
    nit`, distinct from engine severity), out-of-diff findings appear with their
    stated correlation to the change, pre-existing defects adjacent to edited lines
    return as reminders, and every review carries a walkthrough: per-lens outcomes
-   (clean included), per-file verdicts, the engine table, and a run-configuration
-   line naming the harness, model, and thinking level that produced the review.
+   (clean included), per-file verdicts, post-walk lead/overflow metrics, the engine
+   table, and a run-configuration line naming the harness, model, and thinking level
+   that produced the review.
 
 ## Ways to run it
 

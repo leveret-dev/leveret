@@ -99,13 +99,17 @@ describe("benchmark report", () => {
         verification: { verdicts: null, attempts: [], correction_attempted: null },
         final_report: [{ id: "R1" }],
         publication: { attempted: false, events: [] },
+        post_walk_leads: {
+          metrics: { supplied: 4, adopted: 1, priced: 1, refuted: 1, ignored: 1 },
+          overflow: { count: 2, bytes: 100, ids: ["L5", "L6"] },
+        },
         failures: { tool: [], schema: [], gaps: [], error: null },
         coverage: null,
         targets: [],
       }],
     };
     const markdown = renderReplayReport(source);
-    expect(markdown).toContain("| run-1 | valid | diff-only | unknown | 1 | unknown | 1 | no | 0 | 0 |");
+    expect(markdown).toContain("| run-1 | valid | diff-only | unknown | 1 | unknown | 1 | no | 4 | 1 | 1 | 1 | 1 | 2 | 0 | 0 |");
     expect(markdown).toContain("- Configuration: unknown");
     expect(markdown).toContain("- Capabilities: unknown");
   });

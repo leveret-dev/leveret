@@ -22,6 +22,8 @@ const reportSchema = z.object({
   evidence: text,
   suggested_fix: text.optional(),
   evidence_ids: z.array(text),
+  extra_real: z.boolean().nullable().optional(),
+  beyond_diff: z.boolean().nullable().optional(),
 }).strict().superRefine((item, ctx) => {
   if (item.scope === "out-of-diff" && !item.correlation) {
     ctx.addIssue({ code: "custom", path: ["correlation"], message: "out-of-diff reports require correlation" });
@@ -81,7 +83,7 @@ export function parseReviewOutput(output: unknown): ReviewOutput {
 
 export interface VerifyExpectations {
   concerns: { id: string; file: string }[];
-  remainingLeadIds: string[];
+  leads: { id: string; file: string }[];
   changedFiles: string[];
   priorThreadIds: string[];
 }
@@ -115,7 +117,7 @@ export function verifySchemaGaps(output: unknown, expected: VerifyExpectations):
   exactIds(gaps, "coverage.lenses", value.coverage.lenses.map((lens) => lens.lens), REQUIRED_LENSES);
   exactIds(gaps, "verdicts", value.verdicts.map((verdict) => verdict.id), [
     ...expected.concerns.map((concern) => concern.id),
-    ...expected.remainingLeadIds,
+    ...expected.leads.map((lead) => lead.id),
   ]);
 
   const actionable = value.verdicts.filter((verdict) => verdict.grade === "actionable").map((verdict) => verdict.id);
@@ -125,6 +127,7 @@ export function verifySchemaGaps(output: unknown, expected: VerifyExpectations):
   const requiredFiles = new Set([
     ...expected.changedFiles,
     ...expected.concerns.map((concern) => concern.file),
+    ...expected.leads.map((lead) => lead.file),
     ...value.report.map((report) => report.file),
   ]);
   const fileCounts = new Map<string, number>();
@@ -137,6 +140,14 @@ export function verifySchemaGaps(output: unknown, expected: VerifyExpectations):
     const verdict = coverageByFile.get(concern.file);
     if (verdict === "considered-fine" || verdict === "not-examined") gaps.add(`coverage.files:downgraded:${concern.file}`);
   }
+  const grades = new Map(value.verdicts.map((verdict) => [verdict.id, verdict.grade]));
+  for (const lead of expected.leads) {
+    const verdict = coverageByFile.get(lead.file);
+    if ((grades.get(lead.id) === "actionable" || grades.get(lead.id) === "priced-noise")
+      && (verdict === "considered-fine" || verdict === "not-examined")) {
+      gaps.add(`coverage.files:downgraded-lead:${lead.file}:${lead.id}`);
+    }
+  }
   for (const report of value.report) {
     if (coverageByFile.get(report.file) !== "findings") gaps.add(`coverage.files:report-without-findings:${report.file}`);
   }
@@ -147,7 +158,7 @@ export function verifySchemaGaps(output: unknown, expected: VerifyExpectations):
 }
 
 /** Preserve review coverage mechanically; verification may disclose more, never less. */
-export function mergeVerificationCoverage(reviewInput: unknown, verifyInput: unknown): FinalVerifyOutput {
+export function mergeVerificationCoverage(reviewInput: unknown, verifyInput: unknown, leads: { id: string; file: string }[] = []): FinalVerifyOutput {
   const review = reviewOutputSchema.parse(reviewInput);
   const verify = verifyOutputSchema.parse(verifyInput);
   const verifyFiles = new Map(verify.coverage.files.map((file) => [file.file, file]));
@@ -157,23 +168,37 @@ export function mergeVerificationCoverage(reviewInput: unknown, verifyInput: unk
     ids.push(concern.id);
     concernIdsByFile.set(concern.file, ids);
   }
+  const leadIdsByFile = new Map<string, string[]>();
+  for (const lead of leads) {
+    const ids = leadIdsByFile.get(lead.file) ?? [];
+    ids.push(lead.id);
+    leadIdsByFile.set(lead.file, ids);
+  }
   const grades = new Map(verify.verdicts.map((verdict) => [verdict.id, verdict.grade]));
   const reportFiles = new Set(verify.report.map((report) => report.file));
   const orderedFiles = [...review.coverage.files.map((file) => file.file)];
   for (const file of verify.coverage.files) if (!orderedFiles.includes(file.file)) orderedFiles.push(file.file);
+  for (const lead of leads) if (!orderedFiles.includes(lead.file)) orderedFiles.push(lead.file);
   const reviewFiles = new Map(review.coverage.files.map((file) => [file.file, file]));
 
   const files = orderedFiles.map((file) => {
     const reviewed = reviewFiles.get(file);
     const verified = verifyFiles.get(file);
     const concernIds = concernIdsByFile.get(file) ?? [];
+    const leadIds = leadIdsByFile.get(file) ?? [];
+    if (reportFiles.has(file)) {
+      return { file, verdict: "findings" as const, ...(verified?.note ? { note: verified.note } : {}) };
+    }
     if (concernIds.length > 0) {
       const allPriced = concernIds.every((id) => grades.get(id) === "priced-noise");
       return allPriced
         ? { file, verdict: "findings-priced" as const, note: verified?.note ?? "all review concerns were priced-noise" }
         : { file, verdict: "findings" as const, ...(verified?.note ? { note: verified.note } : {}) };
     }
-    if (reportFiles.has(file) || verified?.verdict === "findings") {
+    if (leadIds.some((id) => grades.get(id) === "priced-noise")) {
+      return { file, verdict: "findings-priced" as const, note: verified?.note ?? "post-walk lead was priced-noise" };
+    }
+    if (verified?.verdict === "findings") {
       return { file, verdict: "findings" as const, ...(verified?.note ? { note: verified.note } : {}) };
     }
     return reviewed ?? verified!;

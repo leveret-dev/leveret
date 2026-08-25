@@ -40,7 +40,8 @@ describe("agent contracts", () => {
     const text = await loadContract("review", { repo: "r", base: "b" });
     // cross-file blast radius is the class a diff-only reviewer misses
     expect(text.toLowerCase()).toContain("outside the diff");
-    expect(text).toContain("`leveret.scan`");
+    expect(text).not.toContain("`leveret.scan`");
+    expect(text).toContain("exclude scan, semantic-rule, mutation, and hunt");
     expect(text).toContain("`leveret.context`");
     expect(text).toContain("read-only");
   });

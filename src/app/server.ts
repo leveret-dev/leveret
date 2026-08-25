@@ -28,6 +28,7 @@ import {
   type AppCredentials,
 } from "./manifest.js";
 import { ackMessage, doneMessage, failMessage, renderInline, renderWalkthrough, skipMessage, type Tier, type VerifyOutput } from "./render.js";
+import { markPostWalkLeadPublication } from "../runner/post-walk-leads.js";
 import { formatLine, makeLogger } from "./log.js";
 import { materializeTrustedReviewState, type TrustedReviewState } from "../trusted-state.js";
 import { preBodyReject, readCappedBody, routeEvent, verifySignature, type Job } from "./webhook.js";
@@ -313,6 +314,17 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
         verify = reportFromScan(result);
       }
       await audit?.writeResult(verify);
+      const recordLeadPublication = async (published: boolean): Promise<void> => {
+        const postWalk = verify.post_walk_leads;
+        if (!postWalk) return;
+        postWalk.accounting = markPostWalkLeadPublication(
+          postWalk.accounting,
+          verify.report.map((report) => report.id),
+          published,
+        );
+        await audit?.record("result", "post_walk_publication_accounting", postWalk.accounting);
+        await audit?.writeResult(verify);
+      };
 
       if (access) {
         await audit?.record("app", "publication_started", { repository: job.repo, pr: job.pr, head_sha: job.headSha, findings: verify.report.length });
@@ -328,6 +340,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
           );
         } catch (error) {
           await audit?.record("app", "publication_failed", { action: "review", error });
+          await recordLeadPublication(false);
           throw error;
         }
         if (ackId) {
@@ -368,6 +381,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
           ack_comment_id: ackId,
           findings: verify.report.length,
         });
+        await recordLeadPublication(true);
       } else {
         const walkthrough = renderWalkthrough(verify, result, graph);
         log.info("review completed without GitHub publication", {
@@ -375,6 +389,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
           walkthroughBytes: Buffer.byteLength(walkthrough),
           walkthroughSha256: createHash("sha256").update(walkthrough).digest("hex"),
         });
+        await recordLeadPublication(false);
       }
     });
   } catch (err) {

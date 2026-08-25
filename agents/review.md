@@ -10,17 +10,16 @@ be verified and will be dropped.
 
 ## Inputs to gather (in this order)
 
-1. `leveret.scan` with `{repo: "{{REPO}}", base: "{{BASE}}"}` — graded, delta-filtered
-   leads from the deterministic engines. Read the `suppressed` and `preExisting`
-   tallies too: what was dropped and why is context, and a suspicious suppression is
-   itself worth a concern.
+1. The supplied exact-base/head scope, applicability, workflow facts, and change
+   manifest. These intentionally exclude scan, semantic-rule, mutation, and hunt
+   leads until after this walk.
 2. `leveret.context` on the changed files — per-function complexity, churn, and
    recency. High complexity in a high-churn file gets your deepest read; do not
    spend your budget evenly.
-3. The supplied exact-base/head change manifest, then bounded `leveret_diff` patch
-   requests for its paths. Start with prioritized files, use hunk/range selection
-   where useful, follow cursors, and record every omitted path or hunk. There is no
-   whole-diff route and you do not need the full text of every changed file.
+3. Bounded `leveret_diff` patch requests for manifest paths. Start with prioritized
+   files, use hunk/range selection where useful, follow cursors, and record every
+   omitted path or hunk. There is no whole-diff route and you do not need the full
+   text of every changed file.
 4. **Blast radius — mandatory.** For every changed function, class, constant, or
    config key, find its callers and dependents **outside the diff** (code-graph
    tooling such as CodeGraph where available, otherwise `leveret.ast_search` and
@@ -51,8 +50,8 @@ elsewhere — but never stretch a ruling past its stated scope.
   cannot fail is a concern.
 - **Blast radius.** From input 4: callers whose assumptions the change breaks,
   including files not in the diff.
-- **Leads triage.** Every `scan` finding is a lead, not a verdict: adopt it into a
-  concern with your own analysis, or note why it is not one.
+- **Deferred leads triage.** Deterministic leads are intentionally withheld until
+  verification. Record that no lead triage occurred during discovery.
 
 ## Output
 
@@ -81,7 +80,7 @@ Return only a JSON object; no prose around it:
       { "lens": "contract-conformance", "outcome": "clean" },
       { "lens": "test-honesty", "outcome": "clean" },
       { "lens": "blast-radius", "outcome": "traced parse_feed, PfbConfig::get to 7 external call sites; clean" },
-      { "lens": "leads-triage", "outcome": "24 leads: 2 adopted, 22 dismissed (class reasons in concerns)" }
+      { "lens": "leads-triage", "outcome": "deferred: no leads supplied during discovery" }
     ],
     "files": [
       { "file": "src/foo.php", "verdict": "findings" },
@@ -99,8 +98,8 @@ was found. Raise concerns in files outside the diff with the same shape (list su
 files in `files` too). An empty concerns array is a valid result; do not invent
 concerns to look useful.
 
-Every concern lists the stable scan lead IDs it adopts in `lead_ids`; use an empty
-array for independently discovered concerns. Never invent or reuse a lead ID.
+Every discovery concern uses an empty `lead_ids` array. Deterministic lead IDs are
+created and routed only after this walk; never invent one.
 
 Out-of-diff concerns (`"scope": "out-of-diff"`) are wanted, not tolerated: a defect
 in untouched code that is *correlated* with this change — the same symbol the diff
