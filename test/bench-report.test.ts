@@ -51,7 +51,7 @@ describe("benchmark report", () => {
     const markdown = renderBenchmarkReport([summary]);
     expect(markdown).toContain("Generated mechanically from runner JSON");
     expect(markdown).toContain("- Discovery: `single`");
-    expect(markdown).toContain("| fixture | 1 | 1 | 1 | 0 | 0 | 3 | 1 | 1 | 1 | 1 | 1000 | complete | yes |");
+    expect(markdown).toContain("| fixture | 1 | 1 | 1 | 0 | 0 | 3 | 1 | 1 | 1 | 1 | 1000 | 0 | 0 | 0 | unknown | unknown | unknown | unknown | unknown | unknown | complete | yes |");
     expect(markdown).toContain("`src/a.ts:4` — real defect (R1)");
     expect(markdown).toContain("Semantic finding overlap and defect validity are intentionally not inferred");
   });
@@ -79,7 +79,36 @@ describe("benchmark report", () => {
       diffBytes: null,
       toolDetailComplete: false,
     });
-    expect(renderBenchmarkReport([summary])).toContain("| aggregate | 1 | 1 | 1 | 0 | 0 | 5 | 1 | unknown | unknown | 2 | unknown | aggregate-only | no |");
+    expect(renderBenchmarkReport([summary])).toContain("| aggregate | 1 | 1 | 1 | 0 | 0 | 5 | 1 | unknown | unknown | 2 | unknown | 0 | 0 | 0 | unknown | unknown | unknown | unknown | unknown | unknown | aggregate-only | no |");
+  });
+
+  it("preserves structured cache reasons, bytes, and phase timings", () => {
+    const summary = summarizeResult("cached", {
+      ...result,
+      run_configuration: {
+        ...result.run_configuration,
+        cache: {
+          artifacts: [{
+            artifact: "scan-result",
+            outcome: "hit",
+            key: "a".repeat(64),
+            duration_ms: 2,
+            bytes: 42,
+            reason: "exact versioned key and checksums matched",
+          }],
+        },
+        timings: {
+          preparation_ms: 3,
+          model_ms: 4,
+          verification_ms: 2,
+          publication_ms: null,
+          wall_ms: 7,
+          summed_worker_compute_ms: 5,
+        },
+      },
+    });
+    expect(summary.cache).toEqual([expect.objectContaining({ artifact: "scan-result", outcome: "hit", bytes: 42, reason: expect.stringContaining("checksums") })]);
+    expect(summary.timings).toEqual({ preparation_ms: 3, model_ms: 4, verification_ms: 2, publication_ms: null, wall_ms: 7, summed_worker_compute_ms: 5 });
   });
 
   it("keeps generation and actual publication separate and renders absent detail as unknown", () => {
@@ -103,6 +132,7 @@ describe("benchmark report", () => {
           metrics: { supplied: 4, adopted: 1, priced: 1, refuted: 1, ignored: 1 },
           overflow: { count: 2, bytes: 100, ids: ["L5", "L6"] },
         },
+        metrics: { timings: null, cache: [] },
         failures: { tool: [], schema: [], gaps: [], error: null },
         coverage: null,
         targets: [],

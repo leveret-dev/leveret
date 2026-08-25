@@ -40,6 +40,15 @@ export interface VerifyOutput {
       serena_version?: string;
     };
     discovery?: { mode?: string };
+    cache?: unknown;
+    timings?: {
+      preparation_ms: number | null;
+      model_ms: number | null;
+      verification_ms: number | null;
+      publication_ms: number | null;
+      wall_ms: number | null;
+      summed_worker_compute_ms: number | null;
+    };
   };
   post_walk_leads?: {
     stream: { overflow: { count: number; bytes: number; ids: string[] } };

@@ -1,23 +1,33 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { auditConfig, createAuditRun, withAuditTrace } from "../src/audit.js";
-import { materializeChangeEvidence } from "../src/change-evidence.js";
-import { createEvidencePack, writeEvidencePack } from "../src/evidence-pack.js";
-import { createGuidanceResult, writeGuidanceResult } from "../src/semantic-checks.js";
-import { runStreaming } from "../src/exec.js";
+import { materializeChangeEvidence, openChangeEvidence, type ChangeEvidence, type ChangeManifest } from "../src/change-evidence.js";
+import { createEvidencePack, writeEvidencePack, type EvidencePack } from "../src/evidence-pack.js";
+import { createGuidanceResult, writeGuidanceResult, SEMANTIC_DATA_SHA256, SEMANTIC_RULE_SET_SHA256, type GuidanceResult } from "../src/semantic-checks.js";
+import { CAVEAT_CARD_SET_SHA256 } from "../src/caveat-cards.js";
+import { executableIdentity, runStreaming } from "../src/exec.js";
 import { ensureGraph } from "../src/app/graph.js";
 import { scan } from "../src/scan.js";
+import type { ScanResult } from "../src/findings.js";
 import { ENGINES } from "../src/engines/registry.js";
 import { loadProfile } from "../src/profile.js";
-import { projectFacts } from "../src/project-facts.js";
+import { projectFacts, type ProjectFacts } from "../src/project-facts.js";
 import { materializeTrustedReviewState, type TrustedReviewState } from "../src/trusted-state.js";
 import { parseWorkItem, type WorkItem } from "../src/work-item.js";
+import {
+  ReviewCache,
+  incrementalDependencyBoundary,
+  projectFactsCacheSchema,
+  scanResultCacheSchema,
+  stableJson,
+  type LastCompleted,
+} from "../src/review-cache.js";
 
 export const CORPUS_SCHEMA = "leveret.replay-corpus/v1" as const;
 export const REPLAY_RESULT_SCHEMA = "leveret.replay-result/v1" as const;
@@ -171,7 +181,7 @@ export type InvalidCode = "missing-commit" | "base-mismatch" | "head-mismatch" |
 export interface InvalidReplay { schema: typeof REPLAY_RESULT_SCHEMA; plan: TrialPlan; status: "invalid"; phase: "preparation" | "precondition" | "scan" | "runner" | "audit"; reason: { code: InvalidCode; detail: string }; preconditions: PreconditionResult[]; audit_run_dir: string | null }
 export interface CompleteReplay { schema: typeof REPLAY_RESULT_SCHEMA; plan: TrialPlan; status: "complete"; preconditions: PreconditionResult[]; audit_run_dir: string }
 export type ReplayOutcome = InvalidReplay | CompleteReplay;
-export interface RunTrialOptions { repo: string; traceRoot?: string; profilePath?: string; runner?: ReplayRunner; runnerCommand?: string; scanFn?: ReplayScan; expectedCapabilities?: Record<string, unknown>; discoveryMode?: "single" | "specialized-serial/v1" }
+export interface RunTrialOptions { repo: string; traceRoot?: string; cacheRoot?: string; cache?: boolean; profilePath?: string; runner?: ReplayRunner; runnerCommand?: string; scanFn?: ReplayScan; expectedCapabilities?: Record<string, unknown>; discoveryMode?: "single" | "specialized-serial/v1" }
 function resultRecord(value: unknown): Record<string, unknown> | null { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null; }
 function completeResult(value: unknown): value is Record<string, unknown> { const record = resultRecord(value); return !!record && Array.isArray(record.verdicts) && Array.isArray(record.report) && !!resultRecord(record.coverage) && !!resultRecord(record.run_configuration); }
 function capabilitiesMatch(result: Record<string, unknown>, expected: Record<string, unknown>): boolean { const configuration = resultRecord(result.run_configuration); const actual = resultRecord(configuration?.capabilities); return !!actual && Object.entries(expected).every(([key, value]) => JSON.stringify(actual[key]) === JSON.stringify(value)); }
@@ -195,6 +205,8 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
   let auditRunDir: string | null = null;
   let preconditions: PreconditionResult[] = [];
   let trusted: TrustedReviewState | undefined;
+  let cache: ReviewCache | undefined;
+  let cacheCompletion: Omit<LastCompleted, "schema" | "version" | "repository_sha256" | "pull_request" | "completed_at"> | undefined;
   try {
     await git(repo, ["worktree", "add", "--quiet", "--detach", checkout, plan.head]);
     const actualHead = await git(checkout, ["rev-parse", "HEAD"]);
@@ -213,14 +225,45 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
     const traceEnvironment = { LEVERET_TRACE_ENABLED: "1", LEVERET_TRACE_ROOT: traceRoot, LEVERET_TRACE_SINKS: "private", LEVERET_TRACE_FAILURE: "fail", LEVERET_TRACE_KEEP_UNPACKED: "1" };
     audit = await createAuditRun(auditConfig(traceRoot, traceEnvironment), runId);
     if (!audit) return invalid(plan, "audit", "incomplete-audit", "#51 audit capture is disabled", preconditions);
+    cache = await ReviewCache.open({
+      dataRoot: resolve(options.cacheRoot ?? traceRoot),
+      repoRoot: checkout,
+      repository: plan.repository,
+      pullRequest: plan.pull_request,
+      enabled: options.cache !== false,
+    });
+    const lastCompleted = await cache.readLastCompleted();
+    await audit.record("repository", "cache_metadata", cache.lastCompletedDecision);
+    const boundary = await incrementalDependencyBoundary(checkout, lastCompleted?.head ?? null, plan.head);
+    await audit.record("repository", "incremental_range", boundary);
     let failure: InvalidReplay | undefined;
     let parsed: Record<string, unknown> | undefined;
     try {
       await withAuditTrace(audit, async () => {
         await audit!.record("app", "replay_started", { plan, corpus_target_ids: plan.target_ids });
         await audit!.record("repository", "defect_preconditions_validated", { results: preconditions });
+        const preparationStartedAt = performance.now();
         const evidencePath = join(runnerDir, "change-evidence.v1.json");
-        const evidence = await materializeChangeEvidence(checkout, plan.base, evidencePath, plan.head);
+        const manifestKey = cache!.key("change-manifest", plan.base, plan.head, {
+          schema_version: 1,
+          range: plan.range,
+        }, boundary);
+        const cachedManifest = await cache!.get<ChangeManifest>(manifestKey);
+        await audit!.record("repository", "cache_decision", cachedManifest.decision);
+        let evidence: ChangeEvidence;
+        if (cachedManifest.value) {
+          try {
+            await writeFile(evidencePath, `${JSON.stringify(cachedManifest.value)}\n`);
+            evidence = await openChangeEvidence(checkout, evidencePath);
+          } catch (error) {
+            await audit!.record("repository", "cache_decision", cache!.invalidate(manifestKey, `cached manifest failed checkout validation: ${String(error)}`));
+            evidence = await materializeChangeEvidence(checkout, plan.base, evidencePath, plan.head);
+            cache!.stage(manifestKey, evidence.manifest);
+          }
+        } else {
+          evidence = await materializeChangeEvidence(checkout, plan.base, evidencePath, plan.head);
+          cache!.stage(manifestKey, evidence.manifest);
+        }
         const auditPatch = await evidence.auditPatch();
         await audit!.record("repository", "review_diff", {
           base_sha: evidence.manifest.base,
@@ -232,9 +275,35 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
           sha256: auditPatch.sha256,
           bytes: auditPatch.bytes,
         });
+        const graphKey = cache!.key("graph-toolchain", plan.base, plan.head, {
+          node: process.version,
+          binary: process.env.LEVERET_CODEGRAPH_BIN ?? "codegraph",
+          sandbox: "disabled",
+        }, boundary);
+        await audit!.record("repository", "cache_decision", cache!.fallback(graphKey, "checkout-local graph index must be rebuilt; dependency/tool sandbox is disabled"));
         const graph = await ensureGraph(checkout);
         const effectiveProfilePath = options.profilePath ?? trusted!.profilePath;
-        const scanResult = await (options.scanFn ?? scan)({
+        const profile = await loadProfile(effectiveProfilePath);
+        const profileSha256 = digest(stableJson(profile));
+        const manifestSha256 = digest(stableJson(evidence.manifest));
+        const engineIdentity = JSON.parse(stableJson(await Promise.all(ENGINES.map(async (engine) => ({
+          id: engine.id,
+          bin: engine.bin,
+          executable: await executableIdentity(engine.bin, checkout),
+        })))));
+        const scanKey = cache!.key("scan-result", plan.base, plan.head, {
+          manifest_sha256: manifestSha256,
+          profile_sha256: profileSha256,
+          trusted_base: plan.base,
+          engines: engineIdentity,
+          allow_custom_engines: false,
+        }, boundary);
+        const cachedScan = await cache!.get<unknown>(scanKey);
+        await audit!.record("repository", "cache_decision", cachedScan.decision);
+        const parsedScan = cachedScan.value === undefined ? undefined : scanResultCacheSchema.safeParse(cachedScan.value);
+        if (parsedScan && !parsedScan.success) await audit!.record("repository", "cache_decision", cache!.invalidate(scanKey, `cached scan result failed strict schema validation: ${parsedScan.error.message}`));
+        const cachedScanResult: ScanResult | undefined = parsedScan?.success ? parsedScan.data : undefined;
+        const scanResult = cachedScanResult ?? await (options.scanFn ?? scan)({
           repo: checkout,
           base: evidence.manifest.base,
           manifest: evidence.manifest,
@@ -243,9 +312,33 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
           memoryRepo: trusted!.root,
           allowCustomEngines: false,
         });
+        if (!cachedScanResult) cache!.stage(scanKey, scanResult);
         await audit!.record("repository", "scan_completed", { base_sha: plan.base, head_sha: plan.head, graph, scan: scanResult });
-        const [profile, facts] = await Promise.all([loadProfile(effectiveProfilePath), projectFacts(checkout)]);
-        const evidencePack = await createEvidencePack({
+        const factsKey = cache!.key("project-facts", plan.base, plan.head, {
+          manifest_sha256: manifestSha256,
+          project_facts_version: 1,
+        }, boundary);
+        const cachedFacts = await cache!.get<unknown>(factsKey);
+        await audit!.record("repository", "cache_decision", cachedFacts.decision);
+        const parsedFacts = cachedFacts.value === undefined ? undefined : projectFactsCacheSchema.safeParse(cachedFacts.value);
+        if (parsedFacts && !parsedFacts.success) await audit!.record("repository", "cache_decision", cache!.invalidate(factsKey, `cached project facts failed strict schema validation: ${parsedFacts.error.message}`));
+        const cachedProjectFacts: ProjectFacts | undefined = parsedFacts?.success ? parsedFacts.data : undefined;
+        if (lastCompleted?.head !== plan.head && boundary.reusable_artifacts.includes("project-facts")) {
+          await audit!.record("repository", "cache_decision", cache!.fallback(factsKey, "cross-head project-facts reuse not proven against exact checkout; recomputing owning artifact"));
+        }
+        const facts = cachedProjectFacts ?? await projectFacts(checkout);
+        if (!cachedProjectFacts) cache!.stage(factsKey, facts);
+        const evidenceKey = cache!.key("evidence-pack", plan.base, plan.head, {
+          manifest_sha256: manifestSha256,
+          scan_key: cache!.keyDigest(scanKey),
+          project_key: cache!.keyDigest(factsKey),
+          profile_sha256: profileSha256,
+          trusted_base: plan.base,
+          engines: engineIdentity,
+        }, boundary);
+        const cachedPack = await cache!.get<EvidencePack>(evidenceKey);
+        await audit!.record("repository", "cache_decision", cachedPack.decision);
+        const evidencePack = cachedPack.value ?? await createEvidencePack({
           repo: checkout,
           manifest: evidence.manifest,
           profile,
@@ -255,16 +348,37 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
           scan: scanResult,
           engines: ENGINES,
         });
+        if (!cachedPack.value) cache!.stage(evidenceKey, evidencePack);
         const evidencePackFile = await writeEvidencePack(checkout, join(runnerDir, "evidence-pack.v1.json"), evidencePack);
-        const guidanceFile = await writeGuidanceResult(checkout, join(runnerDir, "guidance-result.v1.json"), await createGuidanceResult(checkout, evidencePackFile));
+        const guidanceKey = cache!.key("guidance-selection", plan.base, plan.head, {
+          evidence_pack_sha256: evidencePackFile.sha256,
+          trusted_base: plan.base,
+          guidance_schema: "leveret.guidance-result/v1",
+          card_set_sha256: CAVEAT_CARD_SET_SHA256,
+          rule_set_sha256: SEMANTIC_RULE_SET_SHA256,
+          data_sha256: SEMANTIC_DATA_SHA256,
+        }, boundary);
+        const cachedGuidance = await cache!.get<GuidanceResult>(guidanceKey);
+        await audit!.record("repository", "cache_decision", cachedGuidance.decision);
+        const guidance = cachedGuidance.value ?? await createGuidanceResult(checkout, evidencePackFile);
+        if (!cachedGuidance.value) cache!.stage(guidanceKey, guidance);
+        const guidanceFile = await writeGuidanceResult(checkout, join(runnerDir, "guidance-result.v1.json"), guidance);
         await audit!.record("repository", "evidence_pack", { pack: evidencePack, schema: evidencePack.schema, sha256: evidencePackFile.sha256, bytes: evidencePackFile.bytes });
         await audit!.record("repository", "guidance_result", { guidance: guidanceFile.guidance, schema: guidanceFile.guidance.schema, sha256: guidanceFile.sha256, bytes: guidanceFile.bytes, selected_card_ids: guidanceFile.guidance.selectedCards.map((card) => card.id), selected_rule_ids: guidanceFile.guidance.selectedCards.flatMap((card) => card.ruleId ? [card.ruleId] : []), emitted_rule_lead_ids: guidanceFile.guidance.ruleLeads.map((lead) => lead.id), selected_mutation_ids: [...new Set(guidanceFile.guidance.mutationLeads.map((lead) => lead.mutationId))].sort(), hashes: guidanceFile.guidance.provenance });
         await audit!.writeCapabilities({ graph, scanner: { engines: scanResult.engines }, evidence_pack: { schema: evidencePack.schema, sha256: evidencePackFile.sha256, bytes: evidencePackFile.bytes }, guidance: { schema: guidanceFile.guidance.schema, sha256: guidanceFile.sha256, bytes: guidanceFile.bytes }, node: process.version });
         let workItemPath: string | undefined;
         if (plan.mode === "review-context") { workItemPath = join(runnerDir, "work-item.json"); await copyFile(plan.work_item_path!, workItemPath); await audit!.record("app", "work_item_materialized", { schema: "leveret.work-item/v1", sha256: plan.work_item_sha256, path_role: "outside-checkout runner input" }); }
         else await audit!.record("app", "work_item_omitted", { context_mode: "diff-only" });
+        const cacheRunPath = join(runnerDir, "cache-run.v1.json");
+        await writeFile(cacheRunPath, `${stableJson({
+          schema: "leveret.review-cache-run/v1",
+          enabled: cache!.enabled,
+          incremental: boundary,
+          artifacts: cache!.decisions,
+          optional_dependency_sandbox: "disabled",
+        })}\n`);
         const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("LEVERET_TRACE_")));
-        const env = { ...inherited, ...traceEnvironment, LEVERET_REPO: checkout, LEVERET_BASE: plan.base, LEVERET_CHANGE_MANIFEST: evidencePath, LEVERET_EVIDENCE_PACK: evidencePackFile.path, LEVERET_EVIDENCE_PACK_SHA256: evidencePackFile.sha256, LEVERET_GUIDANCE: guidanceFile.path, LEVERET_GUIDANCE_SHA256: guidanceFile.sha256, LEVERET_GRAPH: graph.ok ? "1" : "0", LEVERET_TRACE_DIR: audit!.partialDir, LEVERET_RUN_ID: runId, LEVERET_DATA: traceRoot, LEVERET_DISCOVERY_MODE: options.discoveryMode ?? "single", ...(workItemPath ? { LEVERET_WORK_ITEM: workItemPath } : {}) };
+        const env = { ...inherited, ...traceEnvironment, LEVERET_REPO: checkout, LEVERET_BASE: plan.base, LEVERET_CHANGE_MANIFEST: evidencePath, LEVERET_EVIDENCE_PACK: evidencePackFile.path, LEVERET_EVIDENCE_PACK_SHA256: evidencePackFile.sha256, LEVERET_GUIDANCE: guidanceFile.path, LEVERET_GUIDANCE_SHA256: guidanceFile.sha256, LEVERET_CACHE_RUN: cacheRunPath, LEVERET_GRAPH: graph.ok ? "1" : "0", LEVERET_TRACE_DIR: audit!.partialDir, LEVERET_RUN_ID: runId, LEVERET_DATA: traceRoot, LEVERET_DISCOVERY_MODE: options.discoveryMode ?? "single", ...(workItemPath ? { LEVERET_WORK_ITEM: workItemPath } : {}) };
         const runner = options.runner ?? commandRunner(options.runnerCommand ?? process.env.LEVERET_RUNNER ?? `${process.execPath} ${resolve(harnessRoot, "dist/runner/pi.js")}`);
         await audit!.record("lifecycle", "runner_started", { context_mode: plan.mode, discovery_mode: options.discoveryMode ?? "single", environment_names: Object.keys(env).sort() });
         const result = await runner({ cwd: runnerDir, env });
@@ -275,15 +389,56 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
         if (options.expectedCapabilities && !capabilitiesMatch(parsed, options.expectedCapabilities)) { failure = invalid(plan, "runner", "capability-mismatch", "runner capabilities differ from the declared configuration", preconditions); return; }
         await audit!.record("result", "runner_output_parsed", parsed);
         await audit!.writeResult(parsed);
+        const runConfiguration = parsed.run_configuration as Record<string, unknown>;
+        const cacheConfiguration = {
+          schema: "leveret.review-cache-run/v1",
+          enabled: cache!.enabled,
+          root: "host LEVERET_DATA/cache/review-v1 (outside reviewed checkout)",
+          incremental: boundary,
+          artifacts: cache!.decisions,
+          optional_dependency_sandbox: "disabled",
+        };
+        runConfiguration.cache = cacheConfiguration;
+        const timings = (runConfiguration.timings && typeof runConfiguration.timings === "object" ? runConfiguration.timings : {}) as Record<string, unknown>;
+        timings.preparation_ms ??= Math.max(0, performance.now() - preparationStartedAt);
+        timings.publication_ms ??= 0;
+        timings.wall_ms ??= Math.max(0, performance.now() - preparationStartedAt);
+        timings.summed_worker_compute_ms ??= null;
+        runConfiguration.timings = timings;
+        const resultKey = cache!.key("final-result", plan.base, plan.head, {
+          evidence_pack_sha256: evidencePackFile.sha256,
+          guidance_sha256: guidanceFile.sha256,
+          trusted_base: plan.base,
+          runner: options.runnerCommand ?? process.env.LEVERET_RUNNER ?? "direct-runner",
+          system_prompt: JSON.parse(stableJson(runConfiguration.system_prompt ?? null)),
+        }, boundary);
+        const priorResult = await cache!.get(resultKey);
+        await audit!.record("repository", "cache_decision", priorResult.decision);
+        if (priorResult.value) await audit!.record("repository", "cache_decision", cache!.fallback(resultKey, "prior result retained as data; prompts, policy, knowledge, and verdicts are reevaluated"));
+        cacheConfiguration.artifacts = cache!.decisions;
+        cache!.stage(resultKey, parsed);
+        cacheCompletion = {
+          base: plan.base,
+          head: plan.head,
+          range: plan.range,
+          artifact_keys: {},
+          findings: [],
+        };
+        await audit!.writeResult(parsed);
       });
     } catch (error) { failure = invalid(plan, "runner", "orchestration-failure", error instanceof Error ? error.message : String(error), preconditions); }
     const finalized = await audit.finalize(failure ? "failed" : "complete", failure?.reason.detail);
     auditRunDir = finalized.runDir ?? null;
-    if (failure) return { ...failure, audit_run_dir: auditRunDir };
-    if (finalized.status !== "complete" || finalized.completeness !== "complete" || !auditRunDir) return invalid(plan, "audit", "incomplete-audit", `audit finalized ${finalized.status}/${finalized.completeness}`, preconditions, auditRunDir);
+    if (failure) { cache?.discard(); return { ...failure, audit_run_dir: auditRunDir }; }
+    if (finalized.status !== "complete" || finalized.completeness !== "complete" || !auditRunDir) {
+      cache?.discard();
+      return invalid(plan, "audit", "incomplete-audit", `audit finalized ${finalized.status}/${finalized.completeness}`, preconditions, auditRunDir);
+    }
+    if (cache?.enabled && cacheCompletion) await cache.commitCompleted(cacheCompletion);
     return { schema: REPLAY_RESULT_SCHEMA, plan, status: "complete", preconditions, audit_run_dir: auditRunDir };
   } catch (error) {
     try { if (audit && !auditRunDir) auditRunDir = (await audit.finalize("failed", error)).runDir ?? null; } catch { /* retain original failure */ }
+    cache?.discard();
     return invalid(plan, "preparation", "orchestration-failure", error instanceof Error ? error.message : String(error), preconditions, auditRunDir);
   } finally {
     if (trusted) await trusted.close().catch(() => {});
@@ -296,7 +451,7 @@ function option(args: string[], name: string, fallback?: string): string | undef
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const repo = args[0];
-  if (!repo || repo.startsWith("--")) throw new Error("usage: replay.mts <repo> [--corpus path] [--mode diff-only|review-context|both] [--discovery-mode single|specialized-serial/v1] [--trials N] [--profile path] [--trace-root path] [--runner command] [--capabilities expected.json]");
+  if (!repo || repo.startsWith("--")) throw new Error("usage: replay.mts <repo> [--corpus path] [--mode diff-only|review-context|both] [--discovery-mode single|specialized-serial/v1] [--trials N] [--profile path] [--trace-root path] [--cache-root path] [--no-cache] [--runner command] [--capabilities expected.json]");
   const loaded = await loadCorpus(option(args, "--corpus", join(dirname(fileURLToPath(import.meta.url)), "corpus.v1.json"))!);
   const modeArg = option(args, "--mode", "both");
   const modes: ContextMode[] = modeArg === "both" ? ["diff-only", "review-context"] : modeArg === "diff-only" || modeArg === "review-context" ? [modeArg] : (() => { throw new Error(`invalid mode: ${modeArg}`); })();
@@ -306,7 +461,7 @@ async function main(): Promise<void> {
   if (discoveryMode !== "single" && discoveryMode !== "specialized-serial/v1") throw new Error(`invalid discovery mode: ${discoveryMode}`);
   for (const plan of planTrials(loaded, modes, Number(option(args, "--trials", "1")))) {
     const rows = loaded.corpus.rows.filter((row) => row.frozen.range_id === plan.range_id);
-    process.stdout.write(`${JSON.stringify(await runTrial(plan, rows, { repo, traceRoot: option(args, "--trace-root"), profilePath: option(args, "--profile"), runnerCommand: option(args, "--runner"), expectedCapabilities, discoveryMode }))}\n`);
+    process.stdout.write(`${JSON.stringify(await runTrial(plan, rows, { repo, traceRoot: option(args, "--trace-root"), cacheRoot: option(args, "--cache-root"), cache: !args.includes("--no-cache"), profilePath: option(args, "--profile"), runnerCommand: option(args, "--runner"), expectedCapabilities, discoveryMode }))}\n`);
   }
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch((error) => { console.error(error instanceof Error ? error.message : error); process.exit(1); });

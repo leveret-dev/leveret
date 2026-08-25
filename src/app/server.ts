@@ -5,14 +5,15 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { auditConfig, createAuditRun, redactAuditText, withAuditTrace } from "../audit.js";
-import { materializeChangeEvidence } from "../change-evidence.js";
-import { createEvidencePack, writeEvidencePack } from "../evidence-pack.js";
-import { createGuidanceResult, writeGuidanceResult } from "../semantic-checks.js";
+import { materializeChangeEvidence, openChangeEvidence, type ChangeManifest } from "../change-evidence.js";
+import { createEvidencePack, writeEvidencePack, type EvidencePack } from "../evidence-pack.js";
+import { createGuidanceResult, writeGuidanceResult, SEMANTIC_DATA_SHA256, SEMANTIC_RULE_SET_SHA256, type GuidanceResult } from "../semantic-checks.js";
+import { CAVEAT_CARD_SET_SHA256 } from "../caveat-cards.js";
 import { loadProfile } from "../profile.js";
 import { scan } from "../scan.js";
 import type { Finding, ScanResult } from "../findings.js";
 import { ENGINES } from "../engines/registry.js";
-import { projectFacts } from "../project-facts.js";
+import { projectFacts, type ProjectFacts } from "../project-facts.js";
 import { ensureGraph } from "./graph.js";
 import { appAccess, fetchReviewThreads, makeApp, postComment, postReview, replyInThread, resolveThread, tokenAccess, updateComment, type GitHubAccess } from "./github.js";
 import { parsePriorThreads, resolvedReply, type PriorFinding } from "./incremental.js";
@@ -33,8 +34,20 @@ import { formatLine, makeLogger } from "./log.js";
 import { materializeTrustedReviewState, type TrustedReviewState } from "../trusted-state.js";
 import { preBodyReject, readCappedBody, routeEvent, verifySignature, type Job } from "./webhook.js";
 import { relayChallengeAllowed, relayConfigFromEnv, verifyRelayDelivery } from "./relay.js";
-import { run, runStreaming, safeChildEnvironment, type RunOpts } from "../exec.js";
+import { executableIdentity, run, runStreaming, safeChildEnvironment, type RunOpts } from "../exec.js";
 import { writeWorkItem } from "../work-item.js";
+import {
+  ReviewCache,
+  findingSnapshot,
+  incrementalDependencyBoundary,
+  publicationDecisions,
+  reconcileFindings,
+  projectFactsCacheSchema,
+  scanResultCacheSchema,
+  stableJson,
+  type FindingLifecycle,
+  type LastCompleted,
+} from "../review-cache.js";
 
 // The App layer: GitHub plumbing only. It holds the App key and webhook secret —
 // never a model credential. The BYOAI seam is LEVERET_RUNNER: a user-supplied
@@ -82,6 +95,7 @@ function reportFromScan(result: ScanResult): VerifyOutput {
 }
 
 async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubAccess): Promise<void> {
+  const wallStartedAt = performance.now();
   const runId = randomUUID();
   const bound = { runId, prUrl: `https://github.com/${job.repo}/pull/${job.pr}` };
   let audit;
@@ -101,6 +115,8 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
   const work = await mkdtemp(join(tmpdir(), "leveret-app-"));
   const runnerWork = await mkdtemp(join(tmpdir(), "leveret-runner-"));
   let trusted: TrustedReviewState | undefined;
+  let cache: ReviewCache | undefined;
+  let cacheCompletion: Omit<LastCompleted, "schema" | "version" | "repository_sha256" | "pull_request" | "completed_at"> | undefined;
   let failure: unknown;
   try {
     await withAuditTrace(audit, async () => {
@@ -132,6 +148,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
           provider: process.env.LEVERET_RUNNER_PROVIDER ?? "openai",
           thinking: process.env.LEVERET_RUNNER_EFFORT ?? "high",
           discovery: process.env.LEVERET_DISCOVERY_MODE ?? "single",
+          cache: { enabled: process.env.LEVERET_CACHE !== "0", root: join(DATA_DIR, "cache", "review-v1"), owner: "host" },
           trace: audit?.config,
         },
         trusted_base: { source: baseRef, sha: base, profile },
@@ -167,10 +184,50 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
       }
       // the checkout gets its code graph before any agent looks at it (owner ruling:
       // the graph is derived and always buildable — structure is queried, not grepped)
+      const preparationStartedAt = performance.now();
+      cache = await ReviewCache.open({
+        dataRoot: DATA_DIR,
+        repoRoot: work,
+        repository: job.repo,
+        pullRequest: job.pr,
+        enabled: process.env.LEVERET_CACHE !== "0",
+      });
+      const lastCompleted = await cache.readLastCompleted();
+      await audit?.record("repository", "cache_metadata", cache.lastCompletedDecision);
+      const boundary = await incrementalDependencyBoundary(work, lastCompleted?.head ?? null, job.headSha);
+      await audit?.record("repository", "incremental_range", boundary);
+
+      // The checkout-local graph index is intentionally rebuilt. A cached status
+      // cannot stand in for files that tools must query in this exact checkout.
+      const graphKey = cache.key("graph-toolchain", base, job.headSha, {
+        node: process.version,
+        binary: process.env.LEVERET_CODEGRAPH_BIN ?? "codegraph",
+        sandbox: "disabled",
+      }, boundary);
+      await audit?.record("repository", "cache_decision", cache.fallback(graphKey, "checkout-local graph index must be rebuilt; dependency/tool sandbox is disabled"));
       const graph = await ensureGraph(work);
       if (!graph.ok) log.warn("codegraph unavailable", { detail: graph.detail });
       const evidencePath = join(runnerWork, "change-evidence.v1.json");
-      const evidence = await materializeChangeEvidence(work, base, evidencePath, job.headSha);
+      const manifestKey = cache.key("change-manifest", base, job.headSha, {
+        schema_version: 1,
+        range: `${base}..${job.headSha}`,
+      }, boundary);
+      const cachedManifest = await cache.get<ChangeManifest>(manifestKey);
+      await audit?.record("repository", "cache_decision", cachedManifest.decision);
+      let evidence;
+      if (cachedManifest.value) {
+        try {
+          await writeFile(evidencePath, `${JSON.stringify(cachedManifest.value)}\n`);
+          evidence = await openChangeEvidence(work, evidencePath);
+        } catch (error) {
+          await audit?.record("repository", "cache_decision", cache.invalidate(manifestKey, `cached manifest failed checkout validation: ${String(error)}`));
+          evidence = await materializeChangeEvidence(work, base, evidencePath, job.headSha);
+          cache.stage(manifestKey, evidence.manifest);
+        }
+      } else {
+        evidence = await materializeChangeEvidence(work, base, evidencePath, job.headSha);
+        cache.stage(manifestKey, evidence.manifest);
+      }
       const auditPatch = await evidence.auditPatch();
       await audit?.record("repository", "review_diff", {
         base_ref: baseRef,
@@ -182,7 +239,26 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
         sha256: auditPatch.sha256,
         bytes: auditPatch.bytes,
       });
-      const result = await scan({
+      const profileSha256 = createHash("sha256").update(stableJson(profile)).digest("hex");
+      const manifestSha256 = createHash("sha256").update(stableJson(evidence.manifest)).digest("hex");
+      const engineIdentity = JSON.parse(stableJson(await Promise.all(ENGINES.map(async (engine) => ({
+        id: engine.id,
+        bin: engine.bin,
+        executable: await executableIdentity(engine.bin, work),
+      })))));
+      const scanKey = cache.key("scan-result", base, job.headSha, {
+        manifest_sha256: manifestSha256,
+        profile_sha256: profileSha256,
+        trusted_base: base,
+        engines: engineIdentity,
+        allow_custom_engines: false,
+      }, boundary);
+      const cachedScan = await cache.get<unknown>(scanKey);
+      await audit?.record("repository", "cache_decision", cachedScan.decision);
+      const parsedScan = cachedScan.value === undefined ? undefined : scanResultCacheSchema.safeParse(cachedScan.value);
+      if (parsedScan && !parsedScan.success) await audit?.record("repository", "cache_decision", cache.invalidate(scanKey, `cached scan result failed strict schema validation: ${parsedScan.error.message}`));
+      const cachedScanResult: ScanResult | undefined = parsedScan?.success ? parsedScan.data : undefined;
+      const result = cachedScanResult ?? await scan({
         repo: work,
         base: evidence.manifest.base,
         manifest: evidence.manifest,
@@ -191,10 +267,35 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
         memoryRepo: trusted.root,
         allowCustomEngines: false,
       });
+      if (!cachedScanResult) cache.stage(scanKey, result);
       await audit?.record("repository", "scan_completed", { base_ref: baseRef, base_sha: base, head_sha: job.headSha, graph, scan: result });
-      const facts = await projectFacts(work);
+
+      const factsKey = cache.key("project-facts", base, job.headSha, {
+        manifest_sha256: manifestSha256,
+        project_facts_version: 1,
+      }, boundary);
+      const cachedFacts = await cache.get<unknown>(factsKey);
+      await audit?.record("repository", "cache_decision", cachedFacts.decision);
+      const parsedFacts = cachedFacts.value === undefined ? undefined : projectFactsCacheSchema.safeParse(cachedFacts.value);
+      if (parsedFacts && !parsedFacts.success) await audit?.record("repository", "cache_decision", cache.invalidate(factsKey, `cached project facts failed strict schema validation: ${parsedFacts.error.message}`));
+      const cachedProjectFacts: ProjectFacts | undefined = parsedFacts?.success ? parsedFacts.data : undefined;
+      if (lastCompleted?.head !== job.headSha && boundary.reusable_artifacts.includes("project-facts")) {
+        await audit?.record("repository", "cache_decision", cache.fallback(factsKey, "cross-head project-facts reuse not proven against exact checkout; recomputing owning artifact"));
+      }
+      const facts = cachedProjectFacts ?? await projectFacts(work);
+      if (!cachedProjectFacts) cache.stage(factsKey, facts);
       const evidencePackPath = join(runnerWork, "evidence-pack.v1.json");
-      const evidencePack = await createEvidencePack({
+      const evidenceKey = cache.key("evidence-pack", base, job.headSha, {
+        manifest_sha256: manifestSha256,
+        scan_key: cache.keyDigest(scanKey),
+        project_key: cache.keyDigest(factsKey),
+        profile_sha256: profileSha256,
+        trusted_base: base,
+        engines: engineIdentity,
+      }, boundary);
+      const cachedPack = await cache.get<EvidencePack>(evidenceKey);
+      await audit?.record("repository", "cache_decision", cachedPack.decision);
+      const evidencePack = cachedPack.value ?? await createEvidencePack({
         repo: work,
         manifest: evidence.manifest,
         profile,
@@ -204,9 +305,22 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
         scan: result,
         engines: ENGINES,
       });
+      if (!cachedPack.value) cache.stage(evidenceKey, evidencePack);
       const evidencePackFile = await writeEvidencePack(work, evidencePackPath, evidencePack);
       const guidancePath = join(runnerWork, "guidance-result.v1.json");
-      const guidanceFile = await writeGuidanceResult(work, guidancePath, await createGuidanceResult(work, evidencePackFile));
+      const guidanceKey = cache.key("guidance-selection", base, job.headSha, {
+        evidence_pack_sha256: evidencePackFile.sha256,
+        trusted_base: base,
+        guidance_schema: "leveret.guidance-result/v1",
+        card_set_sha256: CAVEAT_CARD_SET_SHA256,
+        rule_set_sha256: SEMANTIC_RULE_SET_SHA256,
+        data_sha256: SEMANTIC_DATA_SHA256,
+      }, boundary);
+      const cachedGuidance = await cache.get<GuidanceResult>(guidanceKey);
+      await audit?.record("repository", "cache_decision", cachedGuidance.decision);
+      const guidance = cachedGuidance.value ?? await createGuidanceResult(work, evidencePackFile);
+      if (!cachedGuidance.value) cache.stage(guidanceKey, guidance);
+      const guidanceFile = await writeGuidanceResult(work, guidancePath, guidance);
       await audit?.record("repository", "evidence_pack", {
         pack: evidencePack,
         schema: evidencePack.schema,
@@ -251,6 +365,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
       }
 
       await audit?.record("repository", "prior_findings", prior);
+      const modelStartedAt = performance.now();
       let verify: VerifyOutput;
       if (process.env.LEVERET_RUNNER) {
         const workItemFile = await writeWorkItem(runnerWork, job.workItem);
@@ -267,6 +382,14 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
         if (!Number.isFinite(runnerTimeout) || runnerTimeout <= 0) {
           throw new Error("LEVERET_RUNNER_TIMEOUT_MS must be a positive number");
         }
+        const cacheRunPath = join(runnerWork, "cache-run.v1.json");
+        await writeFile(cacheRunPath, `${stableJson({
+          schema: "leveret.review-cache-run/v1",
+          enabled: cache.enabled,
+          incremental: boundary,
+          artifacts: cache.decisions,
+          optional_dependency_sandbox: "disabled",
+        })}\n`);
         const runnerEnv = {
           ...process.env,
           LEVERET_REPO: work,
@@ -276,6 +399,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
           LEVERET_EVIDENCE_PACK: evidencePackFile.path,
           LEVERET_EVIDENCE_PACK_SHA256: evidencePackFile.sha256,
           LEVERET_GUIDANCE: guidanceFile.path,
+          LEVERET_CACHE_RUN: cacheRunPath,
           LEVERET_GUIDANCE_SHA256: guidanceFile.sha256,
           LEVERET_GRAPH: graph.ok ? "1" : "0",
           ...(prior.length > 0 ? { LEVERET_PRIOR: join(runnerWork, "prior.json") } : {}),
@@ -313,21 +437,86 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
       } else {
         verify = reportFromScan(result);
       }
+      const modelDurationMs = Math.max(0, performance.now() - modelStartedAt);
+      const snapshots = verify.report.map((item) => {
+        const grade = verify.verdicts.find((verdict) => verdict.id === item.id)?.grade ?? "unverifiable";
+        return findingSnapshot({
+          id: item.id,
+          concernSource: item.id,
+          rule: item.title.split(":")[0] ?? item.title,
+          file: item.file,
+          start: item.line,
+          context: `${item.title}\n${item.evidence}`,
+          evidenceHashes: [createHash("sha256").update(item.evidence).digest("hex")],
+          grade,
+        });
+      });
+      const lifecycle: FindingLifecycle[] = reconcileFindings(snapshots, lastCompleted?.findings);
+      const findingPublications = publicationDecisions(lifecycle);
+      for (const publication of findingPublications) await audit?.record("app", "finding_publication_decision", publication);
+      const publishedIds = new Set(findingPublications.filter((item) => item.publish).map((item) => item.id));
+      const publicationVerify: VerifyOutput = { ...verify, report: verify.report.filter((item) => publishedIds.has(item.id)) };
+      const runConfiguration = (verify.run_configuration ??= {}) as Record<string, unknown>;
+      const cacheConfiguration = {
+        schema: "leveret.review-cache-run/v1",
+        enabled: cache.enabled,
+        root: "host LEVERET_DATA/cache/review-v1 (outside reviewed checkout)",
+        incremental: boundary,
+        artifacts: cache.decisions,
+        optional_dependency_sandbox: "disabled",
+      };
+      runConfiguration.cache = cacheConfiguration;
+      const suppliedTimings: Record<string, unknown> = runConfiguration.timings && typeof runConfiguration.timings === "object" && !Array.isArray(runConfiguration.timings)
+        ? runConfiguration.timings as Record<string, unknown>
+        : {};
+      runConfiguration.timings = {
+        preparation_ms: Math.max(0, modelStartedAt - preparationStartedAt),
+        model_ms: typeof suppliedTimings.model_ms === "number" ? suppliedTimings.model_ms : modelDurationMs,
+        verification_ms: typeof suppliedTimings.verification_ms === "number" ? suppliedTimings.verification_ms : null,
+        publication_ms: null,
+        wall_ms: null,
+        summed_worker_compute_ms: typeof suppliedTimings.summed_worker_compute_ms === "number" ? suppliedTimings.summed_worker_compute_ms : null,
+      };
+      const resultKey = cache.key("final-result", base, job.headSha, {
+        evidence_pack_sha256: evidencePackFile.sha256,
+        guidance_sha256: guidanceFile.sha256,
+        trusted_base: base,
+        runner: process.env.LEVERET_RUNNER ?? "deterministic-only",
+        provider: process.env.LEVERET_RUNNER_PROVIDER ?? "openai",
+        model: process.env.LEVERET_RUNNER_MODEL ?? "gpt-5.6-sol",
+        effort: process.env.LEVERET_RUNNER_EFFORT ?? "high",
+        system_prompt: JSON.parse(stableJson(runConfiguration.system_prompt ?? null)),
+      }, boundary);
+      const priorResult = await cache.get(resultKey);
+      await audit?.record("repository", "cache_decision", priorResult.decision);
+      if (priorResult.value) {
+        await audit?.record("repository", "cache_decision", cache.fallback(resultKey, "prior result retained as data; prompts, policy, knowledge, and verdicts are reevaluated"));
+      }
+      cacheConfiguration.artifacts = cache.decisions;
+      cache.stage(resultKey, verify);
+      cacheCompletion = {
+        base,
+        head: job.headSha,
+        range: boundary.range ?? `${base}..${job.headSha}`,
+        artifact_keys: {},
+        findings: lifecycle.map((item) => ({ finding: item.finding, state: item.state })),
+      };
       await audit?.writeResult(verify);
       const recordLeadPublication = async (published: boolean): Promise<void> => {
         const postWalk = verify.post_walk_leads;
         if (!postWalk) return;
         postWalk.accounting = markPostWalkLeadPublication(
           postWalk.accounting,
-          verify.report.map((report) => report.id),
+          publicationVerify.report.map((report) => report.id),
           published,
         );
         await audit?.record("result", "post_walk_publication_accounting", postWalk.accounting);
         await audit?.writeResult(verify);
       };
 
+      const publicationStartedAt = performance.now();
       if (access) {
-        await audit?.record("app", "publication_started", { repository: job.repo, pr: job.pr, head_sha: job.headSha, findings: verify.report.length });
+        await audit?.record("app", "publication_started", { repository: job.repo, pr: job.pr, head_sha: job.headSha, findings: publicationVerify.report.length, decisions: findingPublications });
         let reviewPublication: Awaited<ReturnType<typeof postReview>>;
         try {
           reviewPublication = await postReview(
@@ -335,8 +524,8 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
             job.repo,
             job.pr,
             job.headSha,
-            renderWalkthrough(verify, result, graph),
-            renderInline(verify),
+            renderWalkthrough(publicationVerify, result, graph),
+            renderInline(publicationVerify),
           );
         } catch (error) {
           await audit?.record("app", "publication_failed", { action: "review", error });
@@ -345,7 +534,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
         }
         if (ackId) {
           try {
-            await updateComment(access, job.repo, ackId, doneMessage(verify));
+            await updateComment(access, job.repo, ackId, doneMessage(publicationVerify));
           } catch (error) {
             await audit?.record("app", "publication_failed", { action: "ack-completion-edit", comment_id: ackId, error });
           }
@@ -366,7 +555,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
           }
         }
         log.info("review posted", {
-          findings: verify.report.length,
+          findings: publicationVerify.report.length,
           resolved: (verify.resolutions ?? []).filter((r) => r.status === "resolved").length,
         });
         if (reviewPublication.inlineFailure) {
@@ -379,18 +568,23 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
           inline: reviewPublication.inline,
           inline_failure: reviewPublication.inlineFailure,
           ack_comment_id: ackId,
-          findings: verify.report.length,
+          findings: publicationVerify.report.length,
         });
         await recordLeadPublication(true);
       } else {
-        const walkthrough = renderWalkthrough(verify, result, graph);
+        const walkthrough = renderWalkthrough(publicationVerify, result, graph);
         log.info("review completed without GitHub publication", {
-          findings: verify.report.length,
+          findings: publicationVerify.report.length,
           walkthroughBytes: Buffer.byteLength(walkthrough),
           walkthroughSha256: createHash("sha256").update(walkthrough).digest("hex"),
         });
         await recordLeadPublication(false);
       }
+      const timings = (runConfiguration.timings ?? {}) as Record<string, unknown>;
+      timings.publication_ms = Math.max(0, performance.now() - publicationStartedAt);
+      timings.wall_ms = Math.max(0, performance.now() - wallStartedAt);
+      await audit?.record("result", "run_metrics", { timings, cache: runConfiguration.cache });
+      await audit?.writeResult(verify);
     });
   } catch (err) {
     failure = err;
@@ -443,6 +637,11 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
         degradation: finalized.degradation,
         completeness: finalized.completeness,
       })}\n`);
+    }
+    if (finalized?.status === "complete" && finalized.completeness === "complete" && cache?.enabled && cacheCompletion) {
+      await cache.commitCompleted(cacheCompletion);
+    } else {
+      cache?.discard();
     }
   }
 }

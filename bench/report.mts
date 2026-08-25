@@ -9,11 +9,15 @@ import { parseAssistantJson } from "../src/runner/pi.js";
 
 interface ToolCall { phase?: string; toolName?: string; isError?: boolean; outcome?: string; nonzero_exit?: boolean; output_bytes?: number }
 interface FindingSummary { id: string; tier: string; file: string; line: number; title: string }
+export interface CacheMetric { artifact: string; outcome: string; key: string; duration_ms: number; bytes: number | null; reason: string }
+export interface TimingMetrics { preparation_ms: number | null; model_ms: number | null; verification_ms: number | null; publication_ms: number | null; wall_ms: number | null; summed_worker_compute_ms: number | null }
 export interface RunSummary {
-  name: string; model: string; thinking: string; prompt: string; discovery: string; findings: FindingSummary[]; grades: Record<string, number>; coverage: Record<string, number>; toolCalls: number; toolErrors: number; timeouts: number | null; nonzeroExits: number | null; diffCalls: number; diffBytes: number | null; toolDetailComplete: boolean; schemaCorrection: boolean;
+  name: string; model: string; thinking: string; prompt: string; discovery: string; findings: FindingSummary[]; grades: Record<string, number>; coverage: Record<string, number>; toolCalls: number; toolErrors: number; timeouts: number | null; nonzeroExits: number | null; diffCalls: number; diffBytes: number | null; toolDetailComplete: boolean; schemaCorrection: boolean; timings: TimingMetrics; cache: CacheMetric[];
 }
 function record(value: unknown, label: string): Record<string, unknown> { if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`); return value as Record<string, unknown>; }
 function array(value: unknown, label: string): unknown[] { if (!Array.isArray(value)) throw new Error(`${label} must be an array`); return value; }
+function nullableNumber(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
+function resultRecord(value: unknown): Record<string, unknown> | null { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null; }
 
 /** Backward-compatible reducer for direct runner JSON. */
 export function summarizeResult(name: string, input: unknown): RunSummary {
@@ -41,6 +45,12 @@ export function summarizeResult(name: string, input: unknown): RunSummary {
   const detailedDiffCalls = toolCalls.filter((call) => call.toolName === "leveret_diff");
   const detailedNonzeroComplete = toolCalls.every((call) => typeof call.nonzero_exit === "boolean");
   const discovery = configuration.discovery && typeof configuration.discovery === "object" && !Array.isArray(configuration.discovery) ? configuration.discovery as Record<string, unknown> : {};
+  const timings = configuration.timings && typeof configuration.timings === "object" && !Array.isArray(configuration.timings) ? configuration.timings as Record<string, unknown> : {};
+  const cacheRun = configuration.cache && typeof configuration.cache === "object" && !Array.isArray(configuration.cache) ? configuration.cache as Record<string, unknown> : {};
+  const cache = Array.isArray(cacheRun.artifacts) ? cacheRun.artifacts.map((value): CacheMetric => {
+    const item = record(value, `${name}.run_configuration.cache.artifacts[]`);
+    return { artifact: String(item.artifact ?? "unknown"), outcome: String(item.outcome ?? "unknown"), key: String(item.key ?? ""), duration_ms: nullableNumber(item.duration_ms) ?? 0, bytes: nullableNumber(item.bytes), reason: String(item.reason ?? "unspecified") };
+  }) : [];
   return {
     name, model: String(configuration.model ?? "unknown"), thinking: String(configuration.thinking ?? "unknown"), prompt: `${String(prompt.version ?? "unknown")} / ${String(prompt.sha256 ?? "unknown")}`, discovery: String(discovery.mode ?? "single"), findings, grades, coverage,
     toolCalls: aggregateCalls || toolCalls.length,
@@ -50,15 +60,24 @@ export function summarizeResult(name: string, input: unknown): RunSummary {
     diffCalls: aggregateCalls ? aggregateDiffCalls : detailedDiffCalls.length,
     diffBytes: detailComplete ? detailedDiffCalls.reduce((total, call) => total + (call.output_bytes ?? 0), 0) : null,
     toolDetailComplete: detailComplete,
-    schemaCorrection: Object.hasOwn(aggregate, "verify-correction") || toolCalls.some((call) => call.phase === "verify-correction"),
+    schemaCorrection: "verify-correction" in aggregate || toolCalls.some((call) => call.phase === "verify-correction"),
+    timings: {
+      preparation_ms: nullableNumber(timings.preparation_ms),
+      model_ms: nullableNumber(timings.model_ms),
+      verification_ms: nullableNumber(timings.verification_ms),
+      publication_ms: nullableNumber(timings.publication_ms),
+      wall_ms: nullableNumber(timings.wall_ms),
+      summed_worker_compute_ms: nullableNumber(timings.summed_worker_compute_ms),
+    },
+    cache,
   };
 }
 
-const cell = (value: unknown) => String(value).replaceAll("|", "\\|").replaceAll("\n", " ");
+const cell = (value: unknown) => String(value).replace(/\|/g, "\\|").replace(/\n/g, " ");
 const metric = (value: number | null) => value ?? "unknown";
 export function renderBenchmarkReport(runs: RunSummary[]): string {
-  const lines = ["# Leveret replay summary", "", "Generated mechanically from runner JSON. Semantic finding overlap and defect validity are intentionally not inferred.", "", "| run | findings | actionable | priced-noise | false-positive | dropped | tool calls | errors | nonzero exits | timeouts | diff calls | diff bytes | detail | correction |", "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |"];
-  for (const run of runs) lines.push(`| ${cell(run.name)} | ${run.findings.length} | ${run.grades.actionable ?? 0} | ${run.grades["priced-noise"] ?? 0} | ${run.grades["false-positive"] ?? 0} | ${run.grades.dropped ?? 0} | ${run.toolCalls} | ${run.toolErrors} | ${metric(run.nonzeroExits)} | ${metric(run.timeouts)} | ${run.diffCalls} | ${metric(run.diffBytes)} | ${run.toolDetailComplete ? "complete" : "aggregate-only"} | ${run.schemaCorrection ? "yes" : "no"} |`);
+  const lines = ["# Leveret replay summary", "", "Generated mechanically from runner JSON. Semantic finding overlap and defect validity are intentionally not inferred.", "", "| run | findings | actionable | priced-noise | false-positive | dropped | tool calls | errors | nonzero exits | timeouts | diff calls | diff bytes | cache hits | misses | fallbacks | preparation ms | model ms | verification ms | publication ms | wall ms | worker compute ms | detail | correction |", "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |"];
+  for (const run of runs) lines.push(`| ${cell(run.name)} | ${run.findings.length} | ${run.grades.actionable ?? 0} | ${run.grades["priced-noise"] ?? 0} | ${run.grades["false-positive"] ?? 0} | ${run.grades.dropped ?? 0} | ${run.toolCalls} | ${run.toolErrors} | ${metric(run.nonzeroExits)} | ${metric(run.timeouts)} | ${run.diffCalls} | ${metric(run.diffBytes)} | ${run.cache.filter((item) => item.outcome === "hit").length} | ${run.cache.filter((item) => item.outcome === "miss").length} | ${run.cache.filter((item) => item.outcome === "fallback" || item.outcome === "invalidated" || item.outcome === "corrupt-recovered").length} | ${metric(run.timings.preparation_ms)} | ${metric(run.timings.model_ms)} | ${metric(run.timings.verification_ms)} | ${metric(run.timings.publication_ms)} | ${metric(run.timings.wall_ms)} | ${metric(run.timings.summed_worker_compute_ms)} | ${run.toolDetailComplete ? "complete" : "aggregate-only"} | ${run.schemaCorrection ? "yes" : "no"} |`);
   for (const run of runs) {
     lines.push("", `## ${cell(run.name)}`, "", `- Model: \`${cell(run.model)}\` (${cell(run.thinking)})`, `- System prompt: \`${cell(run.prompt)}\``, `- Discovery: \`${cell(run.discovery)}\``, `- Coverage: ${Object.entries(run.coverage).map(([verdict, count]) => `${verdict}=${count}`).join(", ") || "none"}`, "", "### Published findings", "");
     if (run.findings.length === 0) lines.push("- None"); else for (const finding of run.findings) lines.push(`- **[${cell(finding.tier)}]** \`${cell(finding.file)}:${finding.line}\` — ${cell(finding.title)} (${cell(finding.id)})`);
@@ -97,6 +116,7 @@ export interface ReplayRunRecord {
     metrics: Record<string, number | null> | null;
     overflow: { count: number; bytes: number; ids: string[] } | null;
   };
+  metrics: { timings: TimingMetrics | null; cache: CacheMetric[] };
   failures: { tool: EventRecord[]; schema: EventRecord[]; gaps: string[]; error: string | null };
   coverage: unknown;
   targets: ReplayTargetRecord[];
@@ -128,7 +148,7 @@ function parseAdjudications(input: unknown): AdjudicationRecord[] {
 async function readJsonIfPresent(path: string): Promise<unknown> { try { return JSON.parse(await readFile(path, "utf8")); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; } }
 function parsedPhaseOutput(events: EventRecord[], phase: string): Record<string, unknown> | null {
   const parsed = events.filter((event) => event.event === "attempt_parsed" && event.phase === phase);
-  const text = payload(parsed.at(-1) ?? {} as EventRecord)?.assistant_text;
+  const text = payload(parsed[parsed.length - 1] ?? {} as EventRecord)?.assistant_text;
   if (typeof text !== "string") return null;
   try {
     const value = parseAssistantJson(text);
@@ -177,6 +197,20 @@ async function finalizedRun(runDir: string, loaded: LoadedCorpus, adjudications:
   const postWalkStream = postWalk ? resultRecord(postWalk.stream) : null;
   const postWalkMetrics = postWalkAccounting ? resultRecord(postWalkAccounting.metrics) : null;
   const postWalkOverflow = postWalkStream ? resultRecord(postWalkStream.overflow) : null;
+  const timingRecord = configuration ? resultRecord(configuration.timings) : null;
+  const cacheRecord = configuration ? resultRecord(configuration.cache) : null;
+  const cacheMetrics = optionalArray(cacheRecord?.artifacts)?.map((value): CacheMetric => {
+    const item = record(value, `${runDir}.run_configuration.cache.artifacts[]`);
+    return { artifact: String(item.artifact ?? "unknown"), outcome: String(item.outcome ?? "unknown"), key: String(item.key ?? ""), duration_ms: nullableNumber(item.duration_ms) ?? 0, bytes: nullableNumber(item.bytes), reason: String(item.reason ?? "unspecified") };
+  }) ?? [];
+  const timingMetrics: TimingMetrics | null = timingRecord ? {
+    preparation_ms: nullableNumber(timingRecord.preparation_ms),
+    model_ms: nullableNumber(timingRecord.model_ms),
+    verification_ms: nullableNumber(timingRecord.verification_ms),
+    publication_ms: nullableNumber(timingRecord.publication_ms),
+    wall_ms: nullableNumber(timingRecord.wall_ms),
+    summed_worker_compute_ms: nullableNumber(timingRecord.summed_worker_compute_ms),
+  } : null;
   return {
     run_id: runId, audit_path: basename(resolve(runDir)), validity: { status: valid ? "valid" : "invalid", reasons }, context_mode: contextMode,
     exact_range: rows[0] ? { base: rows[0].frozen.base, head: rows[0].frozen.head, range: rows[0].frozen.range } : null,
@@ -195,6 +229,7 @@ async function finalizedRun(runDir: string, loaded: LoadedCorpus, adjudications:
         ? { count: postWalkOverflow.count, bytes: postWalkOverflow.bytes, ids: postWalkOverflow.ids.map(String) }
         : null,
     },
+    metrics: { timings: timingMetrics, cache: cacheMetrics },
     failures: { tool: events.filter((event) => event.event === "execution_end" && payload(event)?.is_error === true).map(eventCopy), schema: events.filter((event) => event.event === "attempt_parse_failed").map(eventCopy), gaps: Array.isArray(manifest.gaps) ? manifest.gaps.map(String) : [], error: typeof manifest.error === "string" ? manifest.error : null },
     coverage: result?.coverage ?? null, targets,
   };

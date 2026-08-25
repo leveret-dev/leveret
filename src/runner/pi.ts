@@ -38,6 +38,7 @@ import {
 } from "./post-walk-leads.js";
 import { pathIsInside } from "../path.js";
 import { readWorkItem, type WorkItem } from "../work-item.js";
+import { cacheRunSchema } from "../review-cache.js";
 import {
   SPECIALIZED_SCHEDULER,
   TARGETED_VERIFIER_TOOLS,
@@ -410,6 +411,7 @@ function cliParams(argv: string[]): PiRunnerParams {
 }
 
 async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
+  const wallStartedAt = performance.now();
   const repo = process.env.LEVERET_REPO;
   const base = process.env.LEVERET_BASE;
   if (!repo || !base) throw new Error("LEVERET_REPO and LEVERET_BASE are required");
@@ -529,6 +531,21 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
     selected_mutation_ids: [...new Set(guidance.mutationLeads.map((lead) => lead.mutationId))].sort(),
     hashes: guidance.provenance,
   });
+  let cacheRun: unknown = {
+    schema: "leveret.review-cache-run/v1",
+    enabled: false,
+    incremental: null,
+    artifacts: [],
+    optional_dependency_sandbox: "disabled",
+    reason: "no host cache preparation record supplied",
+  };
+  if (process.env.LEVERET_CACHE_RUN) {
+    const cacheRunPath = await realpath(process.env.LEVERET_CACHE_RUN);
+    const canonicalRepo = await realpath(repo);
+    if (pathIsInside(canonicalRepo, cacheRunPath)) throw new Error("cache run record must remain outside the reviewed checkout");
+    cacheRun = cacheRunSchema.parse(JSON.parse(await readFile(cacheRunPath, "utf8")));
+  }
+  const preparationDurationMs = Math.max(0, performance.now() - wallStartedAt);
   
     const toolOutcomes = new Map<string, { timedOut: boolean; nonzeroExit: boolean }>();
     const serenaManifest = process.env.LEVERET_SERENA_BUNDLE
@@ -863,6 +880,15 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
       capabilities: { ...bundle.capabilities, ...(lspError ? { lsp_error: lspError } : {}) },
       tools: toolMetricsSummary(metrics),
       tool_calls: metrics,
+      cache: cacheRun,
+      timings: {
+        preparation_ms: preparationDurationMs,
+        model_ms: discoveryDurationMs + verificationDurationMs,
+        verification_ms: verificationDurationMs,
+        publication_ms: null,
+        wall_ms: Math.max(0, performance.now() - wallStartedAt),
+        summed_worker_compute_ms: metrics.reduce((total, metric) => total + metric.duration_ms, 0),
+      },
     };
     out.post_walk_leads = {
       stream: postWalkHandoff,

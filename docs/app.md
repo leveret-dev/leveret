@@ -315,6 +315,35 @@ are disabled. Metrics are captured durably by the Pi adapter.
 Without any runner configured, reviews are deterministic-only: engine findings
 post directly and the walkthrough says the agent lenses did not run.
 
+### Review cache
+
+The production App enables the host-owned versioned review cache by default at
+`$LEVERET_DATA/cache/review-v1`. Set `LEVERET_DATA` to a private directory outside
+every reviewed checkout; Leveret rejects roots that contain, or are contained by,
+the checkout and rejects symlink/path traversal. `LEVERET_CACHE=0` forces a
+deterministic cold run. Frozen replay uses the same cache by default, accepts
+`--cache-root PATH`, and supports `--no-cache` for cold comparisons.
+
+Entries are partitioned by the canonical repository identity and pull request.
+Exact base/head plus source, profile, tool, prompt/policy, trusted-base,
+guidance/card/rule, knowledge, and dependency-boundary identities form versioned
+keys. Cache files are data, never model instructions. Writes use immutable
+checksummed generations and an atomic current pointer; schema/checksum failures
+are recorded as `corrupt-recovered` and recomputed rather than treated as clean.
+The store is bounded to 512 MiB by default and a single artifact to 32 MiB.
+
+Each run records the exact prior-head-to-head range, affected paths, and every
+artifact decision (`hit`, `miss`, `invalidated`, `fallback`, or
+`corrupt-recovered`) with its reason, duration, and bytes. Source, policy, tool,
+card/rule, or knowledge uncertainty falls back to recomputing the owning
+artifact. Checkout-local graph indexes are always rebuilt; the optional
+dependency/tool sandbox is explicitly `disabled`. Preparation and result entries,
+finding lifecycle, and last-completed head advance only after successful result
+and audit finalization. Failed or partial runs leave last-completed unchanged.
+Mechanically persisting unchanged findings are retained in cache/audit data but
+not republished; new, moved, materially changed, and reopened findings remain
+publishable.
+
 ### Private audit traces
 
 Audit capture is enabled by default. The App creates each run beneath the host-owned
