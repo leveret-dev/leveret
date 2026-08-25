@@ -138,7 +138,8 @@ describe("Pi runtime isolation", () => {
     const repo = mkdtempSync(join(tmpdir(), "leveret-probe-"));
     const priorSecret = process.env.OPENAI_API_KEY;
     process.env.OPENAI_API_KEY = "must-not-leak";
-    const bundle = await buildPiTools(toolOptions(repo, true));
+    let observedOutcome: unknown;
+    const bundle = await buildPiTools({ ...toolOptions(repo, true), onToolOutcome: (_id, outcome) => { observedOutcome = outcome; } });
     const probe = bundle.tools.find((tool) => tool.name === "leveret_probe")!;
     try {
       const result = await probe.execute("p1", {
@@ -155,6 +156,7 @@ describe("Pi runtime isolation", () => {
         timed_out: false,
         truncated: { stdout: false, stderr: false },
       });
+      expect(observedOutcome).toEqual({ timedOut: false, nonzeroExit: true });
     } finally {
       if (priorSecret === undefined) delete process.env.OPENAI_API_KEY;
       else process.env.OPENAI_API_KEY = priorSecret;
@@ -506,13 +508,17 @@ describe("Pi result and metrics parsing", () => {
 
   it("summarizes phase-attributed tool events", () => {
     const summary = toolMetricsSummary([
-      { phase: "review", toolCallId: "1", toolName: "codegraph_explore", startedAt: 10, endedAt: 30, duration_ms: 20, isError: false, outcome: "success", input_bytes: 5, output_bytes: 8, output_tokens_estimate: 2, args_sha256: "a", server: "codegraph", cache: "unknown" },
-      { phase: "review", toolCallId: "2", toolName: "codegraph_explore", startedAt: 40, endedAt: 55, duration_ms: 15, isError: true, outcome: "error", input_bytes: 5, output_bytes: 8, output_tokens_estimate: 2, args_sha256: "b", server: "codegraph", cache: "unknown" },
-      { phase: "verify", toolCallId: "3", toolName: "lsp_references", startedAt: 60, endedAt: 70, duration_ms: 10, isError: false, outcome: "success", input_bytes: 5, output_bytes: 8, output_tokens_estimate: 2, args_sha256: "c", server: "serena", cache: "unknown" },
+      { phase: "review", toolCallId: "1", toolName: "codegraph_explore", startedAt: 10, endedAt: 30, duration_ms: 20, isError: false, outcome: "success", nonzero_exit: false, input_bytes: 5, output_bytes: 8, output_tokens_estimate: 2, args_sha256: "a", server: "codegraph", cache: "unknown" },
+      { phase: "review", toolCallId: "2", toolName: "codegraph_explore", startedAt: 40, endedAt: 55, duration_ms: 15, isError: true, outcome: "error", nonzero_exit: false, input_bytes: 5, output_bytes: 8, output_tokens_estimate: 2, args_sha256: "b", server: "codegraph", cache: "unknown" },
+      { phase: "verify", toolCallId: "3", toolName: "lsp_references", startedAt: 60, endedAt: 70, duration_ms: 10, isError: false, outcome: "success", nonzero_exit: false, input_bytes: 5, output_bytes: 8, output_tokens_estimate: 2, args_sha256: "c", server: "serena", cache: "unknown" },
+      { phase: "verify", toolCallId: "4", toolName: "leveret_probe", startedAt: 80, endedAt: 90, duration_ms: 10, isError: false, outcome: "success", nonzero_exit: true, input_bytes: 5, output_bytes: 8, output_tokens_estimate: 2, args_sha256: "d", server: "probe", cache: "n/a" },
     ]);
     expect(summary).toEqual({
-      review: { codegraph_explore: { calls: 2, errors: 1, duration_ms: 35 } },
-      verify: { lsp_references: { calls: 1, errors: 0, duration_ms: 10 } },
+      review: { codegraph_explore: { calls: 2, errors: 1, nonzero_exits: 0, duration_ms: 35 } },
+      verify: {
+        lsp_references: { calls: 1, errors: 0, nonzero_exits: 0, duration_ms: 10 },
+        leveret_probe: { calls: 1, errors: 0, nonzero_exits: 1, duration_ms: 10 },
+      },
     });
   });
 

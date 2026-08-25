@@ -51,6 +51,7 @@ async function jailedPath(root: string, requested = "."): Promise<string> {
 
 export interface PiToolOutcome {
   timedOut: boolean;
+  nonzeroExit: boolean;
 }
 
 class ToolExecutionError extends Error {
@@ -66,14 +67,15 @@ function annotateEvidence(tool: ToolDefinition, onOutcome?: (toolCallId: string,
     async execute(toolCallId, params, signal, onUpdate, context) {
       try {
         const result = await execute(toolCallId, params as never, signal, onUpdate, context);
-        const timedOut = (result.details as { timedOut?: unknown } | undefined)?.timedOut === true;
-        onOutcome?.(toolCallId, { timedOut });
+        const details = result.details as { timedOut?: unknown; nonzeroExit?: unknown } | undefined;
+        const timedOut = details?.timedOut === true;
+        onOutcome?.(toolCallId, { timedOut, nonzeroExit: details?.nonzeroExit === true });
         return {
           ...result,
           content: [{ type: "text" as const, text: `evidence_id: ${toolCallId}` }, ...result.content],
         };
       } catch (error) {
-        onOutcome?.(toolCallId, { timedOut: error instanceof ToolExecutionError && error.timedOut });
+        onOutcome?.(toolCallId, { timedOut: error instanceof ToolExecutionError && error.timedOut, nonzeroExit: false });
         throw error;
       }
     },
@@ -347,7 +349,7 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
             stdout: stdout.truncated || result.stdoutTruncated === true,
             stderr: stderr.truncated || result.stderrTruncated === true,
           },
-        }, { timedOut });
+        }, { timedOut, nonzeroExit: !timedOut && !result.signal && result.code !== 0 });
       },
     }));
   }

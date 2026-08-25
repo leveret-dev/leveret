@@ -7,6 +7,7 @@ interface ToolCall {
   toolName?: string;
   isError?: boolean;
   outcome?: string;
+  nonzero_exit?: boolean;
   output_bytes?: number;
 }
 
@@ -29,6 +30,7 @@ export interface RunSummary {
   toolCalls: number;
   toolErrors: number;
   timeouts: number | null;
+  nonzeroExits: number | null;
   diffCalls: number;
   diffBytes: number | null;
   toolDetailComplete: boolean;
@@ -76,6 +78,8 @@ export function summarizeResult(name: string, input: unknown): RunSummary {
   let aggregateCalls = 0;
   let aggregateErrors = 0;
   let aggregateDiffCalls = 0;
+  let aggregateNonzeroExits = 0;
+  let aggregateNonzeroComplete = true;
   for (const [phaseName, phaseValue] of Object.entries(aggregate)) {
     const phase = record(phaseValue, `${name}.run_configuration.tools.${phaseName}`);
     for (const [toolName, toolValue] of Object.entries(phase)) {
@@ -83,11 +87,14 @@ export function summarizeResult(name: string, input: unknown): RunSummary {
       const calls = Number(tool.calls ?? 0);
       aggregateCalls += calls;
       aggregateErrors += Number(tool.errors ?? 0);
+      if (typeof tool.nonzero_exits === "number") aggregateNonzeroExits += tool.nonzero_exits;
+      else aggregateNonzeroComplete = false;
       if (toolName === "leveret_diff") aggregateDiffCalls += calls;
     }
   }
   const detailComplete = aggregateCalls === 0 || aggregateCalls === toolCalls.length;
   const detailedDiffCalls = toolCalls.filter((call) => call.toolName === "leveret_diff");
+  const detailedNonzeroComplete = toolCalls.every((call) => typeof call.nonzero_exit === "boolean");
   return {
     name,
     model: String(configuration.model ?? "unknown"),
@@ -99,6 +106,9 @@ export function summarizeResult(name: string, input: unknown): RunSummary {
     toolCalls: aggregateCalls || toolCalls.length,
     toolErrors: aggregateCalls ? aggregateErrors : toolCalls.filter((call) => call.isError === true).length,
     timeouts: detailComplete ? toolCalls.filter((call) => call.outcome === "timeout").length : null,
+    nonzeroExits: aggregateCalls
+      ? aggregateNonzeroComplete ? aggregateNonzeroExits : null
+      : detailedNonzeroComplete ? toolCalls.filter((call) => call.nonzero_exit === true).length : null,
     diffCalls: aggregateCalls ? aggregateDiffCalls : detailedDiffCalls.length,
     diffBytes: detailComplete ? detailedDiffCalls.reduce((total, call) => total + (call.output_bytes ?? 0), 0) : null,
     toolDetailComplete: detailComplete,
@@ -117,11 +127,11 @@ export function renderBenchmarkReport(runs: RunSummary[]): string {
     "",
     "Generated mechanically from runner JSON. Semantic finding overlap and defect validity are intentionally not inferred.",
     "",
-    "| run | findings | actionable | priced-noise | false-positive | dropped | tool calls | errors | timeouts | diff calls | diff bytes | detail | correction |",
-    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+    "| run | findings | actionable | priced-noise | false-positive | dropped | tool calls | errors | nonzero exits | timeouts | diff calls | diff bytes | detail | correction |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
   ];
   for (const run of runs) {
-    lines.push(`| ${cell(run.name)} | ${run.findings.length} | ${run.grades.actionable ?? 0} | ${run.grades["priced-noise"] ?? 0} | ${run.grades["false-positive"] ?? 0} | ${run.grades.dropped ?? 0} | ${run.toolCalls} | ${run.toolErrors} | ${metric(run.timeouts)} | ${run.diffCalls} | ${metric(run.diffBytes)} | ${run.toolDetailComplete ? "complete" : "aggregate-only"} | ${run.schemaCorrection ? "yes" : "no"} |`);
+    lines.push(`| ${cell(run.name)} | ${run.findings.length} | ${run.grades.actionable ?? 0} | ${run.grades["priced-noise"] ?? 0} | ${run.grades["false-positive"] ?? 0} | ${run.grades.dropped ?? 0} | ${run.toolCalls} | ${run.toolErrors} | ${metric(run.nonzeroExits)} | ${metric(run.timeouts)} | ${run.diffCalls} | ${metric(run.diffBytes)} | ${run.toolDetailComplete ? "complete" : "aggregate-only"} | ${run.schemaCorrection ? "yes" : "no"} |`);
   }
   for (const run of runs) {
     lines.push("", `## ${cell(run.name)}`, "", `- Model: \`${cell(run.model)}\` (${cell(run.thinking)})`, `- System prompt: \`${cell(run.prompt)}\``, `- Coverage: ${Object.entries(run.coverage).map(([verdict, count]) => `${verdict}=${count}`).join(", ") || "none"}`, "", "### Published findings", "");

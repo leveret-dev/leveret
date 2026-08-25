@@ -21,8 +21,9 @@ const result = {
     thinking: "high",
     system_prompt: { version: "2", sha256: "abc" },
     tool_calls: [
-      { phase: "review", toolName: "leveret_diff", isError: false, outcome: "success", output_bytes: 1000 },
-      { phase: "verify-correction", toolName: "leveret_probe", isError: true, outcome: "timeout", output_bytes: 10 },
+      { phase: "review", toolName: "leveret_diff", isError: false, outcome: "success", nonzero_exit: false, output_bytes: 1000 },
+      { phase: "verify-correction", toolName: "leveret_probe", isError: true, outcome: "timeout", nonzero_exit: false, output_bytes: 10 },
+      { phase: "verify", toolName: "leveret_probe", isError: false, outcome: "success", nonzero_exit: true, output_bytes: 20 },
     ],
   },
 };
@@ -34,8 +35,9 @@ describe("benchmark report", () => {
       findings: [{ id: "R1", title: "real defect" }],
       grades: { actionable: 1, "priced-noise": 1 },
       coverage: { findings: 1, "considered-fine": 1 },
-      toolCalls: 2,
+      toolCalls: 3,
       toolErrors: 1,
+      nonzeroExits: 1,
       timeouts: 1,
       diffCalls: 1,
       diffBytes: 1000,
@@ -44,7 +46,7 @@ describe("benchmark report", () => {
     });
     const markdown = renderBenchmarkReport([summary]);
     expect(markdown).toContain("Generated mechanically from runner JSON");
-    expect(markdown).toContain("| fixture | 1 | 1 | 1 | 0 | 0 | 2 | 1 | 1 | 1 | 1000 | complete | yes |");
+    expect(markdown).toContain("| fixture | 1 | 1 | 1 | 0 | 0 | 3 | 1 | 1 | 1 | 1 | 1000 | complete | yes |");
     expect(markdown).toContain("`src/a.ts:4` — real defect (R1)");
     expect(markdown).toContain("Semantic finding overlap and defect validity are intentionally not inferred");
   });
@@ -66,11 +68,12 @@ describe("benchmark report", () => {
     expect(summary).toMatchObject({
       toolCalls: 5,
       toolErrors: 1,
+      nonzeroExits: null,
       timeouts: null,
       diffCalls: 2,
       diffBytes: null,
       toolDetailComplete: false,
     });
-    expect(renderBenchmarkReport([summary])).toContain("| aggregate | 1 | 1 | 1 | 0 | 0 | 5 | 1 | unknown | 2 | unknown | aggregate-only | no |");
+    expect(renderBenchmarkReport([summary])).toContain("| aggregate | 1 | 1 | 1 | 0 | 0 | 5 | 1 | unknown | unknown | 2 | unknown | aggregate-only | no |");
   });
 });

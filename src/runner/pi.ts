@@ -96,6 +96,7 @@ export interface ToolMetric {
   duration_ms: number;
   isError: boolean;
   outcome: "success" | "error" | "timeout";
+  nonzero_exit: boolean;
   input_bytes: number;
   output_bytes: number;
   output_tokens_estimate: number;
@@ -112,13 +113,14 @@ export function classifyAuth(type: "api_key" | "oauth" | undefined, subscription
   return type === "oauth" ? subscription ? "subscription-oauth" : "oauth" : "api-key-or-local";
 }
 
-export function toolMetricsSummary(metrics: ToolMetric[]): Record<string, Record<string, { calls: number; errors: number; duration_ms: number }>> {
-  const result: Record<string, Record<string, { calls: number; errors: number; duration_ms: number }>> = {};
+export function toolMetricsSummary(metrics: ToolMetric[]): Record<string, Record<string, { calls: number; errors: number; nonzero_exits: number; duration_ms: number }>> {
+  const result: Record<string, Record<string, { calls: number; errors: number; nonzero_exits: number; duration_ms: number }>> = {};
   for (const metric of metrics) {
     const phase = (result[metric.phase] ??= {});
-    const entry = (phase[metric.toolName] ??= { calls: 0, errors: 0, duration_ms: 0 });
+    const entry = (phase[metric.toolName] ??= { calls: 0, errors: 0, nonzero_exits: 0, duration_ms: 0 });
     entry.calls++;
     if (metric.isError) entry.errors++;
+    if (metric.nonzero_exit) entry.nonzero_exits++;
     entry.duration_ms += Math.max(0, metric.endedAt - metric.startedAt);
   }
   return result;
@@ -167,7 +169,7 @@ export interface RunPhaseOptions {
   systemPrompt: string;
   tools: Awaited<ReturnType<typeof buildPiTools>>["tools"];
   metrics: ToolMetric[];
-  toolOutcomes: Map<string, { timedOut: boolean }>;
+  toolOutcomes: Map<string, { timedOut: boolean; nonzeroExit: boolean }>;
   audit?: AuditWriter;
   createSession?: typeof createAgentSession;
 }
@@ -251,7 +253,8 @@ export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
               ? "probe"
               : "leveret";
         const endedAt = Date.now();
-        const timedOut = options.toolOutcomes.get(event.toolCallId)?.timedOut === true;
+        const toolOutcome = options.toolOutcomes.get(event.toolCallId);
+        const timedOut = toolOutcome?.timedOut === true;
         options.metrics.push({
           phase: options.phase,
           toolCallId: event.toolCallId,
@@ -261,6 +264,7 @@ export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
           duration_ms: Math.max(0, endedAt - (start?.at ?? endedAt)),
           isError: event.isError,
           outcome: classifyToolOutcome(event.isError, timedOut),
+          nonzero_exit: toolOutcome?.nonzeroExit === true,
           input_bytes: start?.inputBytes ?? 0,
           output_bytes: Buffer.byteLength(output),
           output_tokens_estimate: Math.ceil(Buffer.byteLength(output) / 4),
@@ -396,7 +400,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
   }
   let bundle: Awaited<ReturnType<typeof buildPiTools>> | undefined;
   try {
-    const toolOutcomes = new Map<string, { timedOut: boolean }>();
+    const toolOutcomes = new Map<string, { timedOut: boolean; nonzeroExit: boolean }>();
     const serenaManifest = process.env.LEVERET_SERENA_BUNDLE
       ? join(process.env.LEVERET_SERENA_BUNDLE, "leveret-lsp-manifest.json")
       : undefined;
