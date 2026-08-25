@@ -56,14 +56,14 @@ Raw output: [archive](2026-08-24-pi-quality-raw-output.tar.gz).
 | PR | CR snapshot | Leads | Pi | Valid | CR accepted | Overlap |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | pfBlockerNG #2444 | `ed359c6` | 0 | 4 | 4 | 6 | 0 |
-| pfBlockerNG #2521 | `b312a6d` | 24 | 2 | 0 | 7 | 0 |
-| **Total** | | | **6** | **4** | **13** | **0/13** |
+| pfBlockerNG #2521 | `b312a6d` | 24 | 2 | 0 | 6 | 0 |
+| **Total** | | | **6** | **4** | **12** | **0/12** |
 
 These are not second reviews of the fixed PR heads. All six top-level CodeRabbit
 comments on #2444 identify `ed359c691...` as their `original_commit_id`, and all
 seven on #2521 identify `b312a6def...`. Leveret checked out those exact commits
 directly, before any response fixes. The later `aaf8019` and `0bdd7d9` heads do
-not contribute to this 0/13 result.
+not contribute to this 0/12 result.
 
 The four #2444 findings are evidence-backed defects CodeRabbit missed: failed
 refresh overwrites a working conf, `pkg info -l` failure passes verification,
@@ -71,10 +71,12 @@ refresh overwrites a working conf, `pkg info -l` failure passes verification,
 fail-open. Pi found none of CodeRabbit's six findings on the same source tree.
 
 Both #2521 findings were the already-priced mutable-Action-tag class, so
-publishing them would be noise. Pi missed all seven CodeRabbit findings on the
-same source tree.
+publishing them would be noise. Pi missed all six accepted CodeRabbit findings
+on the same source tree. CodeRabbit posted a seventh suggestion about the GNU-tar
+assertion, but the maintainer skipped it with executed reasoning: changing the
+assertion to `/usr/sbin/tar` would make the check tautological.
 
-The adoption recall gate still fails: **0/13**, now measured on valid pre-fix
+The adoption recall gate still fails: **0/12**, now measured on valid pre-fix
 snapshots rather than final heads. The systems remain complementary, not
 substitutable.
 
