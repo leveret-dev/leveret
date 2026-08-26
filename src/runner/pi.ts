@@ -48,6 +48,7 @@ import {
 } from "./experiment.js";
 import {
   SPECIALIZED_DISCOVERY,
+  SPECIALIZED_LEG_DEFINITIONS,
   TARGETED_VERIFIER_TOOLS,
   discoveryMode,
   phaseToolIdentity,
@@ -617,6 +618,45 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
         throw new Error("work-item base/head identity does not match the reviewed checkout");
       }
     }
+    const identityDiscoveryTools = runtime.discoveryMode === "single"
+      ? bundle.tools.filter((tool) => tool.name !== "leveret_scan")
+      : SPECIALIZED_LEG_DEFINITIONS.map((definition) => ({
+          id: definition.id,
+          tools: phaseToolIdentity(selectPhaseTools(bundle!.tools, definition.requiredTools, definition.optionalTools)),
+        }));
+    const identityVerifierTools = phaseToolIdentity(selectPhaseTools(bundle.tools, TARGETED_VERIFIER_TOOLS.required, TARGETED_VERIFIER_TOOLS.optional, true));
+    const configurationIdentities = {
+      prompt_sha256: stableSha256({
+        discovery: runtime.discoveryMode === "specialized/v1"
+          ? SPECIALIZED_DISCOVERY
+          : { id: "single/v1", system_prompt_version: PI_SYSTEM_PROMPT_VERSION },
+        verifier: { id: "targeted-verifier/v1", system_prompt_version: PI_SYSTEM_PROMPT_VERSION },
+      }),
+      tool_sha256: stableSha256({
+        discovery: runtime.discoveryMode === "single"
+          ? phaseToolIdentity(identityDiscoveryTools as typeof bundle.tools)
+          : identityDiscoveryTools,
+        verifier: identityVerifierTools,
+      }),
+      policy_sha256: stableSha256({ system_prompt_version: PI_SYSTEM_PROMPT_VERSION, discovery_contract: runtime.discoveryMode === "specialized/v1" ? SPECIALIZED_DISCOVERY : "single", verifier_role: "targeted-verifier", http_idle_timeout_ms: 0 }),
+      card_sha256: guidance.provenance.cardSetSha256,
+      rule_sha256: guidance.provenance.ruleSetSha256,
+      cache_sha256: stableSha256({
+        schema: (cacheRun as Record<string, unknown>).schema,
+        enabled: (cacheRun as Record<string, unknown>).enabled === true,
+        optional_dependency_sandbox: (cacheRun as Record<string, unknown>).optional_dependency_sandbox,
+      }),
+    };
+    if (process.env.LEVERET_IDENTITY_ONLY === "1") {
+      process.stdout.write(JSON.stringify({
+        schema: "leveret.experiment-identities/v1",
+        discovery_mode: runtime.discoveryMode,
+        scheduler: runtime.discoveryMode === "single" ? null : runtime.discoveryScheduler,
+        routing: { schema: routing.config.schema, sha256: routing.sha256 },
+        identities: configurationIdentities,
+      }, null, 2));
+      return;
+    }
     const changedFiles = runtime.discoveryMode === "single" ? evidencePack.files.map((file) => file.path) : evidence.manifest.files.map((file) => file.path);
     let specialized: SpecializedDiscoveryResult | undefined;
     const legRuns: Array<Record<string, unknown>> = [];
@@ -855,26 +895,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
     const authCheck = await modelRuntime.checkAuth(verifierRoute.provider).catch(() => undefined);
     const subscriptionOAuth = authCheck?.type === "oauth"
       && modelRuntime.getProvider(verifierRoute.provider)?.auth.oauth?.isSubscription === true;
-    const runIdentities = {
-      prompt_sha256: stableSha256({
-        discovery: specialized
-          ? SPECIALIZED_DISCOVERY
-          : { id: "single/v1", system_prompt_version: PI_SYSTEM_PROMPT_VERSION },
-        verifier: { id: "targeted-verifier/v1", system_prompt_version: PI_SYSTEM_PROMPT_VERSION },
-      }),
-      tool_sha256: stableSha256({
-        discovery: specialized ? legRuns.map((leg) => ({ id: leg.id, tools: leg.tools })) : singleDiscoveryIdentity?.tools,
-        verifier: verifierToolIdentity,
-      }),
-      policy_sha256: stableSha256({ system_prompt_version: PI_SYSTEM_PROMPT_VERSION, discovery_contract: specialized ? SPECIALIZED_DISCOVERY : "single", verifier_role: "targeted-verifier", http_idle_timeout_ms: 0 }),
-      card_sha256: guidance.provenance.cardSetSha256,
-      rule_sha256: guidance.provenance.ruleSetSha256,
-      cache_sha256: stableSha256({
-        schema: (cacheRun as Record<string, unknown>).schema,
-        enabled: (cacheRun as Record<string, unknown>).enabled === true,
-        optional_dependency_sandbox: (cacheRun as Record<string, unknown>).optional_dependency_sandbox,
-      }),
-    };
+    const runIdentities = configurationIdentities;
     const out = verify as Record<string, unknown>;
     out.run_configuration = {
       harness: `pi/${PI_VERSION}`,
