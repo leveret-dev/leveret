@@ -7,6 +7,7 @@ import type { ChangeManifest } from "../change-evidence.js";
 import type { EvidencePack, FileDisposition, FileKind } from "../evidence-pack.js";
 import type { GuidanceResult } from "../semantic-checks.js";
 import type { WorkItemContext } from "./pi.js";
+import { MECHANISM_CHECKLISTS, MECHANISM_CHECKLIST_SET_SHA256, selectMechanismChecklists } from "./mechanism-checklists.js";
 
 export type DiscoveryMode = "single" | "specialized/v1";
 export type DiscoveryLegId = "correctness" | "test-honesty" | "contract-operability";
@@ -54,11 +55,22 @@ const localCoverageFileSchema = z.object({
   }
 });
 
+const localChecklistSchema = z.object({
+  id: text,
+  state: z.enum(["examined", "unresolved"]),
+  note: text.optional(),
+}).strict().superRefine((checklist, ctx) => {
+  if (checklist.state === "unresolved" && !checklist.note) {
+    ctx.addIssue({ code: "custom", path: ["note"], message: "unresolved checklists require a reason" });
+  }
+});
+
 const localOutputSchema = z.object({
   leg_id: text,
   concerns: z.array(localConcernSchema),
   coverage: z.object({
     files: z.array(localCoverageFileSchema),
+    checklists: z.array(localChecklistSchema).default([]),
     stopping: z.object({ rule: text, reason: text }).strict(),
   }).strict(),
 }).strict();
@@ -91,16 +103,18 @@ const OUTPUT_CONTRACT = `Return only this strict JSON object (no extra keys):
  }],
  "coverage": {
   "files": [{"file": "every assigned path exactly once", "state": "examined|unexamined", "note": "required when unexamined", "evidence_ids": []}],
+  "checklists": [{"id": "every host-selected checklist ID exactly once", "state": "examined|unresolved", "note": "required when unresolved"}],
   "stopping": {"rule": "the exact packaged stopping rule", "reason": "why it fired"}
  }
 }
 
 Finalization checklist:
-1. Account for every assigned file exactly once; mark blocked work unexamined instead of making more exploratory calls.
-2. Use at most one batched patch request and one targeted follow-up per assigned file.
-3. Keep concern IDs unique and cite only evidence IDs actually returned by tools.
-4. Omit correlation for in-diff concerns; use a non-empty correlation only for out-of-diff concerns.
-5. Emit the JSON object immediately after completing the ledger; no narration or additional tool calls.`;
+1. Complete every host-selected input checklist and account for its ID exactly once; unresolved items need a concrete reason.
+2. Account for every assigned file exactly once; mark blocked work unexamined instead of making more exploratory calls.
+3. Use at most one batched patch request and one targeted follow-up per assigned file.
+4. Keep concern IDs unique and cite only evidence IDs actually returned by tools.
+5. Omit correlation for in-diff concerns; use a non-empty correlation only for out-of-diff concerns.
+6. Emit the JSON object immediately after completing both ledgers; no narration or additional tool calls.`;
 
 const SOURCES: readonly DefinitionSource[] = [
   {
@@ -206,6 +220,7 @@ function relevantCards(guidance: GuidanceResult, files: FileDisposition[]): Guid
 export interface DiscoveryLegPlan {
   definition: DiscoveryLegDefinition;
   assignedFiles: string[];
+  checklistIds: string[];
   input: Record<string, unknown>;
   inputSha256: string;
   prompt: string;
@@ -226,6 +241,7 @@ export function buildDiscoveryLegPlans(
     const manifestFiles = manifest.files.filter((file) => assignedSet.has(file.path));
     const workflowFacts = evidencePack.workflows.files.filter((workflow) => assignedSet.has(workflow.path));
     const cards = relevantCards(guidance, fileFacts);
+    const checklists = selectMechanismChecklists(definition.id, evidencePack, assignedFiles);
     const omittedEvidenceFiles = evidencePack.files.filter((file) => !assignedSet.has(file.path));
     const omittedManifestFiles = manifest.files.filter((file) => !assignedSet.has(file.path));
     const omittedWorkflows = evidencePack.workflows.files.filter((workflow) => !assignedSet.has(workflow.path));
@@ -255,6 +271,10 @@ export function buildDiscoveryLegPlans(
         provenance: guidance.provenance,
         cardReferences: cards.map((card) => ({ id: card.id, version: card.version, invariant: card.invariant, limitations: card.limitations, source_sha256: card.source.sha256 })),
       },
+      checklists: {
+        set_sha256: MECHANISM_CHECKLIST_SET_SHA256,
+        items: checklists.map(({ selector: _selector, leg: _leg, ...checklist }) => checklist),
+      },
       work_item: workItem.mode === "review-context" ? workItem.workItem : { context_mode: "diff-only", availability: "unavailable" },
       omissions: {
         manifest_files: { items: omittedManifestFiles.length, bytes: bytes(omittedManifestFiles) },
@@ -268,6 +288,11 @@ export function buildDiscoveryLegPlans(
         semantic_rule_leads: { items: guidance.ruleLeads.length, bytes: bytes(guidance.ruleLeads), reason: "excluded from unconstrained specialized discovery" },
         mutation_leads: { items: guidance.mutationLeads.length, bytes: bytes(guidance.mutationLeads), reason: "excluded from unconstrained specialized discovery" },
         residual_questions: { items: guidance.residualQuestions.length, bytes: bytes(guidance.residualQuestions), reason: "reserved for post-walk work" },
+        mechanism_checklists: {
+          items: MECHANISM_CHECKLISTS.length - checklists.length,
+          ids: MECHANISM_CHECKLISTS.filter((checklist) => !checklists.includes(checklist)).map((checklist) => checklist.id),
+          reason: "selector did not match this leg's deterministic assigned facts",
+        },
         corpus_target_text: { items: 0, bytes: 0, reason: "not accepted as runner input" },
       },
     };
@@ -275,6 +300,7 @@ export function buildDiscoveryLegPlans(
     return {
       definition,
       assignedFiles,
+      checklistIds: checklists.map((checklist) => checklist.id),
       input,
       inputSha256: hash(serialized),
       prompt: `## Host-owned specialized discovery input\n${serialized}`,
@@ -332,6 +358,11 @@ export function parseDiscoveryLegOutput(plan: DiscoveryLegPlan, output: unknown)
   }
   const covered = new Set(coverageFiles);
   for (const file of plan.assignedFiles) if (!covered.has(file)) throw new Error(`${plan.definition.id} leg omitted assigned file ${file}`);
+  const checklistIds = parsed.coverage.checklists.map((checklist) => checklist.id);
+  if (new Set(checklistIds).size !== checklistIds.length) throw new Error(`${plan.definition.id} leg returned duplicate checklist coverage`);
+  const expectedChecklistIds = new Set(plan.checklistIds);
+  for (const id of checklistIds) if (!expectedChecklistIds.has(id)) throw new Error(`${plan.definition.id} leg returned foreign checklist ${id}`);
+  for (const id of plan.checklistIds) if (!checklistIds.includes(id)) throw new Error(`${plan.definition.id} leg omitted checklist ${id}`);
   return parsed;
 }
 
