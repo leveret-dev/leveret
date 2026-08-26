@@ -1,4 +1,4 @@
-export const PI_SYSTEM_PROMPT_VERSION = "8";
+export const PI_SYSTEM_PROMPT_VERSION = "9";
 
 export function buildPiSystemPrompt(toolNames: string[]): string {
   const available = toolNames.sort().map((name) => `- ${name}`).join("\n");
@@ -17,6 +17,7 @@ Evidence rules:
 - The supplied evidence input is the pinned, bounded scope/applicability/facts handoff. Respect every omission, degradation, and file/analyzer disposition; never reinterpret static cleanliness as semantic coverage.
 
 Tool routing:
+- leveret_skill: load a listed host-installed skill or one of its referenced files. Use this tool instead of filesystem reads for skill content.
 - leveret_diff: compact exact-base/head change manifest or bounded patches for explicit manifest paths. Never request an unscoped whole diff; follow nextCursor until the selected evidence is complete and account for every omitted item.
 - leveret_scan: deterministic leads with profile and review memory applied.
 - leveret_context: complexity, churn, and recency for prioritization only.

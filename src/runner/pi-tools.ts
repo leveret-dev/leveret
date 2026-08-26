@@ -106,6 +106,7 @@ export interface PiToolsOptions {
   graphify?: { bin: string; graphPath: string; indexedNodes?: number; indexedEdges?: number };
   sandboxed: boolean;
   serena?: SerenaBridge;
+  hostSkills?: Array<{ name: string; filePath: string; baseDir: string }>;
   profilePath: string;
   rulesRoot: string;
   memoryRepo: string;
@@ -137,7 +138,37 @@ export interface PiToolsBundle {
 
 export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBundle> {
   const { repo } = options;
+  const hostSkills = new Map((options.hostSkills ?? []).map((skill) => [skill.name, skill]));
   const tools: ToolDefinition[] = [
+    ...(hostSkills.size > 0
+      ? [defineTool({
+          name: "leveret_skill",
+          label: "Read host skill",
+          description: "Load trusted host-installed skill instructions or one of their referenced files. Use this instead of a filesystem read for skills listed in the system prompt.",
+          parameters: Type.Object({
+            name: Type.String(),
+            path: Type.Optional(Type.String()),
+          }),
+          async execute(_id, params) {
+            const skill = hostSkills.get(params.name);
+            if (!skill) throw new Error(`unknown host skill: ${params.name}`);
+            const requested = params.path ?? relative(skill.baseDir, skill.filePath);
+            if (isAbsolute(requested)) throw new Error("host skill paths must be relative");
+            const baseDir = await realpath(skill.baseDir);
+            const path = await realpath(resolve(baseDir, requested));
+            if (!pathIsInside(baseDir, path)) throw new Error("host skill path escapes its skill directory");
+            const raw = await readFile(path);
+            if (raw.includes(0)) throw new Error("binary skill resources are not readable");
+            const limit = 100_000;
+            return text(raw.subarray(0, limit).toString("utf8"), {
+              skill: params.name,
+              path: relative(baseDir, path),
+              bytes: raw.length,
+              truncated: raw.length > limit,
+            });
+          },
+        })]
+      : []),
     defineTool({
       name: "leveret_read",
       label: "Read reviewed file",

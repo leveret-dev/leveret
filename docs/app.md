@@ -264,13 +264,16 @@ node dist/app/server.js
 | `--max-time` | `LEVERET_RUNNER_MAX_TIME` | `30m` per phase |
 | `--discovery-mode` | `LEVERET_DISCOVERY_MODE` | `single` |
 
-Pi runs from in-memory settings and a host-owned, per-attempt session store with a
-Leveret-owned resource loader and an exact tool allowlist. No project-local
-settings, extensions, skills, templates,
-themes, context files, MCP configuration, system prompts, or executable discovery
-can extend it. `PI_OFFLINE=1`, `PI_TELEMETRY=0`, and
-`PI_SKIP_VERSION_CHECK=1` are enforced by the runner. A custom `LEVERET_RUNNER`
-command is the escape hatch for other harnesses; it receives
+Pi runs from in-memory sessions in a host-owned per-attempt directory. Its resource
+loader accepts trusted host Pi/OMP extensions and hooks, Pi/Claude/Codex skills,
+prompt templates, and host context. The reviewed checkout is not Pi's working
+directory, so project-local settings, extensions, hooks, skills, templates, themes,
+context files, MCP configuration, system prompts, and executables cannot extend the
+session. `PI_OFFLINE=1`, `PI_TELEMETRY=0`, and `PI_SKIP_VERSION_CHECK=1` are
+enforced by the runner. Extra host resource paths may be supplied with
+`LEVERET_PI_EXTENSION_PATHS`, `LEVERET_PI_SKILL_PATHS`, and
+`LEVERET_PI_PROMPT_PATHS` using the platform path delimiter. A custom
+`LEVERET_RUNNER` command is the escape hatch for other harnesses; it receives
 `LEVERET_REPO`, `LEVERET_BASE`, `LEVERET_CHANGE_MANIFEST`,
 `LEVERET_EVIDENCE_PACK` and its required `LEVERET_EVIDENCE_PACK_SHA256`,
 `LEVERET_GUIDANCE` and its required `LEVERET_GUIDANCE_SHA256`,
@@ -329,10 +332,12 @@ phase. Its dashboard, HTTP stats endpoint, GUI, tray process, and anonymous usag
 reporting are disabled. Metrics and seed-file/language readiness are captured
 durably by the Pi adapter.
 
-CodeGraph and Graphify are also prebuilt before the runner starts. They are
-registered directly as fixed Pi tools; global agent hooks or checkout-provided
-skills are neither required nor trusted. Override binaries with
-`LEVERET_CODEGRAPH_BIN` and `LEVERET_GRAPHIFY_BIN`.
+CodeGraph and Graphify are also prebuilt before the runner starts and registered
+through fixed Pi adapters. Serena is connected through its read-only MCP adapter.
+These adapters cover tools without native Pi integration, while tool-provided host
+skills and hooks remain available through Pi's resource loader. Checkout-provided
+resources remain untrusted. Override binaries with `LEVERET_CODEGRAPH_BIN` and
+`LEVERET_GRAPHIFY_BIN`.
 
 Without any runner configured, reviews are deterministic-only: engine findings
 post directly and the walkthrough says the agent lenses did not run.

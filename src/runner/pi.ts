@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import {
   createAgentSession,
-  createExtensionRuntime,
+  DefaultResourceLoader,
   getAgentDir,
   ModelRuntime,
   resolveCliModel,
@@ -11,10 +11,10 @@ import {
   type ResourceLoader,
 } from "@earendil-works/pi-coding-agent";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { homedir, hostname, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { auditConfig, openRunnerAudit, withAuditTrace, type AuditWriter } from "../audit.js";
 import { ensureChangeEvidence } from "../change-evidence.js";
 import { changeManifestSha256, createEvidencePack, loadEvidencePack, writeEvidencePack, type EvidencePack } from "../evidence-pack.js";
@@ -131,21 +131,73 @@ export function startupIndexProblem(state: StartupIndexState): string | null {
   return null;
 }
 
-export function buildPiResourceLoader(systemPrompt: string): ResourceLoader {
-  const extensions = { extensions: [], errors: [], runtime: createExtensionRuntime() };
-  return {
-    getExtensions: () => extensions,
-    getSkills: () => ({ skills: [], diagnostics: [] }),
-    getPrompts: () => ({ prompts: [], diagnostics: [] }),
-    getThemes: () => ({ themes: [], diagnostics: [] }),
-    getAgentsFiles: () => ({ agentsFiles: [] }),
-    getSystemPrompt: () => systemPrompt,
-    getSystemPromptSource: () => undefined,
-    getAppendSystemPrompt: () => [],
-    getAppendSystemPromptSources: () => [],
-    extendResources: () => {},
-    reload: async () => {},
-  };
+export interface PiHostResourceOptions {
+  cwd: string;
+  agentDir?: string;
+  home?: string;
+  env?: Record<string, string | undefined>;
+}
+
+function existingPaths(paths: string[]): string[] {
+  return [...new Set(paths.filter((path) => existsSync(path)))];
+}
+
+function configuredPaths(value: string | undefined): string[] {
+  return value?.split(delimiter).map((path) => resolve(path)).filter(Boolean) ?? [];
+}
+
+function ompPackageExtensions(home: string): string[] {
+  const packageRoot = join(home, ".omp", "plugins");
+  const packageFile = join(packageRoot, "package.json");
+  if (!existsSync(packageFile)) return [];
+  try {
+    const root = JSON.parse(readFileSync(packageFile, "utf8")) as { dependencies?: Record<string, string> };
+    const extensions: string[] = [];
+    for (const name of Object.keys(root.dependencies ?? {})) {
+      const packageDir = join(packageRoot, "node_modules", name);
+      const manifest = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")) as {
+        pi?: { extensions?: unknown };
+        omp?: { extensions?: unknown };
+      };
+      const configured = manifest.pi?.extensions ?? manifest.omp?.extensions;
+      if (!Array.isArray(configured)) continue;
+      for (const entry of configured) {
+        if (typeof entry !== "string") continue;
+        const path = resolve(packageDir, entry);
+        if (pathIsInside(packageDir, path)) extensions.push(path);
+      }
+    }
+    return existingPaths(extensions);
+  } catch {
+    return [];
+  }
+}
+
+/** Load trusted host resources while the untrusted reviewed checkout remains outside Pi's cwd. */
+export function buildPiResourceLoader(systemPrompt: string, options: PiHostResourceOptions): ResourceLoader {
+  const home = options.home ?? homedir();
+  const env = options.env ?? process.env;
+  const agentDir = options.agentDir ?? env.LEVERET_PI_AGENT_DIR ?? getAgentDir();
+  return new DefaultResourceLoader({
+    cwd: options.cwd,
+    agentDir,
+    settingsManager: SettingsManager.create(options.cwd, agentDir),
+    systemPrompt,
+    additionalExtensionPaths: existingPaths([
+      ...ompPackageExtensions(home),
+      ...configuredPaths(env.LEVERET_PI_EXTENSION_PATHS),
+    ]),
+    additionalSkillPaths: existingPaths([
+      join(home, ".claude", "skills"),
+      join(home, ".codex", "skills"),
+      ...configuredPaths(env.LEVERET_PI_SKILL_PATHS),
+    ]),
+    additionalPromptTemplatePaths: existingPaths([
+      join(home, ".claude", "commands"),
+      join(home, ".codex", "prompts"),
+      ...configuredPaths(env.LEVERET_PI_PROMPT_PATHS),
+    ]),
+  });
 }
 
 export function parseAssistantJson(value: string): unknown {
@@ -277,7 +329,8 @@ export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
       },
       { projectTrusted: false },
     );
-    const resourceLoader = buildPiResourceLoader(options.systemPrompt);
+    const resourceLoader = buildPiResourceLoader(options.systemPrompt, { cwd: options.runtimeDir });
+    await resourceLoader.reload({ resolveProjectTrust: async () => false });
     const toolNames = options.tools.map((tool) => tool.name);
     const persistNativeSession = options.audit?.nativeSessionsEnabled() === true;
     const sessionManager = SessionManager.inMemory(options.runtimeDir);
@@ -288,18 +341,18 @@ export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
       system_prompt_sha256: createHash("sha256").update(options.systemPrompt).digest("hex"),
       system_prompt_insertion_count: 1,
       system_prompt_reinsertion_count: 0,
-      tools: options.tools.map((tool) => ({ name: tool.name, description: tool.description, parameters: tool.parameters })),
-      resources: { extensions: [], skills: [], prompts: [], themes: [], agents_files: [] },
+      resources: {
+        extensions: resourceLoader.getExtensions().extensions.map((extension) => extension.resolvedPath),
+        extension_errors: resourceLoader.getExtensions().errors,
+        skills: resourceLoader.getSkills().skills.map((skill) => ({ name: skill.name, path: skill.filePath })),
+        skill_diagnostics: resourceLoader.getSkills().diagnostics,
+        prompts: resourceLoader.getPrompts().prompts.map((prompt) => ({ name: prompt.name, path: prompt.filePath })),
+        prompt_diagnostics: resourceLoader.getPrompts().diagnostics,
+        themes: resourceLoader.getThemes().themes.map((theme) => theme.name),
+        agents_files: resourceLoader.getAgentsFiles().agentsFiles.map((file) => file.path),
+      },
     }, { phase: options.phase, attempt });
     const phaseThinking = options.thinking ?? options.runtime.thinking;
-    await options.audit?.record("provider", "request_metadata", {
-      provider: options.model.provider,
-      model: options.model.id,
-      api: options.model.api,
-      thinking: phaseThinking,
-      prompt_sha256: createHash("sha256").update(options.prompt).digest("hex"),
-      system_prompt_sha256: createHash("sha256").update(options.systemPrompt).digest("hex"),
-    }, { phase: options.phase, attempt });
     const { session } = await (options.createSession ?? createAgentSession)({
       cwd: options.runtimeDir,
       agentDir: process.env.LEVERET_PI_AGENT_DIR ?? getAgentDir(),
@@ -312,6 +365,20 @@ export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
       sessionManager,
       settingsManager,
     });
+    const effectiveSystemPrompt = session.systemPrompt || options.systemPrompt;
+    await options.audit?.record("prompts", "effective_prompt", {
+      system_prompt: effectiveSystemPrompt,
+      system_prompt_sha256: createHash("sha256").update(effectiveSystemPrompt).digest("hex"),
+      active_tools: typeof session.getActiveToolNames === "function" ? session.getActiveToolNames() : toolNames,
+    }, { phase: options.phase, attempt, sessionId: session.sessionId });
+    await options.audit?.record("provider", "request_metadata", {
+      provider: options.model.provider,
+      model: options.model.id,
+      api: options.model.api,
+      thinking: phaseThinking,
+      prompt_sha256: createHash("sha256").update(options.prompt).digest("hex"),
+      system_prompt_sha256: createHash("sha256").update(effectiveSystemPrompt).digest("hex"),
+    }, { phase: options.phase, attempt, sessionId: session.sessionId });
     let assistantText = "";
     let turn = 0;
     const starts = new Map<string, { name: string; at: number; inputBytes: number; argsSha256: string }>();
@@ -632,6 +699,9 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
       ...(lspError ? { lspError } : {}),
     });
     if (indexProblem) throw new Error(`required startup index unavailable: ${indexProblem}`);
+    const hostResourceLoader = buildPiResourceLoader(buildPiSystemPrompt([]), { cwd: runtimeDir });
+    await hostResourceLoader.reload({ resolveProjectTrust: async () => false });
+    const hostSkills = hostResourceLoader.getSkills().skills;
     bundle = await buildPiTools({
       repo,
       graphLive: process.env.LEVERET_GRAPH === "1",
@@ -639,6 +709,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
       graphify,
       sandboxed: process.env.LEVERET_SANDBOXED === "1",
       serena,
+      hostSkills,
       profilePath: trusted.profilePath,
       rulesRoot: trusted.root,
       memoryRepo: trusted.root,
@@ -657,6 +728,16 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
         hidden_provider_reasoning: "unavailable",
       }])),
       model_routing: { schema: routing.config.schema, mode: routing.config.mode, sha256: routing.sha256, source: routing.source, routes: routing.routes },
+      resources: {
+        reviewed_checkout: "excluded",
+        extensions: hostResourceLoader.getExtensions().extensions.map((extension) => extension.resolvedPath),
+        extension_errors: hostResourceLoader.getExtensions().errors,
+        skills: hostSkills.map((skill) => ({ name: skill.name, path: skill.filePath })),
+        skill_diagnostics: hostResourceLoader.getSkills().diagnostics,
+        prompts: hostResourceLoader.getPrompts().prompts.map((prompt) => ({ name: prompt.name, path: prompt.filePath })),
+        prompt_diagnostics: hostResourceLoader.getPrompts().diagnostics,
+        agents_files: hostResourceLoader.getAgentsFiles().agentsFiles.map((file) => file.path),
+      },
       tool_capabilities: { ...bundle.capabilities, evidence_pack: evidencePack.schema, guidance: guidance.schema },
     });
     const metrics: ToolMetric[] = [];
@@ -1095,7 +1176,6 @@ export async function main(): Promise<void> {
       provider_request_payload: "unavailable-from-pinned-sdk",
       hidden_provider_reasoning: "unavailable",
       checkout_internal_reads: "unavailable",
-      resources: { extensions: [], skills: [], prompts: [], hooks: [] },
     });
     await audit?.flush();
     process.chdir(previousCwd);

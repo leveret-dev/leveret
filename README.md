@@ -79,13 +79,15 @@ replies on findings feed `learn`. Getting started + diagram: [docs/app.md](docs/
 
 **Standardized runner.** `leveret-runner-pi` drives the review/verify contracts
 through a pinned [Pi](https://github.com/earendil-works/pi) runtime. Leveret supplies
-the system prompt and an exact read-only toolset; Pi supplies the provider/model
-runtime. Project settings, extensions, skills, prompt templates, context files and
-sessions are not discovered. You choose provider, model, and effort (`--model` /
-`--effort` / `--provider`, or the matching `LEVERET_RUNNER_*` env vars; defaults
-`openai/gpt-5.6-sol` at `high`). Every walkthrough records the effective client,
-model, prompt hash, capabilities, and tool metrics. A custom `LEVERET_RUNNER`
-remains the bring-your-own-harness escape hatch.
+the system prompt and read-only review tools; Pi supplies the provider/model runtime
+and trusted host resources. Host-installed Pi/OMP extensions and hooks, Pi/Claude/
+Codex skills, prompt templates, and context are loaded. The reviewed checkout is
+never Pi's working directory, so its settings, hooks, skills, prompts, MCP
+configuration, and context cannot extend the session. You choose provider, model,
+and effort (`--model` / `--effort` / `--provider`, or the matching
+`LEVERET_RUNNER_*` env vars; defaults `openai/gpt-5.6-sol` at `high`). Every
+walkthrough records the effective client, model, prompt hash, capabilities, and tool
+metrics. A custom `LEVERET_RUNNER` remains the bring-your-own-harness escape hatch.
 
 Autonomous reviews retain a private, owner-controlled audit trace by default:
 Pi's native per-attempt sessions, normalized harness events, App/scanner/subprocess

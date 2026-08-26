@@ -1,5 +1,5 @@
 import { createAgentSession, ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -100,15 +100,36 @@ describe("Pi runtime isolation", () => {
     expect(startupIndexProblem({ required: true, codegraph: true, graphify: true, serenaTools: 6 })).toBeNull();
   });
 
-  it("does not expose project resources or append prompts", async () => {
-    const loader = buildPiResourceLoader("trusted prompt");
-    await loader.reload();
-    expect(loader.getSystemPrompt()).toBe("trusted prompt");
-    expect(loader.getAppendSystemPrompt()).toEqual([]);
-    expect(loader.getAgentsFiles()).toEqual({ agentsFiles: [] });
-    expect(loader.getExtensions().extensions).toEqual([]);
-    expect(loader.getSkills().skills).toEqual([]);
-    expect(loader.getPrompts().prompts).toEqual([]);
+  it("loads trusted host resources without exposing project resources", async () => {
+    const home = mkdtempSync(join(tmpdir(), "leveret-host-resources-"));
+    const runtimeDir = join(home, "runtime");
+    const agentDir = join(home, ".pi", "agent");
+    mkdirSync(join(agentDir, "skills", "native"), { recursive: true });
+    mkdirSync(join(home, ".claude", "skills", "claude-tool"), { recursive: true });
+    mkdirSync(join(home, ".codex", "skills", "codex-tool"), { recursive: true });
+    const hookPackage = join(home, ".omp", "plugins", "node_modules", "host-hooks");
+    mkdirSync(hookPackage, { recursive: true });
+    mkdirSync(join(home, ".claude", "commands"), { recursive: true });
+    mkdirSync(runtimeDir);
+    writeFileSync(join(agentDir, "skills", "native", "SKILL.md"), "---\nname: native\ndescription: native\n---\nNative.\n");
+    writeFileSync(join(home, ".claude", "skills", "claude-tool", "SKILL.md"), "---\nname: claude-tool\ndescription: claude\n---\nClaude.\n");
+    writeFileSync(join(home, ".codex", "skills", "codex-tool", "SKILL.md"), "---\nname: codex-tool\ndescription: codex\n---\nCodex.\n");
+    writeFileSync(join(home, ".claude", "commands", "tool.md"), "Host command.\n");
+    writeFileSync(join(home, ".omp", "plugins", "package.json"), '{"dependencies":{"host-hooks":"1.0.0"}}\n');
+    writeFileSync(join(hookPackage, "package.json"), '{"type":"module","pi":{"extensions":["./extension.js"]}}\n');
+    writeFileSync(join(hookPackage, "extension.js"), "export default function (pi) { pi.on('session_start', async () => {}); }\n");
+    writeFileSync(join(agentDir, "AGENTS.md"), "TRUSTED_HOST_CONTEXT\n");
+    const loader = buildPiResourceLoader("trusted prompt", { cwd: runtimeDir, agentDir, home, env: {} });
+    try {
+      await loader.reload({ resolveProjectTrust: async () => false });
+      expect(loader.getSystemPrompt()).toBe("trusted prompt");
+      expect(loader.getSkills().skills.map((skill) => skill.name)).toEqual(expect.arrayContaining(["claude-tool", "codex-tool", "native"]));
+      expect(loader.getExtensions().extensions.map((extension) => extension.resolvedPath)).toContain(join(hookPackage, "extension.js"));
+      expect(loader.getPrompts().prompts.map((prompt) => prompt.name)).toContain("tool");
+      expect(loader.getAgentsFiles().agentsFiles.map((file) => file.content)).toContain("TRUSTED_HOST_CONTEXT\n");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 
   it("registers no mutation or unrestricted shell tools", async () => {
@@ -136,6 +157,30 @@ describe("Pi runtime isolation", () => {
     expect(tools.capabilities.tool_source_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(tools.capabilities.tool_inventory).toEqual([...names].sort());
     await tools.close();
+  });
+  it("exposes host skill instructions without opening host filesystem access", async () => {
+    const root = mkdtempSync(join(tmpdir(), "leveret-host-skill-"));
+    const repo = join(root, "repo");
+    const skillDir = join(root, "skill");
+    mkdirSync(repo);
+    mkdirSync(join(skillDir, "references"), { recursive: true });
+    writeFileSync(join(skillDir, "SKILL.md"), "Use the fixed graph tools.\n");
+    writeFileSync(join(skillDir, "references", "query.md"), "Query guidance.\n");
+    writeFileSync(join(root, "outside.md"), "outside\n");
+    const bundle = await buildPiTools({
+      ...toolOptions(repo),
+      hostSkills: [{ name: "graph", filePath: join(skillDir, "SKILL.md"), baseDir: skillDir }],
+    });
+    const skill = bundle.tools.find((tool) => tool.name === "leveret_skill")!;
+    try {
+      const result = await skill.execute("skill-1", { name: "graph", path: "references/query.md" }, undefined, undefined, {} as never);
+      expect(result.content[1]).toMatchObject({ type: "text", text: "Query guidance.\n" });
+      await expect(skill.execute("skill-2", { name: "graph", path: "../outside.md" }, undefined, undefined, {} as never)).rejects.toThrow(/escapes/);
+      await expect(skill.execute("skill-3", { name: "missing" }, undefined, undefined, {} as never)).rejects.toThrow(/unknown/);
+    } finally {
+      await bundle.close();
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("registers pre-indexed Graphify tools and indexing capabilities", async () => {
@@ -389,14 +434,13 @@ describe("Pi runtime isolation", () => {
   });
 
   it("does not discover hostile checkout prompts, extensions, MCP, or executables", async () => {
-    const { mkdirSync, mkdtempSync, rmSync, writeFileSync } = await import("node:fs");
-    const { tmpdir } = await import("node:os");
-    const { join } = await import("node:path");
     const repo = mkdtempSync(join(tmpdir(), "leveret-hostile-pi-"));
     const runtimeDir = await createPiRuntimeDirectory();
     mkdirSync(join(repo, ".pi", "extensions"), { recursive: true });
     mkdirSync(join(repo, "node_modules", ".bin"), { recursive: true });
     writeFileSync(join(repo, ".pi", "SYSTEM.md"), "HOSTILE_SYSTEM_PROMPT\n");
+    const agentDir = join(runtimeDir, "agent");
+    mkdirSync(agentDir);
     writeFileSync(join(repo, ".pi", "settings.json"), '{"defaultProjectTrust":"always"}\n');
     writeFileSync(join(repo, ".pi", "extensions", "hostile.ts"), "throw new Error('HOSTILE_EXTENSION')\n");
     writeFileSync(join(repo, "AGENTS.md"), "HOSTILE_CONTEXT\n");
@@ -406,13 +450,15 @@ describe("Pi runtime isolation", () => {
     const runtime = await ModelRuntime.create({ allowModelNetwork: false, refreshOnCreate: false, modelsPath: null });
     const model = runtime.getModel("openai", "gpt-5.6-sol")!;
     const prompt = buildPiSystemPrompt(bundle.tools.map((tool) => tool.name));
+    const resourceLoader = buildPiResourceLoader(prompt, { cwd: runtimeDir, agentDir, home: runtimeDir, env: {} });
+    await resourceLoader.reload({ resolveProjectTrust: async () => false });
     const session = await createAgentSession({
       cwd: runtimeDir,
       modelRuntime: runtime,
       model,
       customTools: bundle.tools,
       tools: bundle.tools.map((tool) => tool.name),
-      resourceLoader: buildPiResourceLoader(prompt),
+      resourceLoader,
       sessionManager: SessionManager.inMemory(runtimeDir),
       settingsManager: SettingsManager.inMemory({ defaultProjectTrust: "never" }, { projectTrusted: false }),
     });
