@@ -638,7 +638,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
           : identityDiscoveryTools,
         verifier: identityVerifierTools,
       }),
-      policy_sha256: stableSha256({ system_prompt_version: PI_SYSTEM_PROMPT_VERSION, discovery_contract: runtime.discoveryMode === "specialized/v1" ? SPECIALIZED_DISCOVERY : "single", verifier_role: "targeted-verifier", http_idle_timeout_ms: 0 }),
+      policy_sha256: stableSha256({ system_prompt_version: PI_SYSTEM_PROMPT_VERSION, discovery_contract: runtime.discoveryMode === "specialized/v1" ? SPECIALIZED_DISCOVERY : "single", verifier_role: "targeted-verifier", http_idle_timeout_ms: 0, phase_deadline_ms: runtime.deadlineMs }),
       card_sha256: guidance.provenance.cardSetSha256,
       rule_sha256: guidance.provenance.ruleSetSha256,
       cache_sha256: stableSha256({
@@ -903,6 +903,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
       client: "leveret-runner-pi",
       model: `${verifierRoute.provider}/${verifierRoute.model}`,
       thinking: verifierRoute.effort,
+      phase_deadline_ms: runtime.deadlineMs,
       auth: classifyAuth(authCheck?.type, subscriptionOAuth),
       system_prompt: { version: PI_SYSTEM_PROMPT_VERSION, sha256: createHash("sha256").update(verifierSystemPrompt).digest("hex"), role: "targeted-verifier" },
       identities: runIdentities,
