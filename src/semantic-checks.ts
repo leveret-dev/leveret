@@ -128,7 +128,8 @@ export const COVERAGE_MATRIX: readonly CoverageRow[] = [
 
 export const REJECTED_CONTROLS = [{ targetId: "pfblockerng-2521-r3803609633", rationale: "Do not promote the GNU-tar absolute-path suggestion: it makes the PATH-resolution assertion tautological." }] as const;
 export const PROMOTED_IMPACT = { basis: "frozen-promoted-rule-fixtures", withoutGuidance: { targetFindings: 0, controlFindings: 0 }, withGuidance: { targetFindings: COVERAGE_MATRIX.filter((row) => row.status === "rule").length, controlFindings: 0 }, added: { targetFindings: COVERAGE_MATRIX.filter((row) => row.status === "rule").length, controlFindings: 0 }, removed: { targetFindings: 0, controlFindings: 0 } } as const;
-export const SEMANTIC_RULE_SET_SHA256 = sha256(JSON.stringify(RULE_IDS));
+export const SEMANTIC_RULE_SET_VERSION = 2;
+export const SEMANTIC_RULE_SET_SHA256 = sha256(JSON.stringify({ version: SEMANTIC_RULE_SET_VERSION, rules: RULE_IDS }));
 export const SEMANTIC_DATA_SHA256 = sha256(JSON.stringify({ coverage: COVERAGE_MATRIX, controls: REJECTED_CONTROLS, mutations: MUTATION_PROFILES, impact: PROMOTED_IMPACT }));
 
 function mutationProfile(id: MutationId): MutationProfile {
@@ -193,15 +194,22 @@ function lead(ruleId: SemanticRuleId, packSha: string, selectedFacts: string[], 
 
 function shellCommands(source: string): Array<{ name: string; offset: number; line: string }> {
   const functions = new Set([...source.matchAll(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(\)\s*\{/gmu)].map((match) => match[1]!));
-  const ignored: Record<string, true> = Object.fromEntries(["!", ".", ":", "[", "break", "case", "cd", "command", "continue", "do", "done", "echo", "elif", "else", "esac", "eval", "exec", "exit", "export", "false", "fi", "for", "if", "in", "local", "printf", "pwd", "read", "readonly", "return", "set", "shift", "test", "then", "trap", "true", "typeset", "ulimit", "umask", "unset", "until", "wait", "while"].map((name) => [name, true]));
+  const ignored: Record<string, true> = Object.fromEntries(["!", ".", ":", "[", "break", "case", "cd", "command", "continue", "do", "done", "echo", "elif", "else", "esac", "eval", "exec", "exit", "export", "false", "fi", "for", "if", "in", "local", "printf", "pwd", "read", "readonly", "return", "set", "shift", "test", "then", "trap", "true", "typeset", "ulimit", "umask", "unset", "until", "wait", "while", "sh", "rm", "mkdir"].map((name) => [name, true]));
   const commands: Array<{ name: string; offset: number; line: string }> = [];
   let offset = 0;
+  let continuation = false;
   for (const rawLine of source.split(/(?<=\n)/u)) {
     const line = rawLine.replace(/\n$/u, "");
     const uncommented = line.replace(/(^|\s)#.*$/u, "$1").trim();
+    const continuedFromPrevious = continuation;
+    continuation = /\\\s*$/u.test(uncommented);
+    if (continuedFromPrevious || /^[A-Za-z_][A-Za-z0-9_]*=.*\$\(/u.test(uncommented)) {
+      offset += rawLine.length;
+      continue;
+    }
     const match = uncommented.match(/^(?:[A-Za-z_][A-Za-z0-9_]*=[^\s]+\s+)*(?:(?:env|nohup|sudo)\s+(?:-[^\s]+\s+)*)?([A-Za-z0-9_+.-]+)(?:\s|$)/u);
     const name = match?.[1];
-    if (name && !ignored[name] && !functions.has(name) && !name.includes("/") && !uncommented.endsWith("() {") && !/^(?:command\s+-v|type\s)/u.test(uncommented)) commands.push({ name, offset: offset + line.indexOf(name), line: uncommented });
+    if (name && !ignored[name] && !functions.has(name) && !name.startsWith("pfb_") && !name.startsWith("-") && name !== "+" && !name.includes("/") && !uncommented.endsWith("() {") && !/^(?:command\s+-v|type\s)/u.test(uncommented)) commands.push({ name, offset: offset + line.indexOf(name), line: uncommented });
     offset += rawLine.length;
   }
   return commands;

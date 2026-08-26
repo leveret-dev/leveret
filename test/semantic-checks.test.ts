@@ -43,7 +43,7 @@ function fixture(): { repo: string; outside: string; evidence: EvidencePackFile 
   mkdirSync(join(repo, "tests"), { recursive: true });
   mkdirSync(outside);
   writeFileSync(join(repo, ".github/workflows/smoke.yml"), `name: smoke\njobs:\n  kvm:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          udevadm trigger\n          # udevadm settle is not executable evidence\n          test -e /dev/kvm\n  egress:\n    runs-on: ubuntu-latest\n    env:\n      SMOKE_BLOCK_EGRESS: "1"\n    steps:\n      - run: |\n          # iptables -A OUTPUT -j REJECT\n          echo 'iptables -C OUTPUT -j REJECT'\n          curl https://example.invalid\n`);
-  writeFileSync(join(repo, "scripts/prepare.sh"), `#!/bin/sh\nfor _tool in git jq curl; do\n  command -v "\${_tool}" >/dev/null\ndone\npkill -9 qemu-system-x86_64\n`);
+  writeFileSync(join(repo, "scripts/prepare.sh"), `#!/bin/sh\nfor _tool in git jq curl oras python3; do\n  command -v "\${_tool}" >/dev/null\ndone\nsh scripts/setup.sh\nrm -rf out\nmkdir -p out\n_digest="$(oras resolve example.invalid/image:tag)"\npython3 scripts/build.py \\\n  --out-dir out \\\n  --channel edge\npfb_project_helper\npkill -9 qemu-system-x86_64\n`);
   writeFileSync(join(repo, "tests/recipe.py"), `"""Setup:\nuv sync\npython -m pytest tests/smoke\n"""\n`);
   writeFileSync(join(repo, "scripts/publish.sh"), "#!/bin/sh\nprintf '%s\\n' artifact\n");
   const evidencePack = pack();
@@ -74,6 +74,9 @@ describe("trusted caveat cards and semantic guidance", () => {
     expect(new Set(guidance.ruleLeads.map((lead) => lead.ruleId))).toEqual(new Set([
       "udev-trigger-before-consumer", "workflow-prerequisite-same-job", "uv-sync-bare-project-command", "external-command-not-preflighted",
     ]));
+    const preflight = guidance.ruleLeads.filter((lead) => lead.ruleId === "external-command-not-preflighted");
+    expect(preflight).toHaveLength(1);
+    expect(preflight[0]?.message).toContain("pkill");
     expect(guidance.residualQuestions.map((item) => item.cardId)).toEqual(["posix-pipe-versus-file-stdin", "generated-published-tested-universe"]);
     expect(guidance.ruleLeads.every((lead) => lead.evidence.sha256.length === 64 && lead.provenance.evidencePackSha256 === value.evidence.sha256)).toBe(true);
     expect(guidance.coverage).toHaveLength(12);
