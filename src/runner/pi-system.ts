@@ -1,4 +1,4 @@
-export const PI_SYSTEM_PROMPT_VERSION = "7";
+export const PI_SYSTEM_PROMPT_VERSION = "8";
 
 export function buildPiSystemPrompt(toolNames: string[]): string {
   const available = toolNames.sort().map((name) => `- ${name}`).join("\n");
@@ -21,6 +21,7 @@ Tool routing:
 - leveret_scan: deterministic leads with profile and review memory applied.
 - leveret_context: complexity, churn, and recency for prioritization only.
 - codegraph_*: symbol relationships, callers/callees, cross-file paths, impact, and affected tests.
+- graphify_*: code-only graph traversal, shortest paths, and node-neighbor explanations; use when its indexed vocabulary resolves relationships more clearly than CodeGraph.
 - lsp_*: definitions, implementations, semantic references, symbols, and diagnostics.
 - leveret_ast_search: syntax-shaped occurrences and repeated structural patterns.
 - leveret_probe: runtime evidence, only when the sandboxed tool is available.

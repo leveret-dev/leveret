@@ -21,11 +21,11 @@ be verified and will be dropped.
    omitted path or hunk. There is no whole-diff route and you do not need the full
    text of every changed file.
 4. **Blast radius — mandatory.** For every changed function, class, constant, or
-   config key, find its callers and dependents **outside the diff** (code-graph
-   tooling such as CodeGraph where available, otherwise `leveret.ast_search` and
-   `git grep`). Cross-file breakage in files the diff never touches is the class a
-   diff-only review structurally misses; state explicitly which changed symbols you
-   traced and what you found.
+   config key, find its callers and dependents **outside the diff** using the
+   pre-indexed CodeGraph or code-only Graphify tools where available, otherwise
+   `leveret.ast_search` and `git grep`. Cross-file breakage in files the diff never
+   touches is the class a diff-only review structurally misses; state explicitly
+   which changed symbols you traced and what you found.
 5. The work item's stated intent (issue, spec, PR description) when provided.
 
 ## Repo rulings (accumulated case law — apply them)

@@ -13,6 +13,7 @@ import { createGuidanceResult, writeGuidanceResult, SEMANTIC_DATA_SHA256, SEMANT
 import { CAVEAT_CARD_SET_SHA256 } from "../src/caveat-cards.js";
 import { executableIdentity, runStreaming } from "../src/exec.js";
 import { ensureGraph } from "../src/app/graph.js";
+import { ensureGraphify } from "../src/app/graphify.js";
 import { scan } from "../src/scan.js";
 import type { ScanResult } from "../src/findings.js";
 import { ENGINES } from "../src/engines/registry.js";
@@ -336,13 +337,20 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
           sha256: auditPatch.sha256,
           bytes: auditPatch.bytes,
         });
+        const codegraphBin = process.env.LEVERET_CODEGRAPH_BIN ?? "codegraph";
+        const graphifyBin = process.env.LEVERET_GRAPHIFY_BIN ?? "graphify";
         const graphKey = cache!.key("graph-toolchain", plan.base, plan.head, {
           node: process.version,
-          binary: process.env.LEVERET_CODEGRAPH_BIN ?? "codegraph",
+          codegraph_binary: codegraphBin,
+          graphify_binary: graphifyBin,
           sandbox: "disabled",
         }, boundary);
-        await audit!.record("repository", "cache_decision", cache!.fallback(graphKey, "checkout-local graph index must be rebuilt; dependency/tool sandbox is disabled"));
-        const graph = await ensureGraph(checkout);
+        await audit!.record("repository", "cache_decision", cache!.fallback(graphKey, "checkout-local indexes must be rebuilt; dependency/tool sandbox is disabled"));
+        const [graph, graphify] = await Promise.all([
+          ensureGraph(checkout, codegraphBin),
+          ensureGraphify(checkout, runnerDir, graphifyBin),
+        ]);
+        await audit!.record("repository", "startup_indexes", { codegraph: graph, graphify });
         const effectiveProfilePath = options.profilePath ?? trusted!.profilePath;
         const profile = await loadProfile(effectiveProfilePath);
         const profileSha256 = digest(stableJson(profile));
@@ -426,7 +434,7 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
         const guidanceFile = await writeGuidanceResult(checkout, join(runnerDir, "guidance-result.v1.json"), guidance);
         await audit!.record("repository", "evidence_pack", { pack: evidencePack, schema: evidencePack.schema, sha256: evidencePackFile.sha256, bytes: evidencePackFile.bytes });
         await audit!.record("repository", "guidance_result", { guidance: guidanceFile.guidance, schema: guidanceFile.guidance.schema, sha256: guidanceFile.sha256, bytes: guidanceFile.bytes, selected_card_ids: guidanceFile.guidance.selectedCards.map((card) => card.id), selected_rule_ids: guidanceFile.guidance.selectedCards.flatMap((card) => card.ruleId ? [card.ruleId] : []), emitted_rule_lead_ids: guidanceFile.guidance.ruleLeads.map((lead) => lead.id), selected_mutation_ids: [...new Set(guidanceFile.guidance.mutationLeads.map((lead) => lead.mutationId))].sort(), hashes: guidanceFile.guidance.provenance });
-        await audit!.writeCapabilities({ graph, scanner: { engines: scanResult.engines }, evidence_pack: { schema: evidencePack.schema, sha256: evidencePackFile.sha256, bytes: evidencePackFile.bytes }, guidance: { schema: guidanceFile.guidance.schema, sha256: guidanceFile.sha256, bytes: guidanceFile.bytes }, node: process.version });
+        await audit!.writeCapabilities({ graph, graphify, scanner: { engines: scanResult.engines }, evidence_pack: { schema: evidencePack.schema, sha256: evidencePackFile.sha256, bytes: evidencePackFile.bytes }, guidance: { schema: guidanceFile.guidance.schema, sha256: guidanceFile.sha256, bytes: guidanceFile.bytes }, node: process.version });
         let workItemPath: string | undefined;
         if (plan.mode === "review-context") { workItemPath = join(runnerDir, "work-item.json"); await copyFile(plan.work_item_path!, workItemPath); await audit!.record("app", "work_item_materialized", { schema: "leveret.work-item/v1", sha256: plan.work_item_sha256, path_role: "outside-checkout runner input" }); }
         else await audit!.record("app", "work_item_omitted", { context_mode: "diff-only" });
@@ -455,6 +463,14 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
           LEVERET_GUIDANCE_SHA256: guidanceFile.sha256,
           LEVERET_CACHE_RUN: cacheRunPath,
           LEVERET_GRAPH: graph.ok ? "1" : "0",
+          LEVERET_CODEGRAPH_BIN: codegraphBin,
+          LEVERET_REQUIRE_INDEXES: process.env.LEVERET_REQUIRE_INDEXES ?? "1",
+          ...(graphify.ok && graphify.graphPath ? {
+            LEVERET_GRAPHIFY_GRAPH: graphify.graphPath,
+            LEVERET_GRAPHIFY_BIN: graphifyBin,
+            LEVERET_GRAPHIFY_NODES: String(graphify.indexedNodes ?? 0),
+            LEVERET_GRAPHIFY_EDGES: String(graphify.indexedEdges ?? 0),
+          } : {}),
           LEVERET_TRACE_DIR: audit!.partialDir,
           LEVERET_RUN_ID: runId,
           LEVERET_DATA: traceRoot,

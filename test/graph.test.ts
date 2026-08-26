@@ -17,6 +17,9 @@ describe("ensureGraph", () => {
     const status = await ensureGraph(repo);
     expect(status.ok).toBe(true);
     expect(status.binarySha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(status).toMatchObject({ indexState: "complete" });
+    expect(status.indexedFiles).toBeGreaterThan(0);
+    expect(status.indexedNodes).toBeGreaterThan(0);
     expect(existsSync(join(repo, ".codegraph"))).toBe(true);
   });
 

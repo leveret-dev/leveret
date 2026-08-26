@@ -15,6 +15,7 @@ import type { Finding, ScanResult } from "../findings.js";
 import { ENGINES } from "../engines/registry.js";
 import { projectFacts, type ProjectFacts } from "../project-facts.js";
 import { ensureGraph } from "./graph.js";
+import { ensureGraphify } from "./graphify.js";
 import { appAccess, fetchReviewThreads, makeApp, postComment, postReview, replyInThread, resolveThread, tokenAccess, updateComment, type GitHubAccess } from "./github.js";
 import { parsePriorThreads, resolvedReply, type PriorFinding } from "./incremental.js";
 import {
@@ -206,14 +207,22 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
 
       // The checkout-local graph index is intentionally rebuilt. A cached status
       // cannot stand in for files that tools must query in this exact checkout.
+      const codegraphBin = process.env.LEVERET_CODEGRAPH_BIN ?? "codegraph";
+      const graphifyBin = process.env.LEVERET_GRAPHIFY_BIN ?? "graphify";
       const graphKey = cache.key("graph-toolchain", base, job.headSha, {
         node: process.version,
-        binary: process.env.LEVERET_CODEGRAPH_BIN ?? "codegraph",
+        codegraph_binary: codegraphBin,
+        graphify_binary: graphifyBin,
         sandbox: "disabled",
       }, boundary);
-      await audit?.record("repository", "cache_decision", cache.fallback(graphKey, "checkout-local graph index must be rebuilt; dependency/tool sandbox is disabled"));
-      const graph = await ensureGraph(work);
+      await audit?.record("repository", "cache_decision", cache.fallback(graphKey, "checkout-local indexes must be rebuilt; dependency/tool sandbox is disabled"));
+      const [graph, graphify] = await Promise.all([
+        ensureGraph(work, codegraphBin),
+        ensureGraphify(work, runnerWork, graphifyBin),
+      ]);
       if (!graph.ok) log.warn("codegraph unavailable", { detail: graph.detail });
+      if (!graphify.ok) log.warn("graphify unavailable", { detail: graphify.detail });
+      await audit?.record("repository", "startup_indexes", { codegraph: graph, graphify });
       const evidencePath = join(runnerWork, "change-evidence.v1.json");
       const manifestKey = cache.key("change-manifest", base, job.headSha, {
         schema_version: 1,
@@ -351,6 +360,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
       ]));
       await audit?.writeCapabilities({
         graph,
+        graphify,
         scanner: { engines: engineCapabilities },
         evidence_pack: { schema: evidencePack.schema, sha256: evidencePackFile.sha256, bytes: evidencePackFile.bytes },
         guidance: { schema: guidanceFile.guidance.schema, sha256: guidanceFile.sha256, bytes: guidanceFile.bytes },
@@ -408,7 +418,15 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
           LEVERET_GUIDANCE: guidanceFile.path,
           LEVERET_CACHE_RUN: cacheRunPath,
           LEVERET_GUIDANCE_SHA256: guidanceFile.sha256,
+          LEVERET_CODEGRAPH_BIN: codegraphBin,
+          LEVERET_REQUIRE_INDEXES: process.env.LEVERET_REQUIRE_INDEXES ?? "1",
           LEVERET_GRAPH: graph.ok ? "1" : "0",
+          ...(graphify.ok && graphify.graphPath ? {
+            LEVERET_GRAPHIFY_GRAPH: graphify.graphPath,
+            LEVERET_GRAPHIFY_BIN: graphifyBin,
+            LEVERET_GRAPHIFY_NODES: String(graphify.indexedNodes ?? 0),
+            LEVERET_GRAPHIFY_EDGES: String(graphify.indexedEdges ?? 0),
+          } : {}),
           ...(prior.length > 0 ? { LEVERET_PRIOR: join(runnerWork, "prior.json") } : {}),
           ...(audit ? { LEVERET_TRACE_DIR: audit.partialDir, LEVERET_RUN_ID: runId, LEVERET_DATA: DATA_DIR } : {}),
         };
@@ -531,7 +549,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
             job.repo,
             job.pr,
             job.headSha,
-            renderWalkthrough(publicationVerify, result, graph),
+            renderWalkthrough(publicationVerify, result, graph, graphify),
             renderInline(publicationVerify),
           );
         } catch (error) {
@@ -577,9 +595,8 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
           ack_comment_id: ackId,
           findings: publicationVerify.report.length,
         });
-        await recordLeadPublication(true);
       } else {
-        const walkthrough = renderWalkthrough(publicationVerify, result, graph);
+        const walkthrough = renderWalkthrough(publicationVerify, result, graph, graphify);
         log.info("review completed without GitHub publication", {
           findings: publicationVerify.report.length,
           walkthroughBytes: Buffer.byteLength(walkthrough),

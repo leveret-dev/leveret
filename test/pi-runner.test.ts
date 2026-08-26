@@ -17,6 +17,7 @@ import {
   piRuntimeConfig,
   loadWorkItemContext,
   toolMetricsSummary,
+  startupIndexProblem,
   withDeadline,
 } from "../src/runner/pi.js";
 import { assembleVerifierOutput, completeVerificationCoverage, mergeVerificationCoverage, normalizeVerifyOutput, verifySchemaGaps } from "../src/runner/verify-output.js";
@@ -91,6 +92,14 @@ describe("Pi runtime isolation", () => {
     });
   });
 
+  it("fails closed before model work when required indexes are unavailable", () => {
+    expect(startupIndexProblem({ required: false, codegraph: false, graphify: false, serenaTools: 0 })).toBeNull();
+    expect(startupIndexProblem({ required: true, codegraph: false, graphify: true, serenaTools: 1 })).toMatch(/CodeGraph/);
+    expect(startupIndexProblem({ required: true, codegraph: true, graphify: false, serenaTools: 1 })).toMatch(/Graphify/);
+    expect(startupIndexProblem({ required: true, codegraph: true, graphify: true, serenaTools: 0, lspError: "bundle missing" })).toContain("bundle missing");
+    expect(startupIndexProblem({ required: true, codegraph: true, graphify: true, serenaTools: 6 })).toBeNull();
+  });
+
   it("does not expose project resources or append prompts", async () => {
     const loader = buildPiResourceLoader("trusted prompt");
     await loader.reload();
@@ -126,6 +135,17 @@ describe("Pi runtime isolation", () => {
     expect(tools.capabilities.tool_schema_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(tools.capabilities.tool_source_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(tools.capabilities.tool_inventory).toEqual([...names].sort());
+    await tools.close();
+  });
+
+  it("registers pre-indexed Graphify tools and indexing capabilities", async () => {
+    const tools = await buildPiTools({
+      ...toolOptions("/tmp/repo"),
+      graphify: { bin: "graphify", graphPath: "/tmp/graph.json", indexedNodes: 12, indexedEdges: 20 },
+    });
+    const names = tools.tools.map((tool) => tool.name);
+    expect(names).toEqual(expect.arrayContaining(["graphify_query", "graphify_path", "graphify_explain"]));
+    expect(tools.capabilities).toMatchObject({ graphify: true, graphify_indexed_nodes: 12, graphify_indexed_edges: 20 });
     await tools.close();
   });
 

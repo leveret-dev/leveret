@@ -10,6 +10,10 @@ export interface GraphStatus {
   detail?: string;
   version?: string;
   binarySha256?: string;
+  indexedFiles?: number;
+  indexedNodes?: number;
+  indexedEdges?: number;
+  indexState?: string;
 }
 
 export async function ensureGraph(repo: string, bin = "codegraph"): Promise<GraphStatus> {
@@ -29,5 +33,31 @@ export async function ensureGraph(repo: string, bin = "codegraph"): Promise<Grap
   if (index.code !== 0) {
     return { ok: false, detail: `${bin} index rc=${index.code}: ${index.stderr.slice(0, 200)}`, ...identity };
   }
-  return { ok: true, ...identity };
+  const probe = await run(bin, ["status", "--json", repo], repo);
+  if (probe.code !== 0) {
+    return { ok: false, detail: `${bin} status rc=${probe.code}: ${probe.stderr.slice(0, 200)}`, ...identity };
+  }
+  try {
+    const status = JSON.parse(probe.stdout) as {
+      initialized?: unknown;
+      fileCount?: unknown;
+      nodeCount?: unknown;
+      edgeCount?: unknown;
+      index?: { state?: unknown };
+    };
+    if (status.initialized !== true || typeof status.fileCount !== "number" || status.fileCount < 1
+      || typeof status.nodeCount !== "number" || status.nodeCount < 1 || status.index?.state !== "complete") {
+      return { ok: false, detail: `${bin} status did not prove a complete non-empty index`, ...identity };
+    }
+    return {
+      ok: true,
+      ...identity,
+      indexedFiles: status.fileCount,
+      indexedNodes: status.nodeCount,
+      ...(typeof status.edgeCount === "number" ? { indexedEdges: status.edgeCount } : {}),
+      indexState: status.index.state,
+    };
+  } catch (error) {
+    return { ok: false, detail: `${bin} status returned invalid JSON: ${String(error).slice(0, 200)}`, ...identity };
+  }
 }

@@ -32,14 +32,30 @@ function presentProbeOutput(value: string): { text: string; truncated: boolean }
 }
 
 
-async function codegraph(repo: string, args: string[]) {
-  const result = await run("codegraph", args, repo, {
+async function codegraph(bin: string, repo: string, args: string[]) {
+  const result = await run(bin, args, repo, {
     timeoutMs: 120_000,
     env: safeChildEnvironment(),
     maxBuffer: 8 * 1024 * 1024,
   });
-  if (result.code !== 0) throw new ToolExecutionError(`codegraph ${args[0]} rc=${result.code}: ${result.stderr.slice(0, 500)}`, result.timedOut);
+  if (result.code !== 0) throw new ToolExecutionError(`${bin} ${args[0]} rc=${result.code}: ${result.stderr.slice(0, 500)}`, result.timedOut);
   return text(result.stdout, { command: args[0] });
+}
+
+async function graphify(bin: string, repo: string, graphPath: string, args: string[]) {
+  const result = await run(bin, [...args, "--graph", graphPath], repo, {
+    timeoutMs: 120_000,
+    env: safeChildEnvironment(),
+    maxBuffer: 8 * 1024 * 1024,
+  });
+  if (result.code !== 0) throw new ToolExecutionError(`${bin} ${args[0]} rc=${result.code}: ${result.stderr.slice(0, 500)}`, result.timedOut);
+  const bytes = Buffer.from(result.stdout);
+  const limit = 128 * 1024;
+  return text(bytes.subarray(0, limit).toString("utf8"), {
+    command: args[0],
+    bytes: bytes.length,
+    truncated: bytes.length > limit,
+  });
 }
 
 async function jailedPath(root: string, requested = "."): Promise<string> {
@@ -86,6 +102,8 @@ function annotateEvidence(tool: ToolDefinition, onOutcome?: (toolCallId: string,
 export interface PiToolsOptions {
   repo: string;
   graphLive: boolean;
+  codegraphBin?: string;
+  graphify?: { bin: string; graphPath: string; indexedNodes?: number; indexedEdges?: number };
   sandboxed: boolean;
   serena?: SerenaBridge;
   profilePath: string;
@@ -104,6 +122,11 @@ export interface PiToolsBundle {
     graph: boolean;
     lsp: boolean;
     probe: boolean;
+    graphify: boolean;
+    serena_indexed_languages?: string[];
+    serena_seed_files?: Record<string, string>;
+    graphify_indexed_nodes?: number;
+    graphify_indexed_edges?: number;
     serena_version?: string;
     serena_bundle_sha256?: string;
     tool_schema_sha256: string;
@@ -277,7 +300,7 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
         description: "Return relevant symbols, source, and call paths for an architectural question.",
         parameters: Type.Object({ query: Type.String(), max_files: Type.Optional(Type.Number({ minimum: 1, maximum: 50 })) }),
         async execute(_id, params) {
-          return codegraph(repo, ["explore", "--path", repo, ...(params.max_files ? ["--max-files", String(params.max_files)] : []), params.query]);
+          return codegraph(options.codegraphBin ?? "codegraph", repo, ["explore", "--path", repo, ...(params.max_files ? ["--max-files", String(params.max_files)] : []), params.query]);
         },
       }),
       defineTool({
@@ -286,7 +309,7 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
         description: "Return one symbol or file with its caller/callee or dependent trail.",
         parameters: Type.Object({ name: Type.String() }),
         async execute(_id, params) {
-          return codegraph(repo, ["node", "--path", repo, params.name]);
+          return codegraph(options.codegraphBin ?? "codegraph", repo, ["node", "--path", repo, params.name]);
         },
       }),
       defineTool({
@@ -295,7 +318,7 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
         description: "Traverse the impact radius of changing a symbol.",
         parameters: Type.Object({ symbol: Type.String(), depth: Type.Optional(Type.Number({ minimum: 1, maximum: 10 })) }),
         async execute(_id, params) {
-          return codegraph(repo, ["impact", "--path", repo, "--depth", String(params.depth ?? 2), params.symbol]);
+          return codegraph(options.codegraphBin ?? "codegraph", repo, ["impact", "--path", repo, "--depth", String(params.depth ?? 2), params.symbol]);
         },
       }),
       defineTool({
@@ -304,7 +327,40 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
         description: "Find tests affected by the supplied changed files.",
         parameters: Type.Object({ files: Type.Array(Type.String()), depth: Type.Optional(Type.Number({ minimum: 1, maximum: 10 })) }),
         async execute(_id, params) {
-          return codegraph(repo, ["affected", "--path", repo, "--depth", String(params.depth ?? 5), ...params.files]);
+          return codegraph(options.codegraphBin ?? "codegraph", repo, ["affected", "--path", repo, "--depth", String(params.depth ?? 5), ...params.files]);
+        },
+      }),
+    );
+  }
+
+  if (options.graphify) {
+    const { bin, graphPath } = options.graphify;
+    tools.push(
+      defineTool({
+        name: "graphify_query",
+        label: "Graphify code query",
+        description: "Traverse the prebuilt code-only Graphify graph for a bounded architectural question.",
+        parameters: Type.Object({ question: Type.String(), budget: Type.Optional(Type.Number({ minimum: 100, maximum: 3000 })) }),
+        async execute(_id, params) {
+          return graphify(bin, repo, graphPath, ["query", params.question, "--budget", String(params.budget ?? 1500)]);
+        },
+      }),
+      defineTool({
+        name: "graphify_path",
+        label: "Graphify shortest path",
+        description: "Find the shortest code-graph path between two named nodes.",
+        parameters: Type.Object({ from: Type.String(), to: Type.String() }),
+        async execute(_id, params) {
+          return graphify(bin, repo, graphPath, ["path", params.from, params.to]);
+        },
+      }),
+      defineTool({
+        name: "graphify_explain",
+        label: "Graphify node explanation",
+        description: "Explain one code node and its indexed neighbors.",
+        parameters: Type.Object({ node: Type.String() }),
+        async execute(_id, params) {
+          return graphify(bin, repo, graphPath, ["explain", params.node]);
         },
       }),
     );
@@ -366,8 +422,15 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
     capabilities: {
       graph: options.graphLive,
       lsp: Boolean(options.serena?.tools.length),
+      graphify: Boolean(options.graphify),
       probe: options.sandboxed,
       ...(options.serena?.version ? { serena_version: options.serena.version } : {}),
+      ...(options.serena?.indexing ? {
+        serena_indexed_languages: options.serena.indexing.languages,
+        serena_seed_files: options.serena.indexing.seedFiles,
+      } : {}),
+      ...(options.graphify?.indexedNodes !== undefined ? { graphify_indexed_nodes: options.graphify.indexedNodes } : {}),
+      ...(options.graphify?.indexedEdges !== undefined ? { graphify_indexed_edges: options.graphify.indexedEdges } : {}),
       ...(options.serenaBundleSha256 ? { serena_bundle_sha256: options.serenaBundleSha256 } : {}),
       tool_schema_sha256: toolSchemaSha256,
       tool_source_sha256: toolSourceSha256,

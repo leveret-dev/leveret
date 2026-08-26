@@ -63,7 +63,7 @@ const disclosureFor = (
   checklists: plan.checklistIds.map((id) => ({ id, state: "examined" as const })),
   stopping: { rule: plan.definition.stoppingRule, reason: "complete" },
 });
-const tools = ["leveret_diff", "leveret_read", "leveret_grep", "leveret_find", "leveret_ast_search", "leveret_probe", "leveret_scan", "leveret_context", "leveret_memory", "codegraph_explore", "lsp_find_declaration", "lsp_find_referencing_symbols"].map((name) => ({ name, label: name, description: name, parameters: {}, execute: vi.fn() })) as unknown as ToolDefinition[];
+const tools = ["leveret_diff", "leveret_read", "leveret_grep", "leveret_find", "leveret_ast_search", "leveret_probe", "leveret_scan", "leveret_context", "leveret_memory", "codegraph_explore", "graphify_query", "graphify_path", "graphify_explain", "lsp_find_declaration", "lsp_find_referencing_symbols"].map((name) => ({ name, label: name, description: name, parameters: {}, execute: vi.fn() })) as unknown as ToolDefinition[];
 
 describe("specialized discovery", () => {
   it("keeps discovery and scheduling host-owned and separate", () => {

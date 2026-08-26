@@ -162,6 +162,31 @@ async function detectedLanguages(repo: string, staged: Set<string>): Promise<str
   return [...found].sort((a, b) => serenaPrefetchFixtures().findIndex((f) => f.language === a) - serenaPrefetchFixtures().findIndex((f) => f.language === b));
 }
 
+async function representativeSourceFiles(repo: string, languages: string[]): Promise<Record<string, string>> {
+  const wanted = new Set(languages);
+  const seeds: Record<string, string> = {};
+  const stack = [repo];
+  let visited = 0;
+  while (stack.length && Object.keys(seeds).length < wanted.size && visited < 20_000) {
+    const dir = stack.pop()!;
+    const entries = (await readdir(dir, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      if (++visited >= 20_000) break;
+      if (entry.isDirectory()) {
+        if (!SKIP_DIRS.has(entry.name)) stack.push(join(dir, entry.name));
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const extension = extname(entry.name).toLowerCase();
+      for (const language of wanted) {
+        if (seeds[language] || !LANGUAGE_EXTENSIONS[language]?.has(extension)) continue;
+        seeds[language] = relative(repo, join(dir, entry.name));
+      }
+    }
+  }
+  return seeds;
+}
+
 export async function createSerenaShadowProject(repo: string): Promise<string> {
   const shadow = await mkdtemp(join(tmpdir(), "leveret-serena-project-"));
   try {
@@ -271,6 +296,7 @@ export interface SerenaBridge {
   close(): Promise<void>;
   version?: string;
   pid?: number;
+  indexing?: { languages: string[]; seedFiles: Record<string, string> };
 }
 
 export async function connectSerena(repo: string, runtimeRoot: string, command = "serena", timeoutMs = 120_000): Promise<SerenaBridge> {
@@ -308,6 +334,23 @@ export async function connectSerena(repo: string, runtimeRoot: string, command =
       }),
     ]);
     const listed = await client.listTools();
+    const overview = listed.tools.find((tool) => tool.name === "get_symbols_overview");
+    if (!overview) throw new Error("Serena did not expose get_symbols_overview for startup indexing");
+    const seedFiles = await representativeSourceFiles(repo, languages);
+    const indexedLanguages: string[] = [];
+    for (const language of languages) {
+      const relativePath = seedFiles[language];
+      if (!relativePath) throw new Error(`Serena startup found no index seed for ${language}`);
+      const result = await client.callTool(
+        { name: overview.name, arguments: { relative_path: relativePath, depth: 0 } },
+        undefined,
+        { timeout: timeoutMs, maxTotalTimeout: timeoutMs },
+      );
+      if (result.isError === true) {
+        throw new Error(`Serena failed to index ${language} seed ${relativePath}: ${textContent(result).slice(0, 500)}`);
+      }
+      indexedLanguages.push(language);
+    }
     const tools: ToolDefinition[] = listed.tools
       .filter((tool) => READ_ONLY_TOOLS.has(tool.name))
       .map((tool) => ({
@@ -333,6 +376,7 @@ export async function connectSerena(repo: string, runtimeRoot: string, command =
       tools,
       version: client.getServerVersion()?.version,
       pid: transport.pid ?? undefined,
+      indexing: { languages: indexedLanguages, seedFiles },
       close: async () => {
         await client.close();
         await rm(shadow, { recursive: true, force: true });

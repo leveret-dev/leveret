@@ -1,6 +1,7 @@
 import { renderResolutions } from "./incremental.js";
 import type { Finding, ScanResult } from "../findings.js";
 import type { GraphStatus } from "./graph.js";
+import type { GraphifyStatus } from "./graphify.js";
 import type { PostWalkLeadAccounting } from "../runner/post-walk-leads.js";
 
 // Rendering the verify output + scan result into the published review: tier-grouped
@@ -64,6 +65,7 @@ export function renderWalkthrough(
   v: VerifyOutput,
   scan: ScanResult,
   graph?: GraphStatus,
+  graphify?: GraphifyStatus,
 ): string {
   const all = [...v.report].sort(byTier);
   const outOfDiff = all.filter((r) => r.scope === "out-of-diff");
@@ -122,6 +124,14 @@ export function renderWalkthrough(
       graph.ok
         ? "Code graph: live (structural blast radius queried, not greped)."
         : `Code graph: unavailable — ${graph.detail ?? "unknown"}; blast radius fell back to ast_search/grep.`,
+    );
+  }
+  if (graphify) {
+    s.push(
+      "",
+      graphify.ok
+        ? `Graphify: live code-only graph (${graphify.indexedNodes ?? "unknown"} nodes, ${graphify.indexedEdges ?? "unknown"} edges).`
+        : `Graphify: unavailable — ${graphify.detail ?? "unknown"}.`,
     );
   }
   const capabilities = v.run_configuration?.capabilities;

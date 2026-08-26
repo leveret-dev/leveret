@@ -40,8 +40,8 @@ For a keyless local OpenAI-compatible server, add a provider to
 Then run with `--provider local --model qwen2.5-coder:7b`. The model request is the
 only network path Pi needs; tool/update/package networks remain disabled.
 
-Optionally stage the curated Serena LSP bundle during installation. This command
-performs downloads now; reviews refuse runtime LSP downloads:
+Stage the curated Serena LSP bundle during installation. This command performs
+downloads now; reviews refuse runtime LSP downloads:
 
 ```sh
 node dist/runner/prefetch-serena.js --bundle /opt/leveret/serena-bundle
@@ -49,9 +49,21 @@ node dist/runner/prefetch-serena.js --bundle /opt/leveret/serena-bundle
 
 The initial self-contained bundle covers TypeScript/JavaScript, PHP (including
 project-scoped `.inc`), Bash, YAML, and JSON. The manifest pins each absolute
-server executable under `LEVERET_SERENA_BUNDLE`; prefetch fails instead of advertising a
-language backed only by a host toolchain or uvx cache. Python, C/C++, Go, Rust, and
-Java remain explicitly unavailable until their executables/runtimes are packaged.
+server executable under `LEVERET_SERENA_BUNDLE`; prefetch fails instead of
+advertising a language backed only by a host toolchain or uvx cache. Python,
+C/C++, Go, Rust, and Java remain explicitly unavailable until packaged.
+
+Install `codegraph` and `graphify` on the App host too. By default autonomous
+reviews set `LEVERET_REQUIRE_INDEXES=1` and fail before model work unless:
+
+- CodeGraph completes `init` + `index` and `status --json` proves a non-empty,
+  complete exact-checkout index;
+- Graphify completes `extract --code-only --no-cluster` into host-owned temporary
+  storage and its graph validates non-empty;
+- Serena starts from the staged bundle and successfully queries one representative
+  source file for every detected packaged language.
+
+Set `LEVERET_REQUIRE_INDEXES=0` only for an explicitly degraded run.
 
 **2. Make the machine reachable for webhooks** (pick one):
 
@@ -310,9 +322,17 @@ therefore cannot teach future reviews through prompt injection.
 
 Serena starts only when `LEVERET_SERENA_BUNDLE` contains
 `leveret-lsp-manifest.json`, created by the prefetch command. Leveret creates and
-sets a fresh `SERENA_HOME` inside the per-review temporary runtime directory. Its
-dashboard, HTTP stats endpoint, GUI, tray process, and anonymous usage reporting
-are disabled. Metrics are captured durably by the Pi adapter.
+sets a fresh `SERENA_HOME` inside the per-review temporary runtime directory,
+activates the disposable shadow project through the Serena launch arguments, and
+warms one symbol query per detected packaged language before exposing any model
+phase. Its dashboard, HTTP stats endpoint, GUI, tray process, and anonymous usage
+reporting are disabled. Metrics and seed-file/language readiness are captured
+durably by the Pi adapter.
+
+CodeGraph and Graphify are also prebuilt before the runner starts. They are
+registered directly as fixed Pi tools; global agent hooks or checkout-provided
+skills are neither required nor trusted. Override binaries with
+`LEVERET_CODEGRAPH_BIN` and `LEVERET_GRAPHIFY_BIN`.
 
 Without any runner configured, reviews are deterministic-only: engine findings
 post directly and the walkthrough says the agent lenses did not run.
@@ -406,10 +426,11 @@ Stable categories are `app`, `repository`, `prompts`, `assistant`, `tools`,
 `subprocess`, `provider`, `lifecycle`, `operational`, and `result`. Narrowing any of
 the Pi transcript categories disables unfiltered native session JSONL and retains
 only policy-filtered normalized events; the manifest records that distinction.
-The capability ledger records the CodeGraph version and binary hash, Serena server
-version and bundle-manifest hash, and the effective Pi tool-schema and source
-hashes. Its provider-keyed visibility matrix states which prompt, response,
-reasoning, and assembled-request surfaces were captured or unavailable.
+The capability ledger records CodeGraph version/hash/index counts, Graphify
+version/hash/code-only node and edge counts, Serena server/bundle/index-seed
+identity, and the effective Pi tool-schema and source hashes. Its provider-keyed
+visibility matrix states which prompt, response, reasoning, and assembled-request
+surfaces were captured or unavailable.
 Finite-retention payloads are isolated under `categories/<category>/`; their stable
 stream entries retain hashes and sizes after expiry, while raw sidecars and
 unreferenced blobs are deleted, the manifest is marked `expired`, and checksums are

@@ -111,15 +111,19 @@ MCP tools: `scan`, `ast_search` (structural search via ast-grep), `context`
 
 ## The reviewer toolbelt
 
-The engines and the code graph are capabilities of the reviewer, not the reviewed
-repository: install them beside Leveret. Full belt: `codegraph`, `semgrep`,
-`gitleaks`, `shellcheck`, `ruff`, `actionlint`, `zizmor`, `osv-scanner`, `typos`,
-`jscpd`, `ast-grep`, `lizard`, and a pre-staged Serena LSP bundle for semantic
-navigation. From a clone, build one with
+The engines and structural indexes are capabilities of the reviewer, not the
+reviewed repository: install them beside Leveret. Full belt: `codegraph`,
+`graphify`, `semgrep`, `gitleaks`, `shellcheck`, `ruff`, `actionlint`, `zizmor`,
+`osv-scanner`, `typos`, `jscpd`, `ast-grep`, `lizard`, and a pre-staged Serena
+LSP bundle for semantic navigation. From a clone, build one with
 `node dist/runner/prefetch-serena.js --bundle /opt/leveret/serena-bundle` and run
 with `LEVERET_SERENA_BUNDLE` set to that path (the installed package also exposes
-`leveret-prefetch-serena`). Runtime downloads are refused. A missing tool degrades
-loudly — the walkthrough reports which surfaces were live.
+`leveret-prefetch-serena`). Runtime downloads are refused.
+
+Before autonomous model work, Leveret builds and validates exact-checkout
+CodeGraph and code-only Graphify indexes, then warms one Serena symbol query per
+detected packaged language. Missing indexes fail closed by default; set
+`LEVERET_REQUIRE_INDEXES=0` only for an explicitly degraded run.
 
 ```sh
 npm test        # integration suite; exercises the real tools

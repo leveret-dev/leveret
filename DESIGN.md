@@ -23,8 +23,8 @@ leveret replicates each pillar with local, inspectable pieces:
 | Pillar | leveret component |
 | --- | --- |
 | Deterministic first pass | engine registry behind the `scan` MCP tool |
-| Code graph | leveret's OWN capability: `ensureGraph()` builds the index into every checkout at the exact reviewed commit; agents query it via the codegraph MCP. The reviewed repo shipping or lacking an index is irrelevant. |
-| AST grounding | `ast_search` (ast-grep) + custom rule packs; LSP diagnostics via the client's LSP surface (e.g. Serena) |
+| Code graph | Leveret-owned exact-checkout CodeGraph plus a host-owned code-only Graphify graph; both are built and validated before model work and exposed through fixed Pi tools. |
+| AST grounding | `ast_search` (ast-grep) + custom rule packs; Serena starts from a staged bundle and warms one symbol query per detected packaged language before model work. |
 | Verification filter | three-layer filter pipeline (below) ending in a verification agent |
 | Memory | in-repo, versioned finding-verdict store + `remember` tool |
 
@@ -270,19 +270,25 @@ Autonomous reviews materialize `.leveret.yml` and repo rulings from the trusted 
 commit outside the checkout; PR-head policy cannot disable review, add an engine, or
 suppress its own findings.
 
-Leveret registers its scan/context/AST/memory functions directly, invokes CodeGraph
-through fixed adapters, and proxies a small read-only Serena toolset. Serena reads a
-disposable shadow tree of file symlinks and writes configuration/cache only outside
-the checkout. It starts only from a pre-staged `LEVERET_SERENA_BUNDLE` manifest;
-Leveret creates a fresh `SERENA_HOME` inside each review's temporary runtime
-directory, and runtime LSP downloads are refused.
-Its dashboard HTTP server, GUI, tray manager and anonymous usage report are disabled.
-The Pi adapter records durable tool metrics because Serena's dashboard-free counters
-otherwise remain process-local.
-The initial fixed-path bundle is intentionally limited to TypeScript/JavaScript, PHP,
-Bash, YAML, and JSON; its manifest records absolute packaged executables. Languages
-that still depend on uvx or a host toolchain are reported unavailable rather than
-being falsely labeled staged.
+Leveret registers its scan/context/AST/memory functions directly, invokes
+pre-indexed CodeGraph and code-only Graphify through fixed adapters, and proxies a
+small read-only Serena toolset. CodeGraph must report a complete non-empty
+exact-checkout index. Graphify writes its derived graph outside the checkout and
+must report a non-empty node set.
+
+Serena reads a disposable shadow tree of file symlinks and writes
+configuration/cache only outside the checkout. It starts only from a pre-staged
+`LEVERET_SERENA_BUNDLE` manifest; Leveret creates a fresh `SERENA_HOME`, launches
+the shadow as the active project, and successfully queries one representative
+source file for every detected packaged language before exposing any model phase.
+Runtime LSP downloads are refused. Its dashboard, HTTP server, GUI, tray manager,
+and anonymous usage reporting are disabled. The Pi adapter records durable index
+identity, warmup seeds, and tool metrics.
+
+The initial fixed-path bundle is intentionally limited to
+TypeScript/JavaScript, PHP, Bash, YAML, and JSON; its manifest records absolute
+packaged executables. Languages that still depend on uvx or a host toolchain are
+reported unavailable rather than falsely labeled staged.
 
 The autonomous Pi surface can read trusted rulings but cannot promote its own
 verdicts into memory. Its verdicts remain in the durable run artifact; versioned

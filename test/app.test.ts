@@ -185,6 +185,10 @@ describe("rendering", () => {
     const without = renderWalkthrough(verifyOutput, scanResult, { ok: false, detail: "codegraph not on PATH" });
     expect(without).toMatch(/code graph.*unavailable/i);
     expect(without).toContain("codegraph not on PATH");
+    const withGraphify = renderWalkthrough(verifyOutput, scanResult, { ok: true }, { ok: true, indexedNodes: 12, indexedEdges: 20 });
+    expect(withGraphify).toContain("Graphify: live code-only graph (12 nodes, 20 edges)");
+    const withoutGraphify = renderWalkthrough(verifyOutput, scanResult, { ok: true }, { ok: false, detail: "graphify missing" });
+    expect(withoutGraphify).toContain("Graphify: unavailable — graphify missing");
   });
 
   it("publishes Pi capability degradation instead of hiding it in the raw artifact", () => {
