@@ -857,9 +857,9 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
     const runIdentities = {
       prompt_sha256: stableSha256({
         discovery: specialized
-          ? specialized.plans.map((plan) => ({ id: plan.definition.id, definition_sha256: plan.definition.definitionSha256, input_sha256: plan.inputSha256 }))
-          : singleDiscoveryIdentity,
-        verifier: { prompt_sha256: createHash("sha256").update(verifyPrompt).digest("hex"), system_prompt_sha256: createHash("sha256").update(verifierSystemPrompt).digest("hex") },
+          ? SPECIALIZED_DISCOVERY
+          : { id: "single/v1", system_prompt_version: PI_SYSTEM_PROMPT_VERSION },
+        verifier: { id: "targeted-verifier/v1", system_prompt_version: PI_SYSTEM_PROMPT_VERSION },
       }),
       tool_sha256: stableSha256({
         discovery: specialized ? legRuns.map((leg) => ({ id: leg.id, tools: leg.tools })) : singleDiscoveryIdentity?.tools,
@@ -868,7 +868,11 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
       policy_sha256: stableSha256({ system_prompt_version: PI_SYSTEM_PROMPT_VERSION, discovery_contract: specialized ? SPECIALIZED_DISCOVERY : "single", verifier_role: "targeted-verifier" }),
       card_sha256: guidance.provenance.cardSetSha256,
       rule_sha256: guidance.provenance.ruleSetSha256,
-      cache_sha256: stableSha256(cacheRun),
+      cache_sha256: stableSha256({
+        schema: (cacheRun as Record<string, unknown>).schema,
+        enabled: (cacheRun as Record<string, unknown>).enabled === true,
+        optional_dependency_sandbox: (cacheRun as Record<string, unknown>).optional_dependency_sandbox,
+      }),
     };
     const out = verify as Record<string, unknown>;
     out.run_configuration = {
