@@ -253,6 +253,7 @@ export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
       {
         compaction: { enabled: false },
         retry: { enabled: false },
+        httpIdleTimeoutMs: 0,
         enableInstallTelemetry: false,
         defaultProjectTrust: "never",
       },
@@ -865,7 +866,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
         discovery: specialized ? legRuns.map((leg) => ({ id: leg.id, tools: leg.tools })) : singleDiscoveryIdentity?.tools,
         verifier: verifierToolIdentity,
       }),
-      policy_sha256: stableSha256({ system_prompt_version: PI_SYSTEM_PROMPT_VERSION, discovery_contract: specialized ? SPECIALIZED_DISCOVERY : "single", verifier_role: "targeted-verifier" }),
+      policy_sha256: stableSha256({ system_prompt_version: PI_SYSTEM_PROMPT_VERSION, discovery_contract: specialized ? SPECIALIZED_DISCOVERY : "single", verifier_role: "targeted-verifier", http_idle_timeout_ms: 0 }),
       card_sha256: guidance.provenance.cardSetSha256,
       rule_sha256: guidance.provenance.ruleSetSha256,
       cache_sha256: stableSha256({
