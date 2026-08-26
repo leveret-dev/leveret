@@ -93,6 +93,14 @@ describe("specialized discovery", () => {
     expect(order).toEqual(["start:correctness", "end:correctness", "start:test-honesty", "end:test-honesty", "start:contract-operability", "end:contract-operability"]);
     const firstPlan = buildDiscoveryLegPlans(manifest, evidencePack, guidance, { mode: "diff-only", availability: "unavailable" })[0]!;
     expect(() => parseDiscoveryLegOutput(firstPlan, { leg_id: "foreign", concerns: [], coverage: { files: coverageFor(firstPlan.assignedFiles), stopping: { rule: firstPlan.definition.stoppingRule, reason: "complete" } } })).toThrow(/foreign leg ID/);
+    expect(parseDiscoveryLegOutput(firstPlan, {
+      leg_id: `${firstPlan.definition.id}/v${firstPlan.definition.version}`,
+      concerns: [],
+      coverage: {
+        files: coverageFor(firstPlan.assignedFiles),
+        stopping: { rule: firstPlan.definition.stoppingRule, reason: "complete" },
+      },
+    }).leg_id).toBe(firstPlan.definition.id);
     expect(() => parseDiscoveryLegOutput(firstPlan, { leg_id: firstPlan.definition.id, concerns: [{ id: "R1", file: firstPlan.assignedFiles[0], range: { start: 1, end: 1 }, title: "x", claim: "x", impact: "x", evidence_hint: "x", scope: "in-diff", evidence_ids: [] }, { id: "R1", file: firstPlan.assignedFiles[0], range: { start: 2, end: 2 }, title: "y", claim: "y", impact: "y", evidence_hint: "y", scope: "in-diff", evidence_ids: [] }], coverage: { files: coverageFor(firstPlan.assignedFiles), stopping: { rule: firstPlan.definition.stoppingRule, reason: "complete" } } })).toThrow(/duplicate local concern IDs/);
     expect(result.concerns).toEqual([expect.objectContaining({ id: "correctness:R1", raising_leg_ids: ["correctness", "contract-operability"], local_concern_ids: ["correctness:R1", "contract-operability:R1"], evidence_ids: ["e-correctness", "e-contract-operability"] })]);
     expect(() => validateDiscoveryEvidence(result, { correctness: ["e-correctness"], "contract-operability": [] })).toThrow(/foreign evidence ID e-contract-operability/);

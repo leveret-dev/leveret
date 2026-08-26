@@ -82,7 +82,7 @@ export interface DiscoveryLegDefinition extends DefinitionSource {
 
 const OUTPUT_CONTRACT = `Return only this strict JSON object (no extra keys):
 {
- "leg_id": "the exact packaged leg ID",
+ "leg_id": "exact bare ID: correctness | test-honesty | contract-operability (never append /v1)",
  "concerns": [{
   "id": "R1 (leg-local and unique)", "file": "assigned/path", "range": {"start": 1, "end": 1},
   "title": "short title", "claim": "one falsifiable mechanism", "impact": "concrete failure",
@@ -314,7 +314,11 @@ export function phaseToolIdentity(tools: ToolDefinition[]): { names: string[]; s
 }
 
 export function parseDiscoveryLegOutput(plan: DiscoveryLegPlan, output: unknown): LocalDiscoveryOutput {
-  const parsed = localOutputSchema.parse(output);
+  const normalized = output && typeof output === "object" && !Array.isArray(output)
+    && (output as Record<string, unknown>).leg_id === `${plan.definition.id}/v${plan.definition.version}`
+    ? { ...(output as Record<string, unknown>), leg_id: plan.definition.id }
+    : output;
+  const parsed = localOutputSchema.parse(normalized);
   if (parsed.leg_id !== plan.definition.id) throw new Error(`${plan.definition.id} leg returned foreign leg ID ${parsed.leg_id}`);
   if (parsed.coverage.stopping.rule !== plan.definition.stoppingRule) throw new Error(`${plan.definition.id} leg changed its stopping rule`);
   const localIds = parsed.concerns.map((concern) => concern.id);
