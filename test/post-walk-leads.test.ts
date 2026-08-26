@@ -54,12 +54,13 @@ describe("post-walk deterministic lead handoff", () => {
     expect(first).toEqual(second);
     expect(first.walk).toEqual({ completed: true, completed_order: 1 });
     expect(first.deduplication).toEqual({ exact_mechanism_location_count: 1, removed_ids: ["scan:L-underlying-b"] });
-    expect(first.pre_cap.count).toBe(4);
+    expect(first.pre_cap.count).toBe(3);
     expect(first.omissions.residual_questions).toEqual({ count: 1, card_ids: ["card-1"], reason: "no stable bounded file/evidence target" });
+    expect(first.omissions.mutation_profiles).toEqual({ count: 1, ids: ["mutation-underlying"], reason: "profile is not observed defect evidence" });
     expect(first.supplied.items.map((lead) => lead.id)).toEqual(["rule:semantic-underlying", "scan:L-underlying-a"]);
     expect(first.supplied.items.find((lead) => lead.id === "scan:L-underlying-a")).toMatchObject({ source_id: "L-underlying-a", mission: "test-honesty", reachability: { state: "unknown", graph_sha256: null } });
-    expect(first.overflow.ids).toEqual(["mutation:mutation-underlying", "scan:L-underlying-c"]);
-    expect(first.overflow.count).toBe(2);
+    expect(first.overflow.ids).toEqual(["scan:L-underlying-c"]);
+    expect(first.overflow.count).toBe(1);
     expect(first.overflow.bytes).toBeGreaterThan(0);
     expect(JSON.stringify(postWalkLeadHandoff(first))).not.toContain("overflow text");
   });
@@ -77,7 +78,7 @@ describe("post-walk deterministic lead handoff", () => {
     });
     expect(accounting.leads.map(({ disposition }) => disposition)).toEqual(["adopted/verified", "priced", "refuted"]);
     expect(accounting.leads.every((lead) => lead.generated_order < lead.routed_order && lead.routed_order < lead.seen_order && lead.seen_order < lead.disposition_order)).toBe(true);
-    expect(accounting.metrics).toMatchObject({ generated: 4, routed: 3, supplied: 3, adopted: 1, refuted: 1, priced: 1, ignored: 0, verified: 1, published: 0, adoption_rate: 1 / 3 });
+    expect(accounting.metrics).toMatchObject({ generated: 3, routed: 3, supplied: 3, adopted: 1, refuted: 1, priced: 1, ignored: 0, verified: 1, published: 0, adoption_rate: 1 / 3 });
     const published = markPostWalkLeadPublication(accounting, [ids[0]!], true);
     expect(published.leads[0]?.publication.state).toBe("published");
     expect(published.metrics.published).toBe(1);

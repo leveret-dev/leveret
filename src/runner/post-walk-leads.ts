@@ -1,5 +1,5 @@
 import type { EvidenceLead, EvidencePack, FileKind } from "../evidence-pack.js";
-import type { GuidanceLead, GuidanceResult, MutationId, MutationLead, SemanticRuleId } from "../semantic-checks.js";
+import type { GuidanceLead, GuidanceResult, SemanticRuleId } from "../semantic-checks.js";
 
 export const POST_WALK_LEADS_SCHEMA = "leveret.post-walk-leads/v1" as const;
 export const POST_WALK_ACCOUNTING_SCHEMA = "leveret.post-walk-lead-accounting/v1" as const;
@@ -12,7 +12,7 @@ export type LeadDisposition = "adopted/verified" | "priced" | "refuted" | "ignor
 export interface PostWalkLead {
   id: string;
   source_id: string;
-  source: "scan" | "guidance-rule" | "guidance-mutation";
+  source: "scan" | "guidance-rule";
   mechanism: string;
   mission: LeadMission;
   priority: number;
@@ -47,6 +47,7 @@ export interface PostWalkLeadStream {
   };
   omissions: {
     residual_questions: { count: number; card_ids: string[]; reason: "no stable bounded file/evidence target" };
+    mutation_profiles: { count: number; ids: string[]; reason: "profile is not observed defect evidence" };
   };
   limits: { max_leads: number; max_bytes: number };
   deduplication: { exact_mechanism_location_count: number; removed_ids: string[] };
@@ -113,14 +114,6 @@ const RULE_MISSIONS: Record<SemanticRuleId, LeadMission> = {
   "workflow-prerequisite-same-job": "correctness",
 };
 
-const MUTATION_MISSIONS: Record<MutationId, LeadMission> = {
-  "sibling-job-substitution": "test-honesty",
-  "trigger-settle-deletion": "correctness",
-  "uv-run-to-bare-command": "contract-operability",
-  "last-list-entry-removal": "test-honesty",
-  "pipe-to-file-substitution": "test-honesty",
-  "wrong-mode-equal-byte": "correctness",
-};
 
 function missionForFile(kind: FileKind | undefined): LeadMission {
   if (kind === "test") return "test-honesty";
@@ -189,25 +182,6 @@ function ruleLead(lead: GuidanceLead): CandidateLead {
   });
 }
 
-function mutationLead(lead: MutationLead): CandidateLead {
-  return withDedupeKey({
-    id: `mutation:${lead.id}`,
-    source_id: lead.id,
-    source: "guidance-mutation",
-    mechanism: lead.mutationId,
-    mission: MUTATION_MISSIONS[lead.mutationId],
-    priority: 25,
-    file: lead.evidence.path,
-    range: { start: null, end: null },
-    message: `Verify the bounded ${lead.mutationId} mutation mechanism at ${lead.evidence.path}.`,
-    evidence: { ids: [...new Set([...lead.selectedFacts, lead.evidence.evidenceId])].sort(), sha256: null, excerpt: null },
-    provenance: lead.provenance,
-    selected_facts: lead.selectedFacts,
-    limitations: lead.limitations,
-    applicability: lead.applicability,
-    reachability: unknownReachability(),
-  });
-}
 
 function itemBytes(item: PostWalkLead): number {
   return Buffer.byteLength(JSON.stringify(item));
@@ -223,7 +197,6 @@ export function buildPostWalkLeadStream(pack: EvidencePack, guidance: GuidanceRe
   const candidates = [
     ...pack.leads.items.map((lead) => scanLead(lead, pack)),
     ...guidance.ruleLeads.map(ruleLead),
-    ...guidance.mutationLeads.map(mutationLead),
   ].sort((left, right) => left.priority - right.priority || left.mission.localeCompare(right.mission) || left.file.localeCompare(right.file) || (left.range.start ?? 0) - (right.range.start ?? 0) || left.mechanism.localeCompare(right.mechanism) || left.id.localeCompare(right.id));
 
   const unique = new Map<string, CandidateLead>();
@@ -266,6 +239,11 @@ export function buildPostWalkLeadStream(pack: EvidencePack, guidance: GuidanceRe
         count: guidance.residualQuestions.length,
         card_ids: guidance.residualQuestions.map((question) => question.cardId),
         reason: "no stable bounded file/evidence target",
+      },
+      mutation_profiles: {
+        count: guidance.mutationLeads.length,
+        ids: guidance.mutationLeads.map((lead) => lead.id),
+        reason: "profile is not observed defect evidence",
       },
     },
     limits: { max_leads: maxLeads, max_bytes: maxBytes },
