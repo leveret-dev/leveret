@@ -363,7 +363,15 @@ export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
           error: event.message.errorMessage,
         }, { phase: options.phase, attempt, sessionId: session.sessionId, turn }));
       } else if (event.type === "message_update") {
-        backgroundAudit(options.audit?.record("assistant", "message_delta", { update: event.assistantMessageEvent }, { phase: options.phase, attempt, sessionId: session.sessionId, turn }));
+        const { partial, ...update } = event.assistantMessageEvent as unknown as Record<string, unknown>;
+        const encodedPartial = JSON.stringify(partial ?? null);
+        backgroundAudit(options.audit?.record("assistant", "message_delta", {
+          update,
+          partial: {
+            sha256: createHash("sha256").update(encodedPartial).digest("hex"),
+            bytes: Buffer.byteLength(encodedPartial),
+          },
+        }, { phase: options.phase, attempt, sessionId: session.sessionId, turn }));
       } else if (event.type === "turn_start") {
         turn++;
         backgroundAudit(options.audit?.record("lifecycle", event.type, {}, { phase: options.phase, attempt, sessionId: session.sessionId, turn }));
