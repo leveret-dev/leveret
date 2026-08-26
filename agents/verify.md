@@ -70,6 +70,22 @@ addressed it? Verify with the same evidence bar as any claim — a committer's
 sentence (what was verified, or what still fails). Do not re-report a still-open
 finding as a new item; it stays its thread's business.
 
+## Finalization checklist
+
+Before returning JSON:
+
+1. Match the supplied concern and lead ID set exactly in `verdicts`; no extras,
+   duplicates, or omissions.
+2. Put exactly the actionable verdict IDs in `report`.
+3. Omit optional string fields when empty. In particular, omit `"correlation"` for
+   every in-diff report and provide a non-empty value only for out-of-diff reports.
+4. Include coverage rows for every concern, supplied lead, and report file you
+   evaluated. The harness carries discovery coverage forward and mechanically adds
+   untouched changed files as `not-examined`.
+5. Emit all five named lens objects. If anything remains unresolved, grade it
+   `dropped` with a reason rather than continuing exploratory tool calls.
+6. Return the JSON object immediately; no prose and no further tool calls.
+
 ## Output
 
 Return only JSON; no prose around it:
@@ -85,7 +101,6 @@ Return only JSON; no prose around it:
       "tier": "major",
       "severity": "error",
       "scope": "in-diff",
-      "correlation": "only for out-of-diff items: why this connects to the change",
       "evidence": "command + output, or cited current code",
       "suggested_fix": "optional, concrete",
       "evidence_ids": ["tool-call evidence_id values supporting this finding"],
@@ -137,11 +152,11 @@ once, so nothing is silently dropped. Non-actionable verdicts require a reason.
 the run has no frozen comparison evidence and never infer quality improvement from
 either field.
 
-`coverage` contains exactly one object for every changed file plus every supplied
-lead/concern/report file. It retains all five named lens objects. A file that
-produced a discovery concern remains `findings` even when you refute or drop that
-concern; never downgrade it to `considered-fine` or `not-examined`. An actionable
-post-walk lead upgrades prior clean coverage to `findings`; a priced lead remains
-visible as findings coverage so the runner can render `findings-priced`. A refuted
-lead may leave prior clean coverage clean only with its verdict rationale. The
-runner mechanically merges this block with the discovery audit trail.
+`coverage` contains one object for every supplied concern/lead/report file the
+verifier evaluated. Discovery coverage is retained mechanically, and the runner
+adds every other changed file as `not-examined`; do not duplicate that full ledger.
+A file that produced a discovery concern remains `findings` even when you refute or
+drop that concern; never downgrade it to `considered-fine` or `not-examined`. An
+actionable or priced post-walk lead upgrades its file to `findings` or
+`findings-priced`. The runner mechanically merges this block with the discovery
+audit trail.

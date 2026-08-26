@@ -29,7 +29,7 @@ import { buildPiSystemPrompt, PI_SYSTEM_PROMPT_VERSION } from "./pi-system.js";
 import { buildPiTools, type PiToolsBundle } from "./pi-tools.js";
 import { connectSerena, serenaBundleProblem } from "./serena.js";
 import { materializeTrustedReviewState, type TrustedReviewState } from "../trusted-state.js";
-import { mergeVerificationCoverage, parseReviewOutput, verifySchemaGaps, type ReviewOutput } from "./verify-output.js";
+import { completeVerificationCoverage, mergeVerificationCoverage, normalizeVerifyOutput, parseReviewOutput, verifySchemaGaps, type ReviewOutput } from "./verify-output.js";
 import {
   accountPostWalkLeads,
   buildPostWalkLeadStream,
@@ -646,7 +646,15 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
           : identityDiscoveryTools,
         verifier: identityVerifierTools,
       }),
-      policy_sha256: stableSha256({ system_prompt_version: PI_SYSTEM_PROMPT_VERSION, discovery_contract: runtime.discoveryMode === "specialized/v1" ? SPECIALIZED_DISCOVERY : "single", verifier_role: "targeted-verifier", http_idle_timeout_ms: 0, phase_deadline_ms: runtime.deadlineMs }),
+      policy_sha256: stableSha256({
+        system_prompt_version: PI_SYSTEM_PROMPT_VERSION,
+        discovery_contract: runtime.discoveryMode === "specialized/v1" ? SPECIALIZED_DISCOVERY : "single",
+        verifier_role: "targeted-verifier",
+        http_idle_timeout_ms: 0,
+        phase_deadline_ms: runtime.deadlineMs,
+        profile_config_sha256: evidencePack.provenance.profileConfigSha256,
+        profile_source_sha256: evidencePack.provenance.profileSourceSha256,
+      }),
       card_sha256: guidance.provenance.cardSetSha256,
       rule_sha256: guidance.provenance.ruleSetSha256,
       cache_sha256: stableSha256({
@@ -805,7 +813,9 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
     if (new Set(priorThreadIds).size !== priorThreadIds.length) throw new Error("LEVERET_PRIOR contains duplicate threadId values");
     const verifierTools = selectPhaseTools(bundle.tools, TARGETED_VERIFIER_TOOLS.required, TARGETED_VERIFIER_TOOLS.optional, true);
     const verifierToolIdentity = phaseToolIdentity(verifierTools);
-    const verifierSystemPrompt = buildPiSystemPrompt(verifierToolIdentity.names);
+    const verifierSystemPrompt = `${buildPiSystemPrompt(verifierToolIdentity.names)}
+
+You are the targeted verification and publication gate. Work from the supplied concern/lead ledger, not a broad new review. Before answering, complete the finalization checklist mechanically: exact verdict IDs, actionable IDs only in report, no empty optional strings, correlation only for out-of-diff findings, all five lenses, and coverage only for evaluated concern/lead/report files. When evidence is insufficient, grade dropped with a reason. Once the ledger is complete, emit JSON immediately without further tool calls.`;
     const specializedCoverage = specialized?.outputs.map(({ plan, output }) => ({
       leg_id: plan.definition.id,
       assigned: plan.assignedFiles,
@@ -848,18 +858,19 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
       toolOutcomes,
       audit,
     });
+    verify = normalizeVerifyOutput(verify);
     const leadExpectations = postWalkLeads.supplied.items.map(({ id, file }) => ({ id, file }));
     const expectations = {
       concerns: reviewOutput.concerns.map(({ id, file }) => ({ id, file })),
       leads: leadExpectations,
-      changedFiles,
+      changedFiles: [],
       priorThreadIds,
     };
     const gaps = verifySchemaGaps(verify, expectations);
     if (gaps.length > 0) {
       verify = await runPhase({
         phase: "verify-correction",
-        prompt: `${verifyPrompt}\n\n## Schema correction\nYour previous answer was invalid: ${gaps.join(", ")}. Re-emit the full object required by the contract.`,
+        prompt: `${verifyPrompt}\n\n## Schema correction\nYour previous answer was invalid: ${gaps.join(", ")}.\nUse only evidence already gathered; make no tool calls. Apply the finalization checklist field by field, then re-emit the complete JSON object immediately.`,
         repo,
         runtimeDir,
         runtime,
@@ -872,12 +883,16 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
         toolOutcomes,
         audit,
       });
+      verify = normalizeVerifyOutput(verify);
       const correctedGaps = verifySchemaGaps(verify, expectations);
       if (correctedGaps.length > 0) {
         throw new Error(`Pi verifier returned invalid output after schema correction: ${correctedGaps.join(", ")}`);
       }
     }
-    const mergedVerify = mergeVerificationCoverage(reviewOutput, verify, leadExpectations);
+    const mergedVerify = completeVerificationCoverage(
+      mergeVerificationCoverage(reviewOutput, verify, leadExpectations),
+      changedFiles,
+    );
     verify = mergedVerify;
     const postWalkAccounting: PostWalkLeadAccounting = accountPostWalkLeads(postWalkLeads, mergedVerify);
     await audit?.record("result", "post_walk_verifier_dispositions", {

@@ -1,4 +1,4 @@
-export const PI_SYSTEM_PROMPT_VERSION = "6";
+export const PI_SYSTEM_PROMPT_VERSION = "7";
 
 export function buildPiSystemPrompt(toolNames: string[]): string {
   const available = toolNames.sort().map((name) => `- ${name}`).join("\n");

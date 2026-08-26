@@ -19,7 +19,7 @@ import {
   toolMetricsSummary,
   withDeadline,
 } from "../src/runner/pi.js";
-import { mergeVerificationCoverage, verifySchemaGaps } from "../src/runner/verify-output.js";
+import { completeVerificationCoverage, mergeVerificationCoverage, normalizeVerifyOutput, verifySchemaGaps } from "../src/runner/verify-output.js";
 import {
   buildSerenaArgs,
   createSerenaRuntimeHome,
@@ -572,6 +572,35 @@ describe("Pi result and metrics parsing", () => {
     };
     expect(verifySchemaGaps(actionable, leadExpectation)).toEqual([]);
     expect(mergeVerificationCoverage(review, actionable, leadExpectation.leads).coverage.files[0]?.verdict).toBe("findings");
+  });
+
+  it("normalizes optional verifier fields and mechanically accounts for untouched files", () => {
+    const normalized = normalizeVerifyOutput({
+      report: [{
+        id: "L2", file: "b.ts", line: 2, title: "bug", tier: "major", severity: "error",
+        scope: "in-diff", correlation: "", evidence: "line 2", suggested_fix: "", evidence_ids: [],
+      }],
+      verdicts: [{ id: "L2", grade: "actionable", reason: "" }],
+      coverage: { lenses, files: [{ file: "b.ts", verdict: "findings", note: "" }] },
+    }) as Record<string, unknown>;
+    expect((normalized.report as Record<string, unknown>[])[0]).not.toHaveProperty("correlation");
+    expect((normalized.report as Record<string, unknown>[])[0]).not.toHaveProperty("suggested_fix");
+    expect((normalized.verdicts as Record<string, unknown>[])[0]).not.toHaveProperty("reason");
+    expect(((normalized.coverage as Record<string, unknown>).files as Record<string, unknown>[])[0]).not.toHaveProperty("note");
+
+    const completed = completeVerificationCoverage(
+      mergeVerificationCoverage(
+        { concerns: [], coverage: { lenses, files: [{ file: "b.ts", verdict: "considered-fine" }] } },
+        normalized,
+        [{ id: "L2", file: "b.ts" }],
+      ),
+      ["b.ts", "untouched.md"],
+    );
+    expect(completed.coverage.files).toContainEqual({
+      file: "untouched.md",
+      verdict: "not-examined",
+      note: "not examined by discovery or targeted verification",
+    });
   });
 
   it("kills a wedged child at its deadline", async () => {

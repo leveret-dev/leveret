@@ -80,6 +80,52 @@ export function parseReviewOutput(output: unknown): ReviewOutput {
   return reviewOutputSchema.parse(output);
 }
 
+/** Normalize harmless optional-field shapes before strict schema validation. */
+export function normalizeVerifyOutput(output: unknown): unknown {
+  if (!output || typeof output !== "object" || Array.isArray(output)) return output;
+  const value = output as Record<string, unknown>;
+  const report = Array.isArray(value.report) ? value.report.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+    const normalized = { ...item } as Record<string, unknown>;
+    if (normalized.scope === "in-diff") delete normalized.correlation;
+    else if (normalized.correlation === "") delete normalized.correlation;
+    if (normalized.suggested_fix === "") delete normalized.suggested_fix;
+    return normalized;
+  }) : value.report;
+  const verdicts = Array.isArray(value.verdicts) ? value.verdicts.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+    const normalized = { ...item } as Record<string, unknown>;
+    if (normalized.grade === "actionable" && normalized.reason === "") delete normalized.reason;
+    return normalized;
+  }) : value.verdicts;
+  const coverage = value.coverage && typeof value.coverage === "object" && !Array.isArray(value.coverage)
+    ? {
+        ...(value.coverage as Record<string, unknown>),
+        files: Array.isArray((value.coverage as Record<string, unknown>).files)
+          ? ((value.coverage as Record<string, unknown>).files as unknown[]).map((item) => {
+              if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+              const normalized = { ...item } as Record<string, unknown>;
+              if (normalized.note === "") delete normalized.note;
+              return normalized;
+            })
+          : (value.coverage as Record<string, unknown>).files,
+      }
+    : value.coverage;
+  return { ...value, report, verdicts, coverage };
+}
+
+/** Account mechanically for changed files omitted by targeted discovery/verification. */
+export function completeVerificationCoverage(output: FinalVerifyOutput, changedFiles: string[]): FinalVerifyOutput {
+  const files = [...output.coverage.files];
+  const present = new Set(files.map((file) => file.file));
+  for (const file of changedFiles) {
+    if (present.has(file)) continue;
+    files.push({ file, verdict: "not-examined", note: "not examined by discovery or targeted verification" });
+    present.add(file);
+  }
+  return { ...output, coverage: { ...output.coverage, files } };
+}
+
 
 export interface VerifyExpectations {
   concerns: { id: string; file: string }[];
