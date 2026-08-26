@@ -340,10 +340,34 @@ export function phaseToolIdentity(tools: ToolDefinition[]): { names: string[]; s
 }
 
 export function parseDiscoveryLegOutput(plan: DiscoveryLegPlan, output: unknown): LocalDiscoveryOutput {
-  const normalized = output && typeof output === "object" && !Array.isArray(output)
-    && (output as Record<string, unknown>).leg_id === `${plan.definition.id}/v${plan.definition.version}`
-    ? { ...(output as Record<string, unknown>), leg_id: plan.definition.id }
-    : output;
+  let normalized: unknown = output;
+  if (output && typeof output === "object" && !Array.isArray(output)) {
+    const record = output as Record<string, unknown>;
+    const coverage = record.coverage && typeof record.coverage === "object" && !Array.isArray(record.coverage)
+      ? record.coverage as Record<string, unknown>
+      : {};
+    const files = Array.isArray(coverage.files) ? [...coverage.files] : [];
+    const coveredFiles = new Set(files.flatMap((file) =>
+      file && typeof file === "object" && !Array.isArray(file) && typeof (file as Record<string, unknown>).file === "string"
+        ? [(file as Record<string, unknown>).file as string]
+        : []));
+    for (const file of plan.assignedFiles) {
+      if (!coveredFiles.has(file)) files.push({ file, state: "unexamined", note: "model omitted assigned file; mechanically accounted", evidence_ids: [] });
+    }
+    const checklists = Array.isArray(coverage.checklists) ? [...coverage.checklists] : [];
+    const coveredChecklists = new Set(checklists.flatMap((checklist) =>
+      checklist && typeof checklist === "object" && !Array.isArray(checklist) && typeof (checklist as Record<string, unknown>).id === "string"
+        ? [(checklist as Record<string, unknown>).id as string]
+        : []));
+    for (const id of plan.checklistIds) {
+      if (!coveredChecklists.has(id)) checklists.push({ id, state: "unresolved", note: "model omitted checklist; mechanically accounted" });
+    }
+    normalized = {
+      ...record,
+      ...(record.leg_id === `${plan.definition.id}/v${plan.definition.version}` ? { leg_id: plan.definition.id } : {}),
+      coverage: { ...coverage, files, checklists },
+    };
+  }
   const parsed = localOutputSchema.parse(normalized);
   if (parsed.leg_id !== plan.definition.id) throw new Error(`${plan.definition.id} leg returned foreign leg ID ${parsed.leg_id}`);
   if (parsed.coverage.stopping.rule !== plan.definition.stoppingRule) throw new Error(`${plan.definition.id} leg changed its stopping rule`);

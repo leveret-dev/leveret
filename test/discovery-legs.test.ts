@@ -110,6 +110,26 @@ describe("specialized discovery", () => {
       concerns: [],
       coverage: disclosureFor(firstPlan),
     }).leg_id).toBe(firstPlan.definition.id);
+    const mechanicallyCompleted = parseDiscoveryLegOutput(firstPlan, {
+      leg_id: firstPlan.definition.id,
+      concerns: [],
+      coverage: {
+        files: [],
+        checklists: [],
+        stopping: { rule: firstPlan.definition.stoppingRule, reason: "budget exhausted" },
+      },
+    });
+    expect(mechanicallyCompleted.coverage.files).toContainEqual({
+      file: firstPlan.assignedFiles[0],
+      state: "unexamined",
+      note: "model omitted assigned file; mechanically accounted",
+      evidence_ids: [],
+    });
+    expect(mechanicallyCompleted.coverage.checklists).toContainEqual({
+      id: firstPlan.checklistIds[0],
+      state: "unresolved",
+      note: "model omitted checklist; mechanically accounted",
+    });
     expect(() => parseDiscoveryLegOutput(firstPlan, { leg_id: firstPlan.definition.id, concerns: [{ id: "R1", file: firstPlan.assignedFiles[0], range: { start: 1, end: 1 }, title: "x", claim: "x", impact: "x", evidence_hint: "x", scope: "in-diff", evidence_ids: [] }, { id: "R1", file: firstPlan.assignedFiles[0], range: { start: 2, end: 2 }, title: "y", claim: "y", impact: "y", evidence_hint: "y", scope: "in-diff", evidence_ids: [] }], coverage: disclosureFor(firstPlan) })).toThrow(/duplicate local concern IDs/);
     expect(result.concerns).toEqual([expect.objectContaining({ id: "correctness:R1", raising_leg_ids: ["correctness", "contract-operability"], local_concern_ids: ["correctness:R1", "contract-operability:R1"], evidence_ids: ["e-correctness", "e-contract-operability"] })]);
     expect(() => validateDiscoveryEvidence(result, { correctness: ["e-correctness"], "contract-operability": [] })).toThrow(/foreign evidence ID e-contract-operability/);
