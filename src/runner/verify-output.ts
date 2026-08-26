@@ -10,8 +10,7 @@ const fileCoverageSchema = z.object({
   note: text.optional(),
 }).strict();
 
-const reportSchema = z.object({
-  id: text,
+const findingFields = {
   file: text,
   line: z.number().int().positive(),
   title: text,
@@ -24,7 +23,13 @@ const reportSchema = z.object({
   evidence_ids: z.array(text),
   extra_real: z.boolean().nullable().optional(),
   beyond_diff: z.boolean().nullable().optional(),
-}).strict().superRefine((item, ctx) => {
+};
+const findingBodySchema = z.object(findingFields).strict().superRefine((item, ctx) => {
+  if (item.scope === "out-of-diff" && !item.correlation) {
+    ctx.addIssue({ code: "custom", path: ["correlation"], message: "out-of-diff findings require correlation" });
+  }
+});
+const reportSchema = z.object({ id: text, ...findingFields }).strict().superRefine((item, ctx) => {
   if (item.scope === "out-of-diff" && !item.correlation) {
     ctx.addIssue({ code: "custom", path: ["correlation"], message: "out-of-diff reports require correlation" });
   }
@@ -55,6 +60,29 @@ const verifyOutputSchema = z.object({
   report: z.array(reportSchema),
   verdicts: z.array(verdictSchema),
   coverage: coverageSchema,
+  resolutions: z.array(resolutionSchema).optional(),
+}).strict();
+
+const verifierDecisionSchema = z.object({
+  id: text,
+  grade: z.enum(["actionable", "priced-noise", "false-positive", "dropped"]),
+  reason: text.optional(),
+  finding: findingBodySchema.optional(),
+}).strict().superRefine((decision, ctx) => {
+  if (decision.grade === "actionable" && !decision.finding) {
+    ctx.addIssue({ code: "custom", path: ["finding"], message: "actionable decisions require a finding body" });
+  }
+  if (decision.grade !== "actionable" && !decision.reason) {
+    ctx.addIssue({ code: "custom", path: ["reason"], message: `${decision.grade} decisions require a reason` });
+  }
+  if (decision.grade !== "actionable" && decision.finding) {
+    ctx.addIssue({ code: "custom", path: ["finding"], message: "non-actionable decisions cannot carry finding bodies" });
+  }
+});
+
+const verifierModelOutputSchema = z.object({
+  decisions: z.array(verifierDecisionSchema),
+  lenses: z.array(lensSchema),
   resolutions: z.array(resolutionSchema).optional(),
 }).strict();
 
@@ -98,6 +126,19 @@ export function normalizeVerifyOutput(output: unknown): unknown {
     if (normalized.grade === "actionable" && normalized.reason === "") delete normalized.reason;
     return normalized;
   }) : value.verdicts;
+  const decisions = Array.isArray(value.decisions) ? value.decisions.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+    const normalized = { ...item } as Record<string, unknown>;
+    if (normalized.grade === "actionable" && normalized.reason === "") delete normalized.reason;
+    if (normalized.finding && typeof normalized.finding === "object" && !Array.isArray(normalized.finding)) {
+      const finding = { ...(normalized.finding as Record<string, unknown>) };
+      if (finding.scope === "in-diff") delete finding.correlation;
+      else if (finding.correlation === "") delete finding.correlation;
+      if (finding.suggested_fix === "") delete finding.suggested_fix;
+      normalized.finding = finding;
+    }
+    return normalized;
+  }) : value.decisions;
   const coverage = value.coverage && typeof value.coverage === "object" && !Array.isArray(value.coverage)
     ? {
         ...(value.coverage as Record<string, unknown>),
@@ -111,7 +152,12 @@ export function normalizeVerifyOutput(output: unknown): unknown {
           : (value.coverage as Record<string, unknown>).files,
       }
     : value.coverage;
-  return { ...value, report, verdicts, coverage };
+  const normalized = { ...value };
+  if ("report" in value) normalized.report = report;
+  if ("verdicts" in value) normalized.verdicts = verdicts;
+  if ("decisions" in value) normalized.decisions = decisions;
+  if ("coverage" in value) normalized.coverage = coverage;
+  return normalized;
 }
 
 /** Account mechanically for changed files omitted by targeted discovery/verification. */
@@ -132,6 +178,52 @@ export interface VerifyExpectations {
   leads: { id: string; file: string }[];
   changedFiles: string[];
   priorThreadIds: string[];
+}
+
+/** Turn compact per-ID model decisions into the canonical verifier result. */
+export function assembleVerifierOutput(output: unknown, expected: VerifyExpectations): unknown {
+  const normalized = normalizeVerifyOutput(output);
+  if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)
+    || !Array.isArray((normalized as Record<string, unknown>).decisions)) return normalized;
+  const parsed = verifierModelOutputSchema.parse(normalized);
+  const verdicts = parsed.decisions.map(({ id, grade, reason }) => ({
+    id,
+    grade,
+    ...(reason ? { reason } : {}),
+  }));
+  const report = parsed.decisions.flatMap((decision) =>
+    decision.grade === "actionable" && decision.finding
+      ? [{ id: decision.id, ...decision.finding }]
+      : []);
+  const decisionsById = new Map(parsed.decisions.map((decision) => [decision.id, decision]));
+  const fileIds = new Map<string, { concern: boolean; ids: string[] }>();
+  for (const item of expected.concerns) {
+    const entry = fileIds.get(item.file) ?? { concern: false, ids: [] };
+    entry.concern = true;
+    entry.ids.push(item.id);
+    fileIds.set(item.file, entry);
+  }
+  for (const item of expected.leads) {
+    const entry = fileIds.get(item.file) ?? { concern: false, ids: [] };
+    entry.ids.push(item.id);
+    fileIds.set(item.file, entry);
+  }
+  for (const finding of report) {
+    const entry = fileIds.get(finding.file) ?? { concern: false, ids: [] };
+    if (!entry.ids.includes(finding.id)) entry.ids.push(finding.id);
+    fileIds.set(finding.file, entry);
+  }
+  const files = [...fileIds].map(([file, entry]) => {
+    const decisions = entry.ids.flatMap((id) => decisionsById.get(id) ? [decisionsById.get(id)!] : []);
+    const disclosed = entry.concern || decisions.some((decision) => decision.grade === "actionable" || decision.grade === "priced-noise");
+    return { file, verdict: disclosed ? "findings" as const : "considered-fine" as const };
+  });
+  return {
+    report,
+    verdicts,
+    coverage: { lenses: parsed.lenses, files },
+    ...(parsed.resolutions ? { resolutions: parsed.resolutions } : {}),
+  };
 }
 
 const REQUIRED_LENSES = [

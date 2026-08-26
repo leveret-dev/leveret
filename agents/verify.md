@@ -74,14 +74,14 @@ finding as a new item; it stays its thread's business.
 
 Before returning JSON:
 
-1. Match the supplied concern and lead ID set exactly in `verdicts`; no extras,
+1. Match the supplied concern and lead ID set exactly in `decisions`; no extras,
    duplicates, or omissions.
-2. Put exactly the actionable verdict IDs in `report`.
+2. Include a `finding` body only for `actionable` decisions. Non-actionable
+   decisions require a reason and must omit `finding`.
 3. Omit optional string fields when empty. In particular, omit `"correlation"` for
-   every in-diff report and provide a non-empty value only for out-of-diff reports.
-4. Include coverage rows for every concern, supplied lead, and report file you
-   evaluated. The harness carries discovery coverage forward and mechanically adds
-   untouched changed files as `not-examined`.
+   every in-diff finding and provide a non-empty value only for out-of-diff findings.
+4. Do not reproduce report, verdict, file-coverage, or publication ledgers; the
+   runner assembles them mechanically from the decision rows.
 5. Emit all five named lens objects. If anything remains unresolved, grade it
    `dropped` with a reason rather than continuing exploratory tool calls.
 6. Return the JSON object immediately; no prose and no further tool calls.
@@ -92,46 +92,45 @@ Return only JSON; no prose around it:
 
 ```json
 {
-  "report": [
+  "decisions": [
     {
       "id": "R1",
-      "file": "src/foo.php",
-      "line": 42,
-      "title": "fail-open when the manifest entry is missing",
-      "tier": "major",
-      "severity": "error",
-      "scope": "in-diff",
-      "evidence": "command + output, or cited current code",
-      "suggested_fix": "optional, concrete",
-      "evidence_ids": ["tool-call evidence_id values supporting this finding"],
-      "extra_real": null,
-      "beyond_diff": false
+      "grade": "actionable",
+      "finding": {
+        "file": "src/foo.php",
+        "line": 42,
+        "title": "fail-open when the manifest entry is missing",
+        "tier": "major",
+        "severity": "error",
+        "scope": "in-diff",
+        "evidence": "command + output, or cited current code",
+        "suggested_fix": "optional, concrete",
+        "evidence_ids": ["tool-call evidence_id values supporting this finding"],
+        "extra_real": null,
+        "beyond_diff": false
+      }
+    },
+    {
+      "id": "scan:L1",
+      "grade": "false-positive",
+      "reason": "guarded two lines above"
     }
   ],
-  "verdicts": [
-    { "id": "R1", "grade": "actionable" },
-    { "id": "scan:L1", "grade": "false-positive", "reason": "guarded two lines above" }
+  "lenses": [
+    { "lens": "correctness-hostile-inputs", "outcome": "1 actionable concern" },
+    { "lens": "contract-conformance", "outcome": "clean" },
+    { "lens": "test-honesty", "outcome": "clean" },
+    { "lens": "blast-radius", "outcome": "7 callers traced; clean" },
+    { "lens": "leads-triage", "outcome": "1 routed lead refuted" }
   ],
-  "coverage": {
-    "lenses": [
-      { "lens": "correctness-hostile-inputs", "outcome": "1 actionable concern" },
-      { "lens": "contract-conformance", "outcome": "clean" },
-      { "lens": "test-honesty", "outcome": "clean" },
-      { "lens": "blast-radius", "outcome": "7 callers traced; clean" },
-      { "lens": "leads-triage", "outcome": "1 routed lead refuted" }
-    ],
-    "files": [
-      { "file": "src/foo.php", "verdict": "findings" }
-    ]
-  },
   "resolutions": [
     { "threadId": "T1", "status": "resolved", "note": "attempts now counts total invocations; probe re-run confirms 3 calls for attempts: 3" }
   ]
 }
 ```
 
-Every `report` item carries a **tier** — your judgment of importance, distinct from
-the engine's mechanical `severity`:
+Every actionable decision's `finding` carries a **tier** — your judgment of
+importance, distinct from the engine's mechanical `severity`:
 
 - `"critical"` — merging this breaks correctness, security, or data for real users;
   must be fixed before merge.
@@ -139,24 +138,15 @@ the engine's mechanical `severity`:
 - `"minor"` — real but low-impact; fine to fix here or in a follow-up.
 - `"nit"` — polish; never blocks anything.
 
-`"scope": "out-of-diff"` items are verified and reported like any other — being
-outside the diff is never grounds to drop a correlated defect (verify the stated
-`correlation` too; if the connection to this change does not hold, the item may
-still be real but belongs in a separate report). In the published output they render
-in their own section, since GitHub cannot attach them inline to the diff.
+`"scope": "out-of-diff"` findings are verified like any other — being outside the
+diff is never grounds to drop a correlated defect. Verify and supply the non-empty
+`correlation`; if the connection does not hold, the defect belongs elsewhere.
 
-Order `report` by tier, most severe first. `report` holds exactly the IDs graded
-`actionable`; `verdicts` holds every supplied concern and post-walk lead exactly
-once, so nothing is silently dropped. Non-actionable verdicts require a reason.
-`extra_real` and `beyond_diff` are optional evaluation observations; use `null` when
-the run has no frozen comparison evidence and never infer quality improvement from
-either field.
+Emit one decision for every supplied ID exactly once. `actionable` requires a
+finding body; `priced-noise`, `false-positive`, and `dropped` require a reason and
+must omit it. `extra_real` and `beyond_diff` are optional evaluation observations;
+use `null` when the run has no frozen comparison evidence.
 
-`coverage` contains one object for every supplied concern/lead/report file the
-verifier evaluated. Discovery coverage is retained mechanically, and the runner
-adds every other changed file as `not-examined`; do not duplicate that full ledger.
-A file that produced a discovery concern remains `findings` even when you refute or
-drop that concern; never downgrade it to `considered-fine` or `not-examined`. An
-actionable or priced post-walk lead upgrades its file to `findings` or
-`findings-priced`. The runner mechanically merges this block with the discovery
-audit trail.
+The runner derives canonical `verdicts`, orders actionable findings by tier,
+preserves discovery coverage, upgrades actionable/priced lead files, and adds all
+other changed files as `not-examined`.

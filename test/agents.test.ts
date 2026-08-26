@@ -81,13 +81,14 @@ describe("agent contracts", () => {
     expect(verify).not.toMatch(/outside the diff[^.]*\bskip\b/i);
   });
 
-  it("the verify contract reports findings in importance tiers and carries coverage through", async () => {
+  it("the verify contract reports finding tiers and delegates coverage assembly", async () => {
     const text = await loadContract("verify", { repo: "r", base: "b" });
     for (const tier of ["critical", "major", "minor", "nit"]) {
       expect(text).toContain(`"${tier}"`);
     }
     expect(text).toContain('"tier"');
-    expect(text).toContain('"coverage"');
+    expect(text).toContain('"decisions"');
+    expect(text).toContain("runner derives canonical");
     // tier is review judgment, not engine severity — both must exist distinctly
     expect(text).toContain('"severity"');
   });

@@ -19,7 +19,7 @@ import {
   toolMetricsSummary,
   withDeadline,
 } from "../src/runner/pi.js";
-import { completeVerificationCoverage, mergeVerificationCoverage, normalizeVerifyOutput, verifySchemaGaps } from "../src/runner/verify-output.js";
+import { assembleVerifierOutput, completeVerificationCoverage, mergeVerificationCoverage, normalizeVerifyOutput, verifySchemaGaps } from "../src/runner/verify-output.js";
 import {
   buildSerenaArgs,
   createSerenaRuntimeHome,
@@ -600,6 +600,25 @@ describe("Pi result and metrics parsing", () => {
       file: "untouched.md",
       verdict: "not-examined",
       note: "not examined by discovery or targeted verification",
+    });
+  });
+
+  it("assembles canonical verifier output from compact per-ID decisions", () => {
+    const assembled = assembleVerifierOutput({
+      decisions: [
+        { id: "R1", grade: "priced-noise", reason: "documented ceiling" },
+        { id: "L1", grade: "false-positive", reason: "guarded" },
+      ],
+      lenses,
+    }, expectations);
+    expect(verifySchemaGaps(assembled, expectations)).toEqual([]);
+    expect(assembled).toMatchObject({
+      report: [],
+      verdicts: [
+        { id: "R1", grade: "priced-noise" },
+        { id: "L1", grade: "false-positive" },
+      ],
+      coverage: { files: [{ file: "a.ts", verdict: "findings" }] },
     });
   });
 

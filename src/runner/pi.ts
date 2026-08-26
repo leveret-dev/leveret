@@ -29,7 +29,7 @@ import { buildPiSystemPrompt, PI_SYSTEM_PROMPT_VERSION } from "./pi-system.js";
 import { buildPiTools, type PiToolsBundle } from "./pi-tools.js";
 import { connectSerena, serenaBundleProblem } from "./serena.js";
 import { materializeTrustedReviewState, type TrustedReviewState } from "../trusted-state.js";
-import { completeVerificationCoverage, mergeVerificationCoverage, normalizeVerifyOutput, parseReviewOutput, verifySchemaGaps, type ReviewOutput } from "./verify-output.js";
+import { assembleVerifierOutput, completeVerificationCoverage, mergeVerificationCoverage, parseReviewOutput, verifySchemaGaps, type ReviewOutput } from "./verify-output.js";
 import {
   accountPostWalkLeads,
   buildPostWalkLeadStream,
@@ -815,7 +815,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
     const verifierToolIdentity = phaseToolIdentity(verifierTools);
     const verifierSystemPrompt = `${buildPiSystemPrompt(verifierToolIdentity.names)}
 
-You are the targeted verification and publication gate. Work from the supplied concern/lead ledger, not a broad new review. Before answering, complete the finalization checklist mechanically: exact verdict IDs, actionable IDs only in report, no empty optional strings, correlation only for out-of-diff findings, all five lenses, and coverage only for evaluated concern/lead/report files. When evidence is insufficient, grade dropped with a reason. Once the ledger is complete, emit JSON immediately without further tool calls.`;
+You are the targeted verification and publication gate. Work from the supplied concern/lead ledger, not a broad new review. Return one compact decision row per supplied ID; include a finding body only for actionable decisions. The runner assembles verdicts, reports, coverage, and publication structures. Before answering, check exact IDs, no empty optional strings, correlation only for out-of-diff findings, and all five lenses. When evidence is insufficient, grade dropped with a reason. Once the ledger is complete, emit JSON immediately without further tool calls.`;
     const specializedCoverage = specialized?.outputs.map(({ plan, output }) => ({
       leg_id: plan.definition.id,
       assigned: plan.assignedFiles,
@@ -842,6 +842,13 @@ You are the targeted verification and publication gate. Work from the supplied c
       JSON.stringify(postWalkHandoff, null, 1),
       ...(prior ? ["\n## Previously posted findings on this PR (judge each and emit resolutions)\n", prior] : []),
     ].join("\n");
+    const leadExpectations = postWalkLeads.supplied.items.map(({ id, file }) => ({ id, file }));
+    const expectations = {
+      concerns: reviewOutput.concerns.map(({ id, file }) => ({ id, file })),
+      leads: leadExpectations,
+      changedFiles: [],
+      priorThreadIds,
+    };
     const verificationStartedAt = performance.now();
     let verify = await runPhase({
       phase: "verify",
@@ -858,14 +865,7 @@ You are the targeted verification and publication gate. Work from the supplied c
       toolOutcomes,
       audit,
     });
-    verify = normalizeVerifyOutput(verify);
-    const leadExpectations = postWalkLeads.supplied.items.map(({ id, file }) => ({ id, file }));
-    const expectations = {
-      concerns: reviewOutput.concerns.map(({ id, file }) => ({ id, file })),
-      leads: leadExpectations,
-      changedFiles: [],
-      priorThreadIds,
-    };
+    verify = assembleVerifierOutput(verify, expectations);
     const gaps = verifySchemaGaps(verify, expectations);
     if (gaps.length > 0) {
       verify = await runPhase({
@@ -883,7 +883,7 @@ You are the targeted verification and publication gate. Work from the supplied c
         toolOutcomes,
         audit,
       });
-      verify = normalizeVerifyOutput(verify);
+      verify = assembleVerifierOutput(verify, expectations);
       const correctedGaps = verifySchemaGaps(verify, expectations);
       if (correctedGaps.length > 0) {
         throw new Error(`Pi verifier returned invalid output after schema correction: ${correctedGaps.join(", ")}`);
