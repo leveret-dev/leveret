@@ -557,7 +557,7 @@ async function main(): Promise<void> {
     return;
   }
   const repo = args[0];
-  if (!repo || repo.startsWith("--")) throw new Error("usage: replay.mts <repo> [--experiment manifest.json --routing routing.json --routing-sha256 HASH] [--corpus path] [--mode diff-only|review-context|both] [--discovery-mode single|specialized/v1] [--discovery-scheduler serial/v1|bounded-concurrent/v1] [--discovery-concurrency 1..3] [--trials N] [--profile path] [--trace-root path] [--cache-root path] [--no-cache] [--runner command] [--capabilities expected.json]");
+  if (!repo || repo.startsWith("--")) throw new Error("usage: replay.mts <repo> [--experiment manifest.json --configuration ID --routing routing.json --routing-sha256 HASH] [--corpus path] [--mode diff-only|review-context|both] [--discovery-mode single|specialized/v1] [--discovery-scheduler serial/v1|bounded-concurrent/v1] [--discovery-concurrency 1..3] [--trials N] [--profile path] [--trace-root path] [--cache-root path] [--no-cache] [--runner command] [--capabilities expected.json]");
   const modeArg = option(args, "--mode", "both");
   const modes: ContextMode[] = modeArg === "both" ? ["diff-only", "review-context"] : modeArg === "diff-only" || modeArg === "review-context" ? [modeArg] : (() => { throw new Error(`invalid mode: ${modeArg}`); })();
   const capabilitiesPath = option(args, "--capabilities");
@@ -567,7 +567,11 @@ async function main(): Promise<void> {
   const discoveryScheduler = option(args, "--discovery-scheduler", "serial/v1");
   if (discoveryScheduler !== "serial/v1" && discoveryScheduler !== "bounded-concurrent/v1") throw new Error(`invalid discovery scheduler: ${discoveryScheduler}`);
   const discoveryConcurrency = Number(option(args, "--discovery-concurrency", discoveryScheduler === "serial/v1" ? "1" : "3"));
-  const plans = experiment ? planExperimentTrials(loaded, experiment) : planTrials(loaded, modes, Number(option(args, "--trials", "1")));
+  const configurationId = option(args, "--configuration");
+  const plans = experiment
+    ? planExperimentTrials(loaded, experiment).filter((plan) => !configurationId || plan.experiment?.configuration.id === configurationId)
+    : planTrials(loaded, modes, Number(option(args, "--trials", "1")));
+  if (experiment && configurationId && plans.length === 0) throw new Error(`experiment configuration not found: ${configurationId}`);
   for (const plan of plans) {
     const rows = loaded.corpus.rows.filter((row) => row.frozen.range_id === plan.range_id);
     process.stdout.write(`${JSON.stringify(await runTrial(plan, rows, {
