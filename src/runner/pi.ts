@@ -26,10 +26,10 @@ import { loadProfile } from "../profile.js";
 import { scan } from "../scan.js";
 import { ENGINES } from "../engines/registry.js";
 import { buildPiSystemPrompt, PI_SYSTEM_PROMPT_VERSION } from "./pi-system.js";
-import { buildPiTools, type PiToolsBundle } from "./pi-tools.js";
+import { buildPiTools, createPhaseSubmissionTool, PHASE_SUBMISSION_TOOL, zodPhaseSubmission, type PhaseSubmission, type PiToolsBundle } from "./pi-tools.js";
 import { connectSerena, serenaBundleProblem } from "./serena.js";
 import { materializeTrustedReviewState, type TrustedReviewState } from "../trusted-state.js";
-import { assembleVerifierOutput, completeVerificationCoverage, mergeVerificationCoverage, parseReviewOutput, verifySchemaGaps, type ReviewOutput } from "./verify-output.js";
+import { assembleVerifierOutput, completeVerificationCoverage, mergeVerificationCoverage, parseReviewOutput, reviewSubmissionSchema, verifierModelOutputSchema, verifySchemaGaps, type ReviewOutput } from "./verify-output.js";
 import {
   accountPostWalkLeads,
   buildPostWalkLeadStream,
@@ -51,6 +51,8 @@ import {
   SPECIALIZED_LEG_DEFINITIONS,
   TARGETED_VERIFIER_TOOLS,
   discoveryMode,
+  localOutputSchema,
+  parseDiscoveryLegOutput,
   phaseToolIdentity,
   runSpecializedDiscovery,
   selectPhaseTools,
@@ -200,15 +202,6 @@ export function buildPiResourceLoader(systemPrompt: string, options: PiHostResou
   });
 }
 
-export function parseAssistantJson(value: string): unknown {
-  const trimmed = value.trim().replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
-  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) throw new Error("Pi assistant returned no JSON object");
-  try {
-    return JSON.parse(trimmed);
-  } catch (error) {
-    throw new Error(`Pi assistant returned invalid JSON: ${String(error)}`);
-  }
-}
 
 export interface ToolMetric {
   phase: string;
@@ -248,9 +241,19 @@ export function toolMetricsSummary(metrics: ToolMetric[]): Record<string, Record
   }
   return result;
 }
+export function piContract(text: string): string {
+  return text
+    .replace(/`leveret\.([a-z_]+)`/g, "`leveret_$1`")
+    .replace(
+      /Return only (?:a )?JSON(?: object)?; no prose around it:\n\n```json\n[\s\S]*?\n```/g,
+      "Complete this phase by calling `leveret_submit_phase` once. Its tool schema defines the required fields; do not serialize the result as assistant text.",
+    )
+    .replace("Before returning JSON:", "Before submitting:")
+    .replace("Return the JSON object immediately; no prose and no further tool calls.", "Call `leveret_submit_phase` immediately; no prose and no further tool calls.");
+}
 
-function piContract(text: string): string {
-  return text.replace(/`leveret\.([a-z_]+)`/g, "`leveret_$1`");
+function phaseToolIdentityWithSubmission(tools: PiToolsBundle["tools"], submission: PhaseSubmission) {
+  return phaseToolIdentity([...tools, createPhaseSubmissionTool(submission, () => undefined)]);
 }
 
 /** Discovery receives deterministic scope and trusted card references, never routed lead material. */
@@ -306,6 +309,7 @@ export interface RunPhaseOptions {
   model: NonNullable<ReturnType<ModelRuntime["getModel"]>>;
   systemPrompt: string;
   tools: PiToolsBundle["tools"];
+  submission: PhaseSubmission;
   metrics: ToolMetric[];
   toolOutcomes: Map<string, { timedOut: boolean; nonzeroExit: boolean }>;
   audit?: AuditWriter;
@@ -331,7 +335,14 @@ export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
     );
     const resourceLoader = buildPiResourceLoader(options.systemPrompt, { cwd: options.runtimeDir });
     await resourceLoader.reload({ resolveProjectTrust: async () => false });
-    const toolNames = options.tools.map((tool) => tool.name);
+    let submitted = false;
+    let phaseResult: unknown;
+    const phaseTools = [...options.tools, createPhaseSubmissionTool(options.submission, (value) => {
+      if (submitted) throw new Error(`${PHASE_SUBMISSION_TOOL} accepts one result per phase`);
+      submitted = true;
+      phaseResult = value;
+    })];
+    const toolNames = phaseTools.map((tool) => tool.name);
     const persistNativeSession = options.audit?.nativeSessionsEnabled() === true;
     const sessionManager = SessionManager.inMemory(options.runtimeDir);
     await options.audit?.record("prompts", "attempt_started", {
@@ -360,7 +371,7 @@ export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
       model: options.model,
       thinkingLevel: phaseThinking as "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
       tools: toolNames,
-      customTools: options.tools,
+      customTools: phaseTools,
       resourceLoader,
       sessionManager,
       settingsManager,
@@ -477,14 +488,12 @@ export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
         remainingMs,
         () => session.abort(),
       );
-      try {
-        const parsed = parseAssistantJson(assistantText);
-        await options.audit?.record("result", "attempt_parsed", { assistant_text: assistantText }, { phase: options.phase, attempt, sessionId: session.sessionId });
-        return parsed;
-      } catch (error) {
-        await options.audit?.record("result", "attempt_parse_failed", { assistant_text: assistantText, error }, { phase: options.phase, attempt, sessionId: session.sessionId });
-        throw error;
+      if (!submitted) {
+        await options.audit?.record("result", "attempt_submission_missing", { assistant_text: assistantText }, { phase: options.phase, attempt, sessionId: session.sessionId });
+        throw new Error(`Pi phase completed without calling ${PHASE_SUBMISSION_TOOL}`);
       }
+      await options.audit?.record("result", "phase_submitted", { assistant_text: assistantText }, { phase: options.phase, attempt, sessionId: session.sessionId });
+      return phaseResult;
     } catch (error) {
       await options.audit?.record("lifecycle", "attempt_failed", { error, assistant_text: assistantText }, { phase: options.phase, attempt, sessionId: session.sessionId });
       if (options.signal?.aborted || /exceeded .*ms/.test(String(error)) || attempt === 2) throw error;
@@ -749,13 +758,22 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
         throw new Error("work-item base/head identity does not match the reviewed checkout");
       }
     }
+    const reviewSubmission = zodPhaseSubmission(reviewSubmissionSchema, parseReviewOutput);
+    const discoveryLegSubmission = zodPhaseSubmission(localOutputSchema);
+    const verifierSubmissionShape = zodPhaseSubmission(verifierModelOutputSchema);
     const identityDiscoveryTools = runtime.discoveryMode === "single"
-      ? bundle.tools.filter((tool) => tool.name !== "leveret_scan")
+      ? phaseToolIdentityWithSubmission(bundle.tools.filter((tool) => tool.name !== "leveret_scan"), reviewSubmission)
       : SPECIALIZED_LEG_DEFINITIONS.map((definition) => ({
           id: definition.id,
-          tools: phaseToolIdentity(selectPhaseTools(bundle!.tools, definition.requiredTools, definition.optionalTools)),
+          tools: phaseToolIdentityWithSubmission(
+            selectPhaseTools(bundle!.tools, definition.requiredTools, definition.optionalTools),
+            discoveryLegSubmission,
+          ),
         }));
-    const identityVerifierTools = phaseToolIdentity(selectPhaseTools(bundle.tools, TARGETED_VERIFIER_TOOLS.required, TARGETED_VERIFIER_TOOLS.optional, true));
+    const identityVerifierTools = phaseToolIdentityWithSubmission(
+      selectPhaseTools(bundle.tools, TARGETED_VERIFIER_TOOLS.required, TARGETED_VERIFIER_TOOLS.optional, true),
+      verifierSubmissionShape,
+    );
     const configurationIdentities = {
       prompt_sha256: stableSha256({
         discovery: runtime.discoveryMode === "specialized/v1"
@@ -764,9 +782,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
         verifier: { id: "targeted-verifier/v1", system_prompt_version: PI_SYSTEM_PROMPT_VERSION },
       }),
       tool_sha256: stableSha256({
-        discovery: runtime.discoveryMode === "single"
-          ? phaseToolIdentity(identityDiscoveryTools as typeof bundle.tools)
-          : identityDiscoveryTools,
+        discovery: identityDiscoveryTools,
         verifier: identityVerifierTools,
       }),
       policy_sha256: stableSha256({
@@ -818,11 +834,12 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
         ),
       ].join("\n");
       const discoveryTools = bundle.tools.filter((tool) => tool.name !== "leveret_scan");
-      const discoverySystemPrompt = buildPiSystemPrompt(discoveryTools.map((tool) => tool.name));
+      const discoveryToolIdentity = phaseToolIdentityWithSubmission(discoveryTools, reviewSubmission);
+      const discoverySystemPrompt = buildPiSystemPrompt(discoveryToolIdentity.names);
       singleDiscoveryIdentity = {
         prompt_sha256: createHash("sha256").update(reviewPrompt).digest("hex"),
         system_prompt_sha256: createHash("sha256").update(discoverySystemPrompt).digest("hex"),
-        tools: phaseToolIdentity(discoveryTools),
+        tools: discoveryToolIdentity,
       };
       const review = await runPhase({
         phase: "review",
@@ -835,6 +852,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
         thinking: routing.routes.verifier.effort,
         systemPrompt: discoverySystemPrompt,
         tools: discoveryTools,
+        submission: reviewSubmission,
         metrics,
         toolOutcomes,
         audit,
@@ -848,7 +866,11 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
         workItemContext,
         async (plan, _index, signal) => {
           const tools = selectPhaseTools(bundle!.tools, plan.definition.requiredTools, plan.definition.optionalTools);
-          const toolIdentity = phaseToolIdentity(tools);
+          const submission: PhaseSubmission = {
+            ...discoveryLegSubmission,
+            parse: (value) => parseDiscoveryLegOutput(plan, value),
+          };
+          const toolIdentity = phaseToolIdentityWithSubmission(tools, submission);
           const legSystemPrompt = `${buildPiSystemPrompt(toolIdentity.names)}\n\n${plan.definition.systemPrompt}`;
           const attempts = { count: 0 };
           const startedAt = performance.now();
@@ -865,6 +887,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
             signal,
             systemPrompt: legSystemPrompt,
             tools,
+            submission,
             metrics,
             toolOutcomes,
             audit,
@@ -935,10 +958,10 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
     });
     if (new Set(priorThreadIds).size !== priorThreadIds.length) throw new Error("LEVERET_PRIOR contains duplicate threadId values");
     const verifierTools = selectPhaseTools(bundle.tools, TARGETED_VERIFIER_TOOLS.required, TARGETED_VERIFIER_TOOLS.optional, true);
-    const verifierToolIdentity = phaseToolIdentity(verifierTools);
+    const verifierToolIdentity = phaseToolIdentityWithSubmission(verifierTools, verifierSubmissionShape);
     const verifierSystemPrompt = `${buildPiSystemPrompt(verifierToolIdentity.names)}
 
-You are the targeted verification and publication gate. Work from the supplied concern/lead ledger, not a broad new review. Return one compact decision row per supplied ID; include a finding body only for actionable decisions. The runner assembles verdicts, reports, coverage, and publication structures. Before answering, check exact IDs, no empty optional strings, correlation only for out-of-diff findings, and all five lenses. When evidence is insufficient, grade dropped with a reason. Once the ledger is complete, emit JSON immediately without further tool calls.`;
+You are the targeted verification and publication gate. Work from the supplied concern/lead ledger, not a broad new review. Submit one compact decision row per supplied ID; include a finding body only for actionable decisions. The runner assembles verdicts, reports, coverage, and publication structures. Check exact IDs, no empty optional strings, correlation only for out-of-diff findings, and all five lenses. When evidence is insufficient, grade dropped with a reason. Once the ledger is complete, call leveret_submit_phase without further investigation.`;
     const specializedCoverage = specialized?.outputs.map(({ plan, output }) => ({
       leg_id: plan.definition.id,
       assigned: plan.assignedFiles,
@@ -972,6 +995,12 @@ You are the targeted verification and publication gate. Work from the supplied c
       changedFiles: [],
       priorThreadIds,
     };
+    const verifierSubmission = zodPhaseSubmission(verifierModelOutputSchema, (value) => {
+      const assembled = assembleVerifierOutput(value, expectations);
+      const gaps = verifySchemaGaps(assembled, expectations);
+      if (gaps.length > 0) throw new Error(`invalid verifier submission: ${gaps.join(", ")}`);
+      return assembled;
+    });
     const verificationStartedAt = performance.now();
     let verify = await runPhase({
       phase: "verify",
@@ -984,34 +1013,11 @@ You are the targeted verification and publication gate. Work from the supplied c
       thinking: routing.routes.verifier.effort,
       systemPrompt: verifierSystemPrompt,
       tools: verifierTools,
+      submission: verifierSubmission,
       metrics,
       toolOutcomes,
       audit,
     });
-    verify = assembleVerifierOutput(verify, expectations);
-    const gaps = verifySchemaGaps(verify, expectations);
-    if (gaps.length > 0) {
-      verify = await runPhase({
-        phase: "verify-correction",
-        prompt: `${verifyPrompt}\n\n## Schema correction\nYour previous answer was invalid: ${gaps.join(", ")}.\nUse only evidence already gathered; make no tool calls. Apply the finalization checklist field by field, then re-emit the complete JSON object immediately.`,
-        repo,
-        runtimeDir,
-        runtime,
-        modelRuntime,
-        model: routing.models.verifier,
-        thinking: routing.routes.verifier.effort,
-        systemPrompt: verifierSystemPrompt,
-        tools: verifierTools,
-        metrics,
-        toolOutcomes,
-        audit,
-      });
-      verify = assembleVerifierOutput(verify, expectations);
-      const correctedGaps = verifySchemaGaps(verify, expectations);
-      if (correctedGaps.length > 0) {
-        throw new Error(`Pi verifier returned invalid output after schema correction: ${correctedGaps.join(", ")}`);
-      }
-    }
     const mergedVerify = completeVerificationCoverage(
       mergeVerificationCoverage(reviewOutput, verify, leadExpectations),
       changedFiles,

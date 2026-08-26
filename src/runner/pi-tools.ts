@@ -1,5 +1,5 @@
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
+import { Type, type TSchema } from "typebox";
 import { createHash } from "node:crypto";
 import { isAbsolute, relative, resolve } from "node:path";
 import { readFile, readdir, realpath } from "node:fs/promises";
@@ -11,6 +11,7 @@ import { memoryList } from "../memory.js";
 import { scan } from "../scan.js";
 import { ENGINES } from "../engines/registry.js";
 import type { SerenaBridge } from "./serena.js";
+import { z } from "zod";
 import { pathIsInside } from "../path.js";
 
 function json(value: unknown, details: Record<string, unknown> = {}) {
@@ -75,6 +76,43 @@ class ToolExecutionError extends Error {
   constructor(message: string, readonly timedOut = false) {
     super(message);
   }
+}
+export const PHASE_SUBMISSION_TOOL = "leveret_submit_phase";
+
+export interface PhaseSubmission<T = unknown> {
+  parameters: TSchema;
+  parse(value: unknown): T;
+}
+
+export function zodPhaseSubmission<T>(schema: z.ZodType<T>): PhaseSubmission<T>;
+export function zodPhaseSubmission<Input, Output>(
+  schema: z.ZodType<Input>,
+  parse: (value: unknown) => Output,
+): PhaseSubmission<Output>;
+export function zodPhaseSubmission(
+  schema: z.ZodType,
+  parse: (value: unknown) => unknown = (value) => schema.parse(value),
+): PhaseSubmission {
+  return {
+    parameters: z.toJSONSchema(schema, { target: "draft-07", io: "input" }) as TSchema,
+    parse,
+  };
+}
+
+export function createPhaseSubmissionTool<T>(
+  submission: PhaseSubmission<T>,
+  accept: (value: T) => void,
+): ToolDefinition {
+  return defineTool({
+    name: PHASE_SUBMISSION_TOOL,
+    label: "Submit phase result",
+    description: "Submit the completed phase result. This is the terminal output channel; call it once after all required evidence and accounting are complete.",
+    parameters: submission.parameters,
+    async execute(_id, params) {
+      accept(submission.parse(params));
+      return text("Phase result accepted.");
+    },
+  });
 }
 
 function annotateEvidence(tool: ToolDefinition, onOutcome?: (toolCallId: string, outcome: PiToolOutcome) => void): ToolDefinition {

@@ -6,6 +6,7 @@ import { auditConfig, createAuditRun, openRunnerAudit, verifyChecksums } from ".
 import { inspectAudit, readAuditEvents } from "../src/audit-inspect.js";
 import { classifyToolOutcome, runPhase } from "../src/runner/pi.js";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 
 const created: string[] = [];
 
@@ -359,7 +360,7 @@ describe("run trace", () => {
     await expect(openRunnerAudit(config, { LEVERET_TRACE_DIR: join(data, "repo", "trace"), LEVERET_RUN_ID: "r" }, join(data, "repo"))).rejects.toThrow(/outside/);
   });
 
-  it("keeps exact malformed assistant output for every Pi attempt", async () => {
+  it("keeps exact assistant output when every Pi attempt omits submission", async () => {
     const data = await root();
     const audit = (await createAuditRun(auditConfig(data, { LEVERET_TRACE_ROOT: join(data, "traces"), LEVERET_TRACE_SINKS: "private" }), "run-malformed"))!;
     let attempt = 0;
@@ -394,11 +395,12 @@ describe("run trace", () => {
       model: { provider: "test", id: "test", api: "openai-responses" } as never,
       systemPrompt: "system",
       tools: [],
+      submission: { parameters: Type.Object({}), parse: (value) => value },
       metrics: [],
       toolOutcomes: new Map(),
       audit,
       createSession,
-    })).rejects.toThrow(/no JSON/);
+    })).rejects.toThrow(/without calling leveret_submit_phase/);
     const finalized = await audit.finalize("failed", new Error("malformed fixture"));
     expect(finalized.completeness).toBe("complete");
     const runDir = finalized.runDir!;
@@ -408,7 +410,7 @@ describe("run trace", () => {
       expect(session).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz");
     }
     const events = await readFile(join(runDir, "app.ndjson"), "utf8");
-    expect(events).toContain("attempt_parse_failed");
+    expect(events).toContain("attempt_submission_missing");
     expect(events).toContain("malformed-1");
     expect(events).toContain("malformed-2");
   });

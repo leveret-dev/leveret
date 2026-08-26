@@ -80,13 +80,39 @@ const verifierDecisionSchema = z.object({
   }
 });
 
-const verifierModelOutputSchema = z.object({
+export const verifierModelOutputSchema = z.object({
   decisions: z.array(verifierDecisionSchema),
   lenses: z.array(lensSchema),
   resolutions: z.array(resolutionSchema).optional(),
 }).strict();
 
-const reviewOutputSchema = z.looseObject({
+const reviewConcernSchema = z.looseObject({
+  id: text,
+  file: text,
+  line: z.number().int().positive(),
+  title: text,
+  claim: text,
+  impact: text,
+  evidence_hint: text,
+  scope: z.enum(["in-diff", "out-of-diff"]),
+  correlation: text.optional(),
+  evidence_ids: z.array(text),
+  lead_ids: z.array(text).max(0),
+}).superRefine((concern, ctx) => {
+  if (concern.scope === "out-of-diff" && !concern.correlation) {
+    ctx.addIssue({ code: "custom", path: ["correlation"], message: "out-of-diff concerns require correlation" });
+  }
+  if (concern.scope === "in-diff" && concern.correlation) {
+    ctx.addIssue({ code: "custom", path: ["correlation"], message: "in-diff concerns cannot carry correlation" });
+  }
+});
+
+export const reviewSubmissionSchema = z.object({
+  concerns: z.array(reviewConcernSchema),
+  coverage: coverageSchema,
+}).strict();
+
+const reviewAccountingSchema = z.looseObject({
   concerns: z.array(z.looseObject({
     id: text,
     file: text,
@@ -96,7 +122,8 @@ const reviewOutputSchema = z.looseObject({
 });
 
 export type VerifyOutput = z.infer<typeof verifyOutputSchema>;
-export type ReviewOutput = z.infer<typeof reviewOutputSchema>;
+export type ReviewOutput = z.infer<typeof reviewSubmissionSchema>;
+
 export type FinalVerifyOutput = Omit<VerifyOutput, "coverage"> & {
   coverage: {
     lenses: VerifyOutput["coverage"]["lenses"];
@@ -105,7 +132,7 @@ export type FinalVerifyOutput = Omit<VerifyOutput, "coverage"> & {
 };
 
 export function parseReviewOutput(output: unknown): ReviewOutput {
-  return reviewOutputSchema.parse(output);
+  return reviewSubmissionSchema.parse(output);
 }
 
 /** Normalize harmless optional-field shapes before strict schema validation. */
@@ -297,7 +324,7 @@ export function verifySchemaGaps(output: unknown, expected: VerifyExpectations):
 
 /** Preserve review coverage mechanically; verification may disclose more, never less. */
 export function mergeVerificationCoverage(reviewInput: unknown, verifyInput: unknown, leads: { id: string; file: string }[] = []): FinalVerifyOutput {
-  const review = reviewOutputSchema.parse(reviewInput);
+  const review = reviewAccountingSchema.parse(reviewInput);
   const verify = verifyOutputSchema.parse(verifyInput);
   const verifyFiles = new Map(verify.coverage.files.map((file) => [file.file, file]));
   const concernIdsByFile = new Map<string, string[]>();

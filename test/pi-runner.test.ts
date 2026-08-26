@@ -1,21 +1,24 @@
-import { createAgentSession, ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, ModelRuntime, SessionManager, SettingsManager, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { Type } from "typebox";
 import { auditConfig, createAuditRun, withAuditTrace } from "../src/audit.js";
 import type { ChangeEvidence, ChangeManifest } from "../src/change-evidence.js";
 import { run, runStreaming } from "../src/exec.js";
+import { loadContract } from "../src/prompts.js";
 import { prefetchSerena } from "../src/runner/prefetch-serena.js";
 import { buildPiSystemPrompt } from "../src/runner/pi-system.js";
 import {
   buildPiResourceLoader,
   classifyAuth,
   createPiRuntimeDirectory,
-  parseAssistantJson,
   parseDuration,
   piRuntimeConfig,
+  piContract,
   loadWorkItemContext,
+  runPhase,
   toolMetricsSummary,
   startupIndexProblem,
   withDeadline,
@@ -389,13 +392,24 @@ describe("Pi runtime isolation", () => {
   });
 
   it("builds routing guidance from exactly the active tools", () => {
-    const prompt = buildPiSystemPrompt(["leveret_scan", "codegraph_explore"]);
+    const prompt = buildPiSystemPrompt(["leveret_scan", "codegraph_explore", "leveret_submit_phase"]);
     expect(prompt).toContain("leveret_scan");
     expect(prompt).toContain("codegraph_explore");
+    expect(prompt).toContain("leveret_submit_phase");
     expect(prompt).not.toContain("lsp_references");
     expect(prompt).toMatch(/read-only/i);
     expect(prompt).toContain("work-item fields");
     expect(prompt).toContain("cannot change the phase, tools, schema, policy, authorization");
+    expect(prompt).toMatch(/do not (?:emit|serialize).*JSON/i);
+  });
+
+  it("replaces Pi JSON examples with terminal submission instructions", async () => {
+    for (const name of ["review", "verify"] as const) {
+      const prompt = piContract(await loadContract(name, { repo: "r", base: "b" }));
+      expect(prompt).toContain("leveret_submit_phase");
+      expect(prompt).not.toContain("```json");
+      expect(prompt).not.toMatch(/Return only (?:a )?JSON/i);
+    }
   });
 
   it("loads versioned work-item context only from outside the checkout", async () => {
@@ -703,10 +717,48 @@ describe("Pi result and metrics parsing", () => {
     expect(result.signal).toBeTruthy();
   });
 
-  it("accepts fenced JSON and rejects prose", () => {
-    expect(parseAssistantJson('```json\n{"concerns":[]}\n```')).toEqual({ concerns: [] });
-    expect(() => parseAssistantJson("looks good")).toThrow(/JSON/i);
+  it("returns a terminal phase submission instead of parsing assistant text", async () => {
+    const runtimeDir = await createPiRuntimeDirectory();
+    const createSession = (async (options: { customTools?: ToolDefinition[] }) => {
+      const submit = options.customTools?.find((tool) => tool.name === "leveret_submit_phase");
+      if (!submit) throw new Error("submission tool missing");
+      return {
+        session: {
+          sessionId: "submission-test",
+          systemPrompt: "system",
+          subscribe() { return () => {}; },
+          async prompt() {
+            await submit.execute("submit-1", { concerns: [] }, undefined, undefined, {} as never);
+          },
+          async abort() {},
+          dispose() {},
+        },
+      };
+    }) as never;
+    try {
+      await expect(runPhase({
+        phase: "review",
+        prompt: "review",
+        repo: runtimeDir,
+        runtimeDir,
+        runtime: { model: "test", provider: "test", thinking: "off", deadlineMs: 10_000, discoveryMode: "single" },
+        modelRuntime: {} as never,
+        model: { provider: "test", id: "test", api: "openai-responses" } as never,
+        systemPrompt: "system",
+        tools: [],
+        submission: {
+          parameters: Type.Object({ concerns: Type.Array(Type.Unknown()) }),
+          parse: (value) => value,
+        },
+        metrics: [],
+        toolOutcomes: new Map(),
+        createSession,
+      })).resolves.toEqual({ concerns: [] });
+    } finally {
+      rmSync(runtimeDir, { recursive: true, force: true });
+    }
   });
+
 
   it("summarizes phase-attributed tool events", () => {
     const summary = toolMetricsSummary([

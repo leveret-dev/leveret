@@ -247,7 +247,7 @@ So the brand rides on three surfaces instead of on owning the name:
 Mode 2 would restore a single branded App, at the cost of the perimeter — which is
 the trade that mode 2 already is.
 
-### Runner standardization (owner decision, updated 2026-08-22)
+### Runner standardization (owner decision, updated 2026-08-26)
 
 Prompt contracts alone do not standardize a reviewer: the harness (tool
 orchestration, system framing, output discipline) shapes the review as much as the
@@ -257,6 +257,12 @@ reviewer**. The standardized client is `leveret-runner-pi`, built on upstream Pi
 `package-lock.json`). Pi owns providers,
 OAuth, model calls and the agent loop. Leveret owns the system prompt, tools,
 deadlines, metrics and output contract.
+
+Each phase exposes a typed terminal `leveret_submit_phase` tool. The provider
+validates its arguments against the phase schema, and Leveret performs dynamic
+ledger checks before accepting the result. The runner consumes accepted tool
+arguments directly and mechanically assembles publication structures; it does not
+parse assistant text as JSON or launch a second full-output correction phase.
 
 The client runs from a host-owned temporary directory and uses in-memory sessions.
 Its resource loader accepts trusted host Pi/OMP extensions and hooks, Pi/Claude/

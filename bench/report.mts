@@ -288,7 +288,7 @@ async function finalizedRun(runDir: string, loaded: LoadedCorpus, adjudications:
       beyond_diff_count: nullableNumber(stopGate?.beyond_diff_count),
     },
     metrics: { timings: timingMetrics, cache: cacheMetrics, cache_hit_rate: cacheHitRate, tokens: usage.tokens, cost_usd: usage.cost_usd },
-    failures: { tool: events.filter((event) => event.event === "execution_end" && payload(event)?.is_error === true).map(eventCopy), schema: events.filter((event) => event.event === "attempt_parse_failed").map(eventCopy), gaps: Array.isArray(manifest.gaps) ? manifest.gaps.map(String) : [], error: typeof manifest.error === "string" ? manifest.error : null },
+    failures: { tool: events.filter((event) => event.event === "execution_end" && payload(event)?.is_error === true).map(eventCopy), schema: events.filter((event) => event.event === "attempt_parse_failed" || event.event === "attempt_submission_missing").map(eventCopy), gaps: Array.isArray(manifest.gaps) ? manifest.gaps.map(String) : [], error: typeof manifest.error === "string" ? manifest.error : null },
     coverage: result?.coverage ?? null, targets,
   };
 }

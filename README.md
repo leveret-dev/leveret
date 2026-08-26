@@ -79,8 +79,10 @@ replies on findings feed `learn`. Getting started + diagram: [docs/app.md](docs/
 
 **Standardized runner.** `leveret-runner-pi` drives the review/verify contracts
 through a pinned [Pi](https://github.com/earendil-works/pi) runtime. Leveret supplies
-the system prompt and read-only review tools; Pi supplies the provider/model runtime
-and trusted host resources. Host-installed Pi/OMP extensions and hooks, Pi/Claude/
+the system prompt, phase-specific terminal submission schema, and read-only review
+tools; Pi supplies the provider/model runtime and trusted host resources. Models
+submit phase results through `leveret_submit_phase`; assistant text is not parsed as
+JSON. Host-installed Pi/OMP extensions and hooks, Pi/Claude/
 Codex skills, prompt templates, and context are loaded. The reviewed checkout is
 never Pi's working directory, so its settings, hooks, skills, prompts, MCP
 configuration, and context cannot extend the session. You choose provider, model,
