@@ -18,7 +18,7 @@ import {
   type DiscoveryLegPlan,
   specializedReviewOutput,
 } from "../src/runner/discovery-legs.js";
-import { piRuntimeConfig } from "../src/runner/pi.js";
+import { piRuntimeConfig, singleDiscoveryInput } from "../src/runner/pi.js";
 import { MECHANISM_CHECKLISTS } from "../src/runner/mechanism-checklists.js";
 import { verifySchemaGaps } from "../src/runner/verify-output.js";
 
@@ -40,7 +40,7 @@ const evidencePack = {
   provenance: { changeManifestSha256: "a", projectFactsSha256: "b", profileConfigSha256: "c", profileSourceSha256: null, engineRegistrySha256: "d", scanResultSha256: "e" },
   files: manifest.files.map((file, index) => ({ path: file.path, status: file.status, disposition: "selected", reason: "fixture", language: file.language ?? "Text", kind: kinds[file.path as keyof typeof kinds], evidenceId: `F${index + 1}`, facts: { sourceRoot: file.path.startsWith("src/") ? "src" : null, testRoot: file.path.startsWith("test/") ? "test" : null, buildSystems: ["Node package"], frameworks: [], workflowEvidenceId: file.path.includes("workflows") ? "W1" : null } })),
   project: { trackedFiles: 5, languages: [{ language: "TypeScript", files: 2 }, { language: "YAML", files: 1 }], buildSystems: [{ name: "Node package", evidence: ["package.json"] }], frameworks: [], sourceRoots: ["src"], testRoots: ["test"], manifests: [], manifestErrors: [], truncated: { manifests: false, roots: false }, omitted: { languages: 0, buildSystems: 0, frameworks: 0, sourceRoots: 0, testRoots: 0, manifests: 0, manifestErrors: 0 } },
-  workflows: { files: [{ path: ".github/workflows/ci.yml", name: "CI", status: "completed", jobs: [{ id: "test", name: "test", runsOn: "ubuntu-latest", shell: "bash", shellSource: "runner-default", steps: [{ index: 1, id: null, name: "locale", kind: "run", shell: "bash", shellSource: "runner-default", commandNames: ["locale"], uses: null, text: "locale -a", truncated: false, evidenceId: "WS1" }], omittedStepIds: [], omittedStepCount: 0, evidenceId: "WJ1" }], omittedJobIds: [], omittedJobCount: 0, errors: [], evidenceId: "W1" }], omittedFileIds: [], omittedFileCount: 0, errors: [] },
+  workflows: { files: [{ path: ".github/workflows/ci.yml", name: "CI", status: "completed", jobs: [{ id: "test", name: "test", runsOn: "ubuntu-latest", shell: "bash", shellSource: "runner-default", steps: [{ index: 1, id: null, name: "locale", kind: "run", shell: "bash", shellSource: "runner-default", commandNames: ["locale", "udevadm"], uses: null, text: "locale -a\nudevadm trigger", truncated: false, evidenceId: "WS1" }], omittedStepIds: [], omittedStepCount: 0, evidenceId: "WJ1" }], omittedJobIds: [], omittedJobCount: 0, errors: [], evidenceId: "W1" }], omittedFileIds: [], omittedFileCount: 0, errors: [] },
   analyzers: [{ id: "secret-analyzer", applicability: "applicable", lifecycle: "completed", reason: "SECRET_ANALYZER_TARGET", definitionSha256: "x", configSha256: "x", profileSourceSha256: null, ruleSources: [], executable: null, selectedFiles: [], omittedSelectedFileIds: [], omittedSelectedFileCount: 0, counts: { found: 1, surviving: 1, reminders: 0, suppressed: 0 }, durationMs: 1, cache: "unknown", evidenceIds: [], semanticCoverage: false, staticResult: "completed", detail: null }],
   leads: { items: [{ id: "L1", evidenceId: "scan-1", engine: "fixture", rule: "fixture", severity: "warning", file: "src/core.ts", range: { start: 1, end: 1 }, message: "SECRET_SCAN_TARGET", provenance: "introduced", source: "finding" }], totalAfterSuppression: 1, deduplicated: 0, omittedIds: [], omittedIdCount: 0, omittedIdsTruncated: 0 },
   suppression: { entries: [], preExisting: 0 }, completeness: { manifestTruncated: false, errors: [], staticCleanIsSemanticCoverage: false },
@@ -93,6 +93,19 @@ describe("specialized discovery", () => {
       expect(phaseToolIdentity(selected).names).toEqual([...plan.definition.requiredTools, ...plan.definition.optionalTools]);
       expect(selected.map((tool) => tool.name)).not.toEqual(expect.arrayContaining(["leveret_scan", "leveret_context"]));
     }
+  });
+
+  it("routes applicable mechanism checklists into default single discovery", () => {
+    const input = singleDiscoveryInput(evidencePack, guidance) as { mechanism_checklists?: { items?: Array<{ id?: string }> } };
+    const ids = input.mechanism_checklists?.items?.map((item) => item.id) ?? [];
+
+    expect(ids).toEqual(expect.arrayContaining([
+      "parsed-package-command-equivalence",
+      "executable-locale-assertion",
+      "udev-event-settling",
+      "workflow-job-local-proof",
+      "managed-environment-command",
+    ]));
   });
 
   it("runs required legs serially, namespaces and conservatively dedupes provenance, and reports unexamined files", async () => {

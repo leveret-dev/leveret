@@ -401,6 +401,14 @@ calling the standardized runner, persists complete and failed outcomes, and
 rejects actual run identities that differ from the manifest. No command runs paid
 trials automatically after landing.
 
+Focused diagnostic replays may select one frozen range with `--range <range-id>`.
+Historical repository rulings that postdate the frozen base may be supplied with
+the paired `--trusted-memory <outside-checkout.jsonl>` and
+`--trusted-memory-sha256 <hash>` options. The replay validates the file location
+and hash, uses the same overlay for deterministic scanning and the Pi runner,
+records its identity in the audit, and includes it in cache keys. Formal parity
+decisions still require the experiment manifest and its five pinned trial IDs.
+
 Finalized #51 runs feed `npm run bench:report -- --corpus
 bench/corpus.v1.json --json <source.json> [--markdown <report.md>] <run-dir...>`.
 JSON is the deterministic source; Markdown only renders it. Runs remain grouped by

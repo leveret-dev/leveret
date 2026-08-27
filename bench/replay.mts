@@ -19,7 +19,7 @@ import type { ScanResult } from "../src/findings.js";
 import { ENGINES } from "../src/engines/registry.js";
 import { loadProfile } from "../src/profile.js";
 import { projectFacts, type ProjectFacts } from "../src/project-facts.js";
-import { materializeTrustedReviewState, type TrustedReviewState } from "../src/trusted-state.js";
+import { materializeTrustedReviewState, type TrustedMemoryOverlay, type TrustedReviewState } from "../src/trusted-state.js";
 import { parseWorkItem, type WorkItem } from "../src/work-item.js";
 import {
   ReviewCache,
@@ -141,11 +141,11 @@ export interface TrialPlan {
   schema: typeof REPLAY_RESULT_SCHEMA; id: string; corpus_sha256: string; range_id: string; repository: string; pull_request: number; base: string; head: string; range: string; mode: ContextMode; trial: number; target_ids: string[]; work_item_path: string | null; work_item_sha256: string | null;
   experiment?: { configuration: ExperimentConfiguration; trial_id: string; cache_state: "cold" | "warm" };
 }
-export function planTrials(loaded: LoadedCorpus, modes: ContextMode[], trials: number): TrialPlan[] {
+export function planTrials(loaded: LoadedCorpus, modes: ContextMode[], trials: number, rangeId?: string): TrialPlan[] {
   if (!Number.isSafeInteger(trials) || trials <= 0) throw new Error("trials must be a positive integer");
   if (new Set(modes).size !== modes.length || modes.length === 0) throw new Error("modes must be non-empty and unique");
   const grouped = new Map<string, CorpusRow[]>();
-  for (const row of loaded.corpus.rows) grouped.set(row.frozen.range_id, [...(grouped.get(row.frozen.range_id) ?? []), row]);
+  for (const row of loaded.corpus.rows) if (!rangeId || row.frozen.range_id === rangeId) grouped.set(row.frozen.range_id, [...(grouped.get(row.frozen.range_id) ?? []), row]);
   const groups = [...grouped.values()].sort((a, b) => a[0]!.frozen.range_id.localeCompare(b[0]!.frozen.range_id));
   const plans: TrialPlan[] = [];
   for (const rows of groups) {
@@ -222,7 +222,7 @@ export type InvalidCode = "missing-commit" | "base-mismatch" | "head-mismatch" |
 export interface InvalidReplay { schema: typeof REPLAY_RESULT_SCHEMA; plan: TrialPlan; status: "invalid"; phase: "preparation" | "precondition" | "scan" | "runner" | "audit"; reason: { code: InvalidCode; detail: string }; preconditions: PreconditionResult[]; audit_run_dir: string | null }
 export interface CompleteReplay { schema: typeof REPLAY_RESULT_SCHEMA; plan: TrialPlan; status: "complete"; preconditions: PreconditionResult[]; audit_run_dir: string }
 export type ReplayOutcome = InvalidReplay | CompleteReplay;
-export interface RunTrialOptions { repo: string; traceRoot?: string; cacheRoot?: string; cache?: boolean; profilePath?: string; runner?: ReplayRunner; runnerCommand?: string; scanFn?: ReplayScan; expectedCapabilities?: Record<string, unknown>; discoveryMode?: "single" | "specialized/v1"; discoveryScheduler?: "serial/v1" | "bounded-concurrent/v1"; discoveryConcurrency?: number; routingPath?: string; routingSha256?: string }
+export interface RunTrialOptions { repo: string; traceRoot?: string; cacheRoot?: string; cache?: boolean; profilePath?: string; runner?: ReplayRunner; runnerCommand?: string; scanFn?: ReplayScan; expectedCapabilities?: Record<string, unknown>; discoveryMode?: "single" | "specialized/v1"; discoveryScheduler?: "serial/v1" | "bounded-concurrent/v1"; discoveryConcurrency?: number; routingPath?: string; routingSha256?: string; trustedMemoryPath?: string; trustedMemorySha256?: string }
 function resultRecord(value: unknown): Record<string, unknown> | null { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null; }
 function completeResult(value: unknown): value is Record<string, unknown> { const record = resultRecord(value); return !!record && Array.isArray(record.verdicts) && Array.isArray(record.report) && !!resultRecord(record.coverage) && !!resultRecord(record.run_configuration); }
 function capabilitiesMatch(result: Record<string, unknown>, expected: Record<string, unknown>): boolean { const configuration = resultRecord(result.run_configuration); const actual = resultRecord(configuration?.capabilities); return !!actual && Object.entries(expected).every(([key, value]) => JSON.stringify(actual[key]) === JSON.stringify(value)); }
@@ -250,6 +250,12 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
     if (options.discoveryScheduler && options.discoveryScheduler !== configuration.scheduler.id) return invalid(plan, "preparation", "configuration-mismatch", "runner scheduler differs from experiment manifest");
     if (options.discoveryConcurrency && options.discoveryConcurrency !== configuration.scheduler.concurrency_bound) return invalid(plan, "preparation", "configuration-mismatch", "runner concurrency differs from experiment manifest");
   }
+  if (Boolean(options.trustedMemoryPath) !== Boolean(options.trustedMemorySha256)) {
+    return invalid(plan, "preparation", "configuration-mismatch", "trusted memory path and SHA-256 must be supplied together");
+  }
+  const trustedMemory: TrustedMemoryOverlay | undefined = options.trustedMemoryPath
+    ? { path: resolve(options.trustedMemoryPath), sha256: options.trustedMemorySha256! }
+    : undefined;
   const repo = await realpath(options.repo);
   if (!await resolveCommit(repo, plan.base)) return invalid(plan, "preparation", "missing-commit", `base commit unavailable: ${plan.base}`);
   if (!await resolveCommit(repo, plan.head)) return invalid(plan, "preparation", "missing-commit", `head commit unavailable: ${plan.head}`);
@@ -278,7 +284,7 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
     preconditions = await executePreconditions(checkout, rows.flatMap((row) => row.preconditions));
     const failed = preconditions.find((condition) => !condition.ok);
     if (failed) return invalid(plan, "precondition", "failed-precondition", `${failed.precondition.path}: ${failed.detail}`, preconditions);
-    trusted = await materializeTrustedReviewState(checkout, plan.base);
+    trusted = await materializeTrustedReviewState(checkout, plan.base, trustedMemory);
     const traceRoot = resolve(options.traceRoot ?? join(tmpdir(), "leveret-replay-traces"));
     const harnessRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
     for (const rootPath of [harnessRoot, repo]) { const rel = relative(rootPath, traceRoot); if (rel === "" || (!rel.startsWith(`..${sep}`) && rel !== "..")) return invalid(plan, "preparation", "orchestration-failure", "private trace root must stay outside both repositories", preconditions); }
@@ -287,6 +293,7 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
     const traceEnvironment = { LEVERET_TRACE_ENABLED: "1", LEVERET_TRACE_ROOT: traceRoot, LEVERET_TRACE_SINKS: "private", LEVERET_TRACE_FAILURE: "fail", LEVERET_TRACE_KEEP_UNPACKED: "1" };
     audit = await createAuditRun(auditConfig(traceRoot, traceEnvironment), runId);
     if (!audit) return invalid(plan, "audit", "incomplete-audit", "#51 audit capture is disabled", preconditions);
+    if (trustedMemory) await audit.record("repository", "trusted_memory_overlay", { sha256: trustedMemory.sha256, path_role: "host-file outside reviewed repository" });
     cache = await ReviewCache.open({
       dataRoot: resolve(options.cacheRoot ?? traceRoot),
       repoRoot: checkout,
@@ -364,6 +371,7 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
           manifest_sha256: manifestSha256,
           profile_sha256: profileSha256,
           trusted_base: plan.base,
+          trusted_memory_sha256: trustedMemory?.sha256 ?? null,
           engines: engineIdentity,
           allow_custom_engines: false,
         }, boundary);
@@ -478,6 +486,7 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
           LEVERET_DISCOVERY_SCHEDULER: selectedScheduler,
           LEVERET_DISCOVERY_CONCURRENCY: String(selectedConcurrency),
           ...(options.routingPath ? { LEVERET_MODEL_ROUTING: resolve(options.routingPath), LEVERET_MODEL_ROUTING_SHA256: options.routingSha256! } : {}),
+          ...(trustedMemory ? { LEVERET_TRUSTED_MEMORY: trustedMemory.path, LEVERET_TRUSTED_MEMORY_SHA256: trustedMemory.sha256 } : {}),
           ...(workItemPath ? { LEVERET_WORK_ITEM: workItemPath } : {}),
         };
         const runner = options.runner ?? commandRunner(options.runnerCommand ?? process.env.LEVERET_RUNNER ?? `${process.execPath} ${resolve(harnessRoot, "dist/runner/pi.js")}`);
@@ -522,6 +531,7 @@ export async function runTrial(plan: TrialPlan, rows: CorpusRow[], options: RunT
           evidence_pack_sha256: evidencePackFile.sha256,
           guidance_sha256: guidanceFile.sha256,
           trusted_base: plan.base,
+          trusted_memory_sha256: trustedMemory?.sha256 ?? null,
           runner: options.runnerCommand ?? process.env.LEVERET_RUNNER ?? "direct-runner",
           system_prompt: JSON.parse(stableJson(runConfiguration.system_prompt ?? null)),
         }, boundary);
@@ -573,7 +583,7 @@ async function main(): Promise<void> {
     return;
   }
   const repo = args[0];
-  if (!repo || repo.startsWith("--")) throw new Error("usage: replay.mts <repo> [--experiment manifest.json --configuration ID --trial ID --range ID --routing routing.json --routing-sha256 HASH] [--corpus path] [--mode diff-only|review-context|both] [--discovery-mode single|specialized/v1] [--discovery-scheduler serial/v1|bounded-concurrent/v1] [--discovery-concurrency 1..3] [--trials N] [--profile path] [--trace-root path] [--cache-root path] [--no-cache] [--runner command] [--capabilities expected.json]");
+  if (!repo || repo.startsWith("--")) throw new Error("usage: replay.mts <repo> [--experiment manifest.json --configuration ID --trial ID --range ID --routing routing.json --routing-sha256 HASH] [--corpus path] [--mode diff-only|review-context|both] [--discovery-mode single|specialized/v1] [--discovery-scheduler serial/v1|bounded-concurrent/v1] [--discovery-concurrency 1..3] [--trials N] [--trusted-memory path --trusted-memory-sha256 HASH] [--profile path] [--trace-root path] [--cache-root path] [--no-cache] [--runner command] [--capabilities expected.json]");
   const modeArg = option(args, "--mode", "both");
   const modes: ContextMode[] = modeArg === "both" ? ["diff-only", "review-context"] : modeArg === "diff-only" || modeArg === "review-context" ? [modeArg] : (() => { throw new Error(`invalid mode: ${modeArg}`); })();
   const capabilitiesPath = option(args, "--capabilities");
@@ -591,10 +601,11 @@ async function main(): Promise<void> {
         (!configurationId || plan.experiment?.configuration.id === configurationId)
         && (!trialId || plan.experiment?.trial_id === trialId)
         && (!rangeId || plan.range_id === rangeId))
-    : planTrials(loaded, modes, Number(option(args, "--trials", "1")));
+    : planTrials(loaded, modes, Number(option(args, "--trials", "1")), rangeId);
   if (experiment && configurationId && !experiment.configurations.some((configuration) => configuration.id === configurationId)) throw new Error(`experiment configuration not found: ${configurationId}`);
   if (experiment && trialId && plans.length === 0) throw new Error(`experiment trial not found: ${trialId}`);
   if (experiment && rangeId && plans.length === 0) throw new Error(`experiment range not found: ${rangeId}`);
+  if (!experiment && rangeId && plans.length === 0) throw new Error(`replay range not found: ${rangeId}`);
   for (const plan of plans) {
     const rows = loaded.corpus.rows.filter((row) => row.frozen.range_id === plan.range_id);
     process.stdout.write(`${JSON.stringify(await runTrial(plan, rows, {
@@ -610,6 +621,8 @@ async function main(): Promise<void> {
       discoveryConcurrency: experiment ? undefined : discoveryConcurrency,
       routingPath: option(args, "--routing"),
       routingSha256: option(args, "--routing-sha256"),
+      trustedMemoryPath: option(args, "--trusted-memory"),
+      trustedMemorySha256: option(args, "--trusted-memory-sha256"),
     }))}\n`);
   }
 }
