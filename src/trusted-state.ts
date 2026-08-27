@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { run } from "./exec.js";
@@ -9,6 +10,11 @@ export interface TrustedReviewState {
   root: string;
   profilePath: string;
   close(): Promise<void>;
+}
+
+export interface TrustedMemoryOverlay {
+  path: string;
+  sha256: string;
 }
 
 async function fileAtRef(repo: string, ref: string, path: string): Promise<string | undefined> {
@@ -42,10 +48,25 @@ async function copyTree(repo: string, base: string, root: string, path: string):
   for (const file of files) await copyBlob(repo, base, root, file);
 }
 
+async function hostMemory(repo: string, overlay: TrustedMemoryOverlay): Promise<string> {
+  if (!/^[a-f0-9]{64}$/.test(overlay.sha256)) throw new Error("trusted memory SHA-256 is invalid");
+  const [repoRoot, memoryPath] = await Promise.all([realpath(repo), realpath(resolve(overlay.path))]);
+  const rel = relative(repoRoot, memoryPath);
+  if (rel === "" || (!rel.startsWith(`..${sep}`) && rel !== "..")) {
+    throw new Error("trusted memory must stay outside the reviewed repository");
+  }
+  const content = await readFile(memoryPath);
+  if (createHash("sha256").update(content).digest("hex") !== overlay.sha256) {
+    throw new Error("trusted memory SHA-256 mismatch");
+  }
+  return content.toString("utf8");
+}
+
 /** Copy review policy from the trusted base commit, outside the untrusted checkout. */
 export async function materializeTrustedReviewState(
   repo: string,
   base: string,
+  memoryOverlay?: TrustedMemoryOverlay,
 ): Promise<TrustedReviewState> {
   const root = await mkdtemp(join(tmpdir(), "leveret-trusted-"));
   const profilePath = join(root, ".leveret.yml");
@@ -61,7 +82,7 @@ export async function materializeTrustedReviewState(
         await copyTree(repo, base, root, join(dirname(rule), directory));
       }
     }
-    const memory = await fileAtRef(repo, base, ".leveret/memory.jsonl");
+    const memory = memoryOverlay ? await hostMemory(repo, memoryOverlay) : await fileAtRef(repo, base, ".leveret/memory.jsonl");
     if (memory !== undefined) {
       await mkdir(join(root, ".leveret"), { recursive: true });
       await writeFile(join(root, ".leveret", "memory.jsonl"), memory);

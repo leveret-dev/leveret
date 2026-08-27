@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import { readAuditEvents, type EventRecord } from "../src/audit-inspect.js";
 import { verifyChecksums } from "../src/audit.js";
 import { loadCorpus, type LoadedCorpus } from "./replay.mjs";
-import { parseAssistantJson } from "../src/runner/pi.js";
 
 interface ToolCall { phase?: string; toolName?: string; isError?: boolean; outcome?: string; nonzero_exit?: boolean; output_bytes?: number }
 interface FindingSummary { id: string; tier: string; file: string; line: number; title: string }
@@ -151,13 +150,27 @@ function parseAdjudications(input: unknown): AdjudicationRecord[] {
 }
 
 async function readJsonIfPresent(path: string): Promise<unknown> { try { return JSON.parse(await readFile(path, "utf8")); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; } }
-function parsedPhaseOutput(events: EventRecord[], phase: string): Record<string, unknown> | null {
+function legacyAssistantJson(value: string): unknown {
+  const trimmed = value.trim().replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) throw new Error("assistant returned no JSON object");
+  return JSON.parse(trimmed);
+}
+
+export function phaseOutput(events: EventRecord[], phase: string): Record<string, unknown> | null {
+  const successful = new Set(events
+    .filter((event) => event.event === "execution_end" && payload(event)?.tool === "leveret_submit_phase" && payload(event)?.is_error === false)
+    .flatMap((event) => event.tool_call_id ? [event.tool_call_id] : []));
+  const submissions = events.filter((event) => event.event === "execution_start"
+    && event.phase === phase
+    && payload(event)?.tool === "leveret_submit_phase"
+    && Boolean(event.tool_call_id && successful.has(event.tool_call_id)));
+  const submitted = resultRecord(payload(submissions[submissions.length - 1] ?? {} as EventRecord)?.args);
+  if (submitted) return submitted;
   const parsed = events.filter((event) => event.event === "attempt_parsed" && event.phase === phase);
   const text = payload(parsed[parsed.length - 1] ?? {} as EventRecord)?.assistant_text;
   if (typeof text !== "string") return null;
   try {
-    const value = parseAssistantJson(text);
-    return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+    return resultRecord(legacyAssistantJson(text));
   } catch {
     return null;
   }
@@ -220,11 +233,11 @@ async function finalizedRun(runDir: string, loaded: LoadedCorpus, adjudications:
   const contextMode = planRecord?.mode === "diff-only" || planRecord?.mode === "review-context" ? planRecord.mode : "unknown";
   const rangeId = typeof planRecord?.range_id === "string" ? planRecord.range_id : null;
   const rows = rangeId ? loaded.corpus.rows.filter((row) => row.frozen.range_id === rangeId) : [];
-  const reviewOutput = parsedPhaseOutput(events, "review");
+  const reviewOutput = phaseOutput(events, "review");
   const configuration = result ? resultRecord(result.run_configuration) : null;
   const discovery = configuration ? resultRecord(configuration.discovery) : null;
   const discoveryConcerns = optionalArray(discovery?.normalized_concerns);
-  const generationConcerns = discovery?.mode === "specialized/v1" ? discoveryConcerns : optionalArray(reviewOutput?.concerns);
+  const generationConcerns = discoveryConcerns ?? optionalArray(reviewOutput?.concerns);
   const reasons: string[] = [];
   if (manifest.status !== "complete") reasons.push(`manifest status is ${String(manifest.status ?? "unknown")}`);
   if (manifest.completeness !== "complete") reasons.push(`manifest completeness is ${String(manifest.completeness ?? "unknown")}`);

@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { buildReplayReport, renderBenchmarkReport, renderReplayReport, summarizeResult, type ReplayReportRecord } from "../bench/report.mjs";
+import { buildReplayReport, phaseOutput, renderBenchmarkReport, renderReplayReport, summarizeResult, type ReplayReportRecord } from "../bench/report.mjs";
 import { loadCorpus } from "../bench/replay.mjs";
 
 const result = {
@@ -148,6 +148,17 @@ describe("benchmark report", () => {
     expect(markdown).toContain("- Capabilities: unknown");
   });
 
+
+  it("reads the last successful phase-tool submission from audit events", () => {
+    const events = [
+      { event: "execution_start", phase: "review", tool_call_id: "failed", payload: { tool: "leveret_submit_phase", args: { concerns: [{ id: "wrong" }] } } },
+      { event: "execution_end", phase: "review", tool_call_id: "failed", payload: { tool: "leveret_submit_phase", is_error: true } },
+      { event: "execution_start", phase: "review", tool_call_id: "accepted", payload: { tool: "leveret_submit_phase", args: { concerns: [{ id: "C1" }] } } },
+      { event: "execution_end", phase: "review", tool_call_id: "accepted", payload: { tool: "leveret_submit_phase", is_error: false } },
+    ];
+
+    expect(phaseOutput(events as never, "review")).toEqual({ concerns: [{ id: "C1" }] });
+  });
   it("excludes the rejected GNU-tar control from the recall denominator", async () => {
     const corpus = await loadCorpus(join(dirname(fileURLToPath(import.meta.url)), "../bench/corpus.v1.json"));
     const source = await buildReplayReport(corpus, []);

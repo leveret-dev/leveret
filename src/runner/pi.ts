@@ -26,6 +26,7 @@ import { loadProfile } from "../profile.js";
 import { scan } from "../scan.js";
 import { ENGINES } from "../engines/registry.js";
 import { buildPiSystemPrompt, PI_SYSTEM_PROMPT_VERSION } from "./pi-system.js";
+import { MECHANISM_CHECKLISTS, MECHANISM_CHECKLIST_SET_SHA256, selectMechanismChecklists, type ChecklistLeg } from "./mechanism-checklists.js";
 import { buildPiTools, createPhaseSubmissionTool, PHASE_SUBMISSION_TOOL, zodPhaseSubmission, type PhaseSubmission, type PiToolsBundle } from "./pi-tools.js";
 import { connectSerena, serenaBundleProblem } from "./serena.js";
 import { materializeTrustedReviewState, type TrustedReviewState } from "../trusted-state.js";
@@ -259,6 +260,11 @@ function phaseToolIdentityWithSubmission(tools: PiToolsBundle["tools"], submissi
 /** Discovery receives deterministic scope and trusted card references, never routed lead material. */
 export function singleDiscoveryInput(evidencePack: EvidencePack, guidance: GuidanceResult): Record<string, unknown> {
   const { leads: _leads, ...scopeAndFacts } = evidencePack;
+  const assignedFiles = evidencePack.files.map((file) => file.path);
+  const selectedIds = new Set((["correctness", "test-honesty", "contract-operability"] as ChecklistLeg[])
+    .flatMap((leg) => selectMechanismChecklists(leg, evidencePack, assignedFiles))
+    .map((checklist) => checklist.id));
+  const checklists = MECHANISM_CHECKLISTS.filter((checklist) => selectedIds.has(checklist.id));
   return {
     evidence_pack: scopeAndFacts,
     trusted_card_references: guidance.selectedCards.map((card) => ({
@@ -268,6 +274,10 @@ export function singleDiscoveryInput(evidencePack: EvidencePack, guidance: Guida
       limitations: card.limitations,
       source_sha256: card.source.sha256,
     })),
+    mechanism_checklists: {
+      set_sha256: MECHANISM_CHECKLIST_SET_SHA256,
+      items: checklists.map(({ selector: _selector, ...checklist }) => checklist),
+    },
   };
 }
 
@@ -590,9 +600,15 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
   const evidence = await ensureChangeEvidence(repo, base, evidencePath);
   const pinnedBase = evidence.manifest.base;
   await audit?.record("repository", "change_manifest", evidence.manifest);
+  if (Boolean(process.env.LEVERET_TRUSTED_MEMORY) !== Boolean(process.env.LEVERET_TRUSTED_MEMORY_SHA256)) {
+    throw new Error("trusted memory path and SHA-256 must be supplied together");
+  }
+  const trustedMemory = process.env.LEVERET_TRUSTED_MEMORY
+    ? { path: process.env.LEVERET_TRUSTED_MEMORY, sha256: process.env.LEVERET_TRUSTED_MEMORY_SHA256! }
+    : undefined;
   let trusted: TrustedReviewState;
   try {
-    trusted = await materializeTrustedReviewState(repo, pinnedBase);
+    trusted = await materializeTrustedReviewState(repo, pinnedBase, trustedMemory);
   } catch (error) {
     await serena?.close();
     throw error;
@@ -779,6 +795,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
         discovery: runtime.discoveryMode === "specialized/v1"
           ? SPECIALIZED_DISCOVERY
           : { id: "single/v1", system_prompt_version: PI_SYSTEM_PROMPT_VERSION },
+        mechanism_checklist_set_sha256: MECHANISM_CHECKLIST_SET_SHA256,
         verifier: { id: "targeted-verifier/v1", system_prompt_version: PI_SYSTEM_PROMPT_VERSION },
       }),
       tool_sha256: stableSha256({
@@ -1079,6 +1096,9 @@ You are the targeted verification and publication gate. Work from the supplied c
         rule_set_sha256: guidance.provenance.ruleSetSha256,
         data_sha256: guidance.provenance.dataSha256,
       },
+      trusted_memory: trustedMemory
+        ? { source: "host-file", sha256: trustedMemory.sha256 }
+        : { source: "base-commit" },
       work_item: workItemContext.mode === "review-context"
         ? {
             mode: workItemContext.mode,

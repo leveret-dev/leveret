@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -68,6 +69,87 @@ describe("frozen full replay", () => {
     expect(runner.mock.calls[0]![0].env.LEVERET_GUIDANCE_SHA256).toMatch(/^[a-f0-9]{64}$/);
     expect(handedPack).toMatchObject({ schema: "leveret.evidence-pack/v1", base: fixture.base, head: fixture.head });
     expect(handedGuidance).toMatchObject({ schema: "leveret.guidance-result/v1", base: fixture.base, head: fixture.head });
+  });
+
+  it("uses one hash-pinned host memory file for scan and runner", async () => {
+    const fixture = repository();
+    const memoryPath = join(fixture.root, "benchmark-memory.jsonl");
+    const memory = '{"kind":"convention","text":"benchmark ruling","author":"owner","created":"2026-08-26"}\n';
+    writeFileSync(memoryPath, memory);
+    const memorySha256 = createHash("sha256").update(memory).digest("hex");
+    let scannedMemory = "";
+    const runner = vi.fn<ReplayRunner>(async (context) => {
+      expect(context.env.LEVERET_TRUSTED_MEMORY).toBe(memoryPath);
+      expect(context.env.LEVERET_TRUSTED_MEMORY_SHA256).toBe(memorySha256);
+      return completeRunner(context);
+    });
+    const scan = vi.fn(async (options: { memoryRepo: string }) => {
+      scannedMemory = readFileSync(join(options.memoryRepo, ".leveret", "memory.jsonl"), "utf8");
+      return scanResult;
+    });
+
+    const outcome = await runTrial(plan(fixture.base, fixture.head), [row([{ kind: "contains", path: "target.txt", text: "defect-present" }])], {
+      repo: fixture.repo,
+      traceRoot: join(fixture.root, "traces"),
+      runner,
+      scanFn: scan as never,
+      trustedMemoryPath: memoryPath,
+      trustedMemorySha256: memorySha256,
+    });
+
+    expect(outcome.status).toBe("complete");
+    expect(scannedMemory).toBe(memory);
+    expect(runner).toHaveBeenCalledTimes(1);
+  });
+
+
+  it("requires trusted memory path and SHA-256 together", async () => {
+    const fixture = repository();
+    const target = row([{ kind: "contains", path: "target.txt", text: "defect-present" }]);
+    const pathOnly = await runTrial(plan(fixture.base, fixture.head), [target], {
+      repo: fixture.repo,
+      trustedMemoryPath: join(fixture.root, "memory.jsonl"),
+    });
+    const hashOnly = await runTrial(plan(fixture.base, fixture.head), [target], {
+      repo: fixture.repo,
+      trustedMemorySha256: "0".repeat(64),
+    });
+
+    expect(pathOnly).toMatchObject({ status: "invalid", phase: "preparation", reason: { code: "configuration-mismatch" } });
+    expect(hashOnly).toMatchObject({ status: "invalid", phase: "preparation", reason: { code: "configuration-mismatch" } });
+  });
+
+  it("invalidates cached scans when trusted memory changes", async () => {
+    const fixture = repository();
+    const memoryPath = join(fixture.root, "benchmark-memory.jsonl");
+    const scan = vi.fn(async () => scanResult);
+    const target = row([{ kind: "contains", path: "target.txt", text: "defect-present" }]);
+
+    for (const text of ["first ruling", "second ruling"]) {
+      const memory = `${JSON.stringify({ kind: "convention", text, author: "owner", created: "2026-08-26" })}\n`;
+      writeFileSync(memoryPath, memory);
+      const outcome = await runTrial(plan(fixture.base, fixture.head), [target], {
+        repo: fixture.repo,
+        traceRoot: join(fixture.root, "traces"),
+        cacheRoot: join(fixture.root, "cache"),
+        runner: completeRunner,
+        scanFn: scan as never,
+        trustedMemoryPath: memoryPath,
+        trustedMemorySha256: createHash("sha256").update(memory).digest("hex"),
+      });
+      expect(outcome.status).toBe("complete");
+    }
+
+    expect(scan).toHaveBeenCalledTimes(2);
+  });
+  it("plans only the requested historical range", async () => {
+    const corpus = await loadCorpus(join(dirname(fileURLToPath(import.meta.url)), "../bench/corpus.v1.json"));
+    const rangeId = "pfblockerng-2521-03d1e963f0e8-b312a6def6d5";
+
+    const selected = planTrials(corpus, ["review-context"], 1, rangeId);
+
+    expect(selected).toHaveLength(1);
+    expect(selected[0]).toMatchObject({ range_id: rangeId, mode: "review-context" });
   });
 
   it("mechanically validates the fixture and makes repeated plans stable and unique", async () => {

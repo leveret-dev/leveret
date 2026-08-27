@@ -106,6 +106,48 @@ const SOURCES: readonly ChecklistSource[] = [
     evidenceStandard: "Cite the executable command chain and demonstrate how absence reaches a failing exit status.",
     limitations: "Locale aliases and platform-specific canonicalization require explicit project policy.",
   },
+  {
+    id: "udev-event-settling",
+    version: 1,
+    leg: "correctness",
+    selector: { languagesAny: ["YAML"], fileKindsAny: ["workflow"], workflowCommandsAny: ["udevadm"] },
+    question: "Does every triggered device event explicitly settle before the workflow tests or uses that device?",
+    steps: [
+      "Locate udevadm trigger calls and the first later access to the affected device.",
+      "Require udevadm settle or an equivalent event-completion barrier before that access.",
+      "Treat intervening package installation, sleep, or unrelated synchronous work as delay, not proof of event completion.",
+    ],
+    evidenceStandard: "Cite the trigger, missing completion barrier, and first device consumer; timing delay alone cannot refute the race.",
+    limitations: "A command option that synchronously waits for the specific event satisfies the barrier when its semantics are cited.",
+  },
+  {
+    id: "workflow-job-local-proof",
+    version: 1,
+    leg: "test-honesty",
+    selector: { languagesAny: ["Python", "YAML"], fileKindsAny: ["test", "workflow"] },
+    question: "Does each workflow invariant require setup and proof inside the same job that consumes the state?",
+    steps: [
+      "Parse workflow jobs separately; do not flatten steps across jobs.",
+      "For each guarded consumer, locate its prerequisite setup and executable proof in that same job.",
+      "Add a sibling-job control that must not satisfy the invariant.",
+    ],
+    evidenceStandard: "Cite the consumer job and the misplaced setup or proof from a different job; repository-wide presence is insufficient.",
+    limitations: "Explicit artifacts, outputs, or reusable-workflow contracts may transfer state when their handoff is proved.",
+  },
+  {
+    id: "managed-environment-command",
+    version: 1,
+    leg: "test-honesty",
+    selector: { languagesAny: ["Python"], fileKindsAny: ["test", "documentation", "manifest"] },
+    question: "Do changed executable examples enter the dependency environment declared by the same documentation or manifest?",
+    steps: [
+      "Identify the environment manager and dependency group the changed text tells users to install.",
+      "Trace each documented Python command without assuming an interactive environment remains activated.",
+      "Require uv run, an explicit environment interpreter, or a proved activation step.",
+    ],
+    evidenceStandard: "Cite the install instruction and executable command; show that a fresh shell resolves different dependencies or interpreter state.",
+    limitations: "Repository-wide contributor setup may satisfy activation only when the changed instructions explicitly depend on it.",
+  },
 ] as const;
 
 
