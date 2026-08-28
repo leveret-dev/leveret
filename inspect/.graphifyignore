@@ -1,25 +1,13 @@
+# Only docs/, specs/ and runtime/ are part of the corpus. Everything else —
+# build output, Gradle wrapper, tool state, dotfiles — is excluded.
 *
+!docs/
+!docs/**
+!specs/
+!specs/**
 !runtime/
 !runtime/**
 
+# Build output inside an allowed folder.
 runtime/build/
 runtime/build/**
-
-*.[mM][dD]
-*.[mM][dD][xX]
-*.[tT][xX][tT]
-*.[rR][sS][tT]
-*.[hH][tT][mM][lL]
-*.[yY][aA][mM][lL]
-*.[yY][mM][lL]
-*.[tT][oO][mM][lL]
-*.[pP][rR][oO][pP][eE][rR][tT][iI][eE][sS]
-*.[pP][dD][fF]
-*.[pP][nN][gG]
-*.[jJ][pP][gG]
-*.[jJ][pP][eE][gG]
-*.[gG][iI][fF]
-*.[wW][eE][bB][pP]
-*.[sS][vV][gG]
-*.[jJ][aA][rR]
-*.[cC][lL][aA][sS][sS]

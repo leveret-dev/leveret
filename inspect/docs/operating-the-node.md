@@ -61,10 +61,9 @@ Two shutdown paths exist:
 - graceful stop, available to local tooling when `leveret.enableStopCommand` is true;
 - hard stop, always available, requested by the bundled hard-stop helper.
 
-The hard-stop helper reads `conf/leveret.properties` and resolves a relative temporary path against
-its own working directory. Run it with the installation home as the working directory, or configure
-an absolute `leveret.path.temp`; otherwise it can create an unrelated temporary directory, report
-success, and leave the node running.
+The hard-stop helper reads `conf/leveret.properties` from the installation home and resolves a
+relative temporary path against that home, so it reaches the running node from any working
+directory.
 
 ## Security
 
