@@ -27,7 +27,30 @@ java {
 
 application {
     mainClass.set("com.leveret.inspect.runtime.AppKt")
+    applicationName = "leveret-inspect"
 }
+
+distributions {
+    main {
+        contents {
+            from("src/main/assembly")
+        }
+    }
+}
+
+/** Operator-facing hard-stop helper; the application plugin generates only the monitor script. */
+val stopScripts by tasks.registering(CreateStartScripts::class) {
+    mainClass.set("com.leveret.inspect.runtime.Shutdowner")
+    applicationName = "leveret-inspect-stop"
+    outputDir = layout.buildDirectory.dir("stopScripts").get().asFile
+    classpath = tasks.startScripts.get().classpath
+}
+
+tasks.named<Sync>("installDist") { from(stopScripts) { into("bin") } }
+
+tasks.named<Tar>("distTar") { from(stopScripts) { into("${project.name}-${project.version}/bin") } }
+
+tasks.named<Zip>("distZip") { from(stopScripts) { into("${project.name}-${project.version}/bin") } }
 
 tasks.test {
     useJUnitPlatform()
