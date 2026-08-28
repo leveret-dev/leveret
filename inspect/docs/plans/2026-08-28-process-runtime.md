@@ -6,7 +6,7 @@
 
 **Architecture:** One Gradle module `runtime/` with behavior-named packages (`config`, `fs`, `ipc`, `proc`, `supervise`, `log`) and three entry points in the same artifact: the monitor (`App`), the standalone hard-stop requester (`Shutdowner`), and the reusable child host (`ChildEntryPoint`). Children are separate operating-system processes coordinated through a memory-mapped command file; the monitor never shares memory objects with them.
 
-**Tech Stack:** Kotlin/JVM (JDK 21), Gradle Kotlin DSL, SLF4J + Logback, JUnit 5, AssertJ.
+**Tech Stack:** Kotlin/JVM (bytecode target JDK 25, current LTS), Gradle Kotlin DSL, SLF4J + Logback, JUnit 5, AssertJ.
 
 **Spec:** `specs/platform/process-runtime/specification.md` and the derived design `docs/specs/2026-08-28-process-runtime-design.md`
 

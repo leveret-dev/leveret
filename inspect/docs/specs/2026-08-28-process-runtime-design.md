@@ -71,7 +71,9 @@ silently attaching to child processes.
 
 ## 4. Stack and build
 
-- Kotlin on the JVM, language and toolchain target JDK 21.
+- Kotlin on the JVM, bytecode target JDK 25, the current long-term-support release. Kotlin 2.4.0
+  targets 1.8 and 9 through 26, so the floor is a support decision, not a toolchain limit. Local
+  builds compile on the installed JDK 26 with release 25.
 - Gradle with the Kotlin DSL, one module: `runtime/`.
 - Logging through SLF4J with a Logback backend configured programmatically. The specification treats
   the logging framework as a third-party dependency, so only the observable file, level, layout, and

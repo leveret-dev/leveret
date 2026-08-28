@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test
 
 class ToolchainTest {
     @Test
-    fun `runs on java 21 or later`() {
-        assertThat(Runtime.version().feature()).isGreaterThanOrEqualTo(21)
+    fun `runs on java 25 or later`() {
+        assertThat(Runtime.version().feature()).isGreaterThanOrEqualTo(25)
     }
 }
