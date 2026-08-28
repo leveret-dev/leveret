@@ -1,16 +1,10 @@
 package com.leveret.inspect.runtime.config
 
-/**
- * Immutable resolved configuration. Keys are stored canonical, so a legacy-prefixed lookup answers
- * from the canonical entry.
- */
-class Settings(values: Map<String, String>) {
-    private val values: Map<String, String> =
-        values.entries.associate { (key, value) -> PropertyKeys.canonical(key) to value }
-
+/** Immutable resolved configuration. */
+class Settings(private val values: Map<String, String>) {
     val keys: Set<String> get() = values.keys
 
-    fun optional(key: String): String? = values[PropertyKeys.canonical(key)]
+    fun optional(key: String): String? = values[key]
 
     fun required(key: String): String =
         optional(key) ?: throw IllegalStateException("Missing configuration property: $key")

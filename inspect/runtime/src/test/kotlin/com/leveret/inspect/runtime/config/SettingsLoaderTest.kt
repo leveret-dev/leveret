@@ -41,25 +41,15 @@ class SettingsLoaderTest {
     }
 
     @Test
-    fun `legacy prefix resolves to canonical key and conflict warns`(@TempDir dir: Path) {
+    fun `a foreign prefix never feeds a recognized key`(@TempDir dir: Path) {
         val h = home(dir, "sonar.log.level=TRACE")
-        val warnings = mutableListOf<String>()
-        val settings = SettingsLoader({ h }, emptyMap(), emptyMap(), warnings::add).load(emptyArray())
-        assertThat(settings.required("leveret.log.level")).isEqualTo("TRACE")
-        assertThat(warnings).isEmpty()
-
-        val h2 = home(dir, "sonar.log.level=TRACE", "leveret.log.level=DEBUG")
-        val conflicts = mutableListOf<String>()
-        val resolved = SettingsLoader({ h2 }, emptyMap(), emptyMap(), conflicts::add).load(emptyArray())
-        assertThat(resolved.required("leveret.log.level")).isEqualTo("DEBUG")
-        assertThat(conflicts).anySatisfy { assertThat(it).contains("sonar.log.level").contains("leveret.log.level") }
-    }
-
-    @Test
-    fun `legacy environment name is accepted`(@TempDir dir: Path) {
-        val h = home(dir, "leveret.log.level=DEBUG")
-        val settings = SettingsLoader({ h }, mapOf("SONAR_LOG_LEVEL" to "TRACE"), emptyMap(), {}).load(emptyArray())
-        assertThat(settings.required("leveret.log.level")).isEqualTo("TRACE")
+        val settings = SettingsLoader(
+            { h },
+            mapOf("SONAR_LOG_LEVEL" to "TRACE"),
+            mapOf("sonar.log.level" to "TRACE"),
+            {},
+        ).load(emptyArray())
+        assertThat(settings.required(PropertyKeys.LOG_LEVEL)).isEqualTo("INFO")
     }
 
     @Test
@@ -79,13 +69,5 @@ class SettingsLoaderTest {
         Files.createDirectories(dir.resolve("conf/leveret.properties"))
         assertThatThrownBy { SettingsLoader({ dir }, emptyMap(), emptyMap(), {}).load(emptyArray()) }
             .isInstanceOf(IllegalStateException::class.java)
-    }
-
-    @Test
-    fun `legacy file is used when canonical file is absent`(@TempDir dir: Path) {
-        Files.createDirectories(dir.resolve("conf"))
-        Files.writeString(dir.resolve("conf/sonar.properties"), "leveret.log.level=TRACE")
-        val settings = SettingsLoader({ dir }, emptyMap(), emptyMap(), {}).load(emptyArray())
-        assertThat(settings.required("leveret.log.level")).isEqualTo("TRACE")
     }
 }

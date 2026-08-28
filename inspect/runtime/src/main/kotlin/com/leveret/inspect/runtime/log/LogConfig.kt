@@ -51,12 +51,6 @@ sealed interface RollingPolicy {
  * throws instead of degrading to a default.
  */
 object LogConfig {
-    /**
-     * Node name carried by both layouts. Cluster configuration belongs to a later part; this key is
-     * read here only so a named node labels its records.
-     */
-    private const val CLUSTER_NODE_NAME = "leveret.cluster.node.name"
-
     private const val DEFAULT_LEVEL = "INFO"
     private const val DEFAULT_ROLLING_POLICY = "time:yyyy-MM-dd"
     private const val DEFAULT_MAX_FILES = 7
@@ -109,10 +103,9 @@ object LogConfig {
     fun configure(settings: Settings, fs: RuntimeFileSystem, id: ProcessId) {
         val level = levelFor(settings, id)
         val policy = rollingPolicy(settings)
-        val nodeName = settings.optional(CLUSTER_NODE_NAME)
         val json = settings.boolValue(PropertyKeys.LOG_JSON, false)
         val layout: () -> Layout<ILoggingEvent> =
-            { if (json) JsonLayout(id.key, nodeName) else PlainLayout(id.key, nodeName) }
+            { if (json) JsonLayout(id.key) else PlainLayout(id.key) }
 
         val context = LoggerFactory.getILoggerFactory() as LoggerContext
         context.reset()

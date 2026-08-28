@@ -13,7 +13,7 @@ enum class ProcessId(
     val displayName: String,
 ) {
     APP("app", 0, "leveret", "Leveret Inspect"),
-    SEARCH("es", 1, "es", "Search"),
+    SEARCH("search", 1, "search", "Search"),
     WEB("web", 2, "web", "Web Server"),
     COMPUTE("ce", 3, "ce", "Compute Engine"),
     ;

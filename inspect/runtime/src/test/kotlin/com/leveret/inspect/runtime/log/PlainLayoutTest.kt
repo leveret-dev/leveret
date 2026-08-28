@@ -15,7 +15,7 @@ class PlainLayoutTest {
 
     @Test
     fun `plain record carries the specified fields on one line`() {
-        val rendered = PlainLayout("app", nodeName = null).render(event("started"))
+        val rendered = PlainLayout("app").render(event("started"))
 
         assertThat(rendered).endsWith("\n")
         assertThat(rendered.trimEnd().lines()).hasSize(1)
@@ -24,12 +24,5 @@ class PlainLayoutTest {
             .contains("Example")
             .doesNotContain("com.leveret.inspect.runtime.Example")
             .endsWith("started\n")
-    }
-
-    @Test
-    fun `node name appears when present`() {
-        val rendered = PlainLayout("web", nodeName = "node-1").render(event("started"))
-
-        assertThat(rendered).contains("node-1 web[")
     }
 }

@@ -19,95 +19,46 @@ class SettingsLoader(
 ) {
     fun load(args: Array<String>): Settings {
         val home = homeSupplier().toAbsolutePath().normalize()
-        val fileValues = canonicalize(readBaseFile(home), "configuration file")
+        val fileValues = readBaseFile(home)
 
         val values = LinkedHashMap<String, String>(fileValues)
         values.putAll(environmentValues(PropertyKeys.defaults.keys + fileValues.keys))
-        values.putAll(canonicalize(CommandLineParser.parse(args), "command line arguments"))
-        values.putAll(canonicalize(prefixedSystemProperties(), "system properties"))
+        values.putAll(CommandLineParser.parse(args))
+        values.putAll(prefixedSystemProperties())
         values[PropertyKeys.PATH_HOME] = home.toString()
         PropertyKeys.defaults.forEach { (key, default) -> values.putIfAbsent(key, default) }
         return Settings(values)
     }
 
     private fun readBaseFile(home: Path): Map<String, String> {
-        val canonicalFile = home.resolve("conf").resolve("leveret.properties")
-        val legacyFile = home.resolve("conf").resolve("sonar.properties")
-        val file = when {
-            Files.exists(canonicalFile) -> canonicalFile
-            Files.exists(legacyFile) -> legacyFile
-            else -> {
-                warn("No configuration file found at $canonicalFile or $legacyFile, using defaults")
-                return emptyMap()
-            }
-        }
-        if (!Files.isRegularFile(file)) {
-            throw IllegalStateException("Configuration file is not a regular file: $file")
+        val file = home.resolve(CONF_DIRECTORY).resolve(FILE_NAME)
+        if (!Files.exists(file)) {
+            warn("Configuration file $file is absent; continuing with defaults")
+            return emptyMap()
         }
         val properties = Properties()
         try {
-            Files.newBufferedReader(file, StandardCharsets.UTF_8).use(properties::load)
+            Files.newBufferedReader(file, StandardCharsets.UTF_8).use { properties.load(it) }
         } catch (e: IOException) {
-            throw IllegalStateException("Cannot read configuration file: $file", e)
+            throw IllegalStateException("Configuration file $file cannot be read", e)
         }
-        return properties.stringPropertyNames().associateWith(properties::getProperty)
+        return properties.stringPropertyNames().associateWith { properties.getProperty(it) }
     }
 
     /**
      * Environment overrides for keys eligible to receive them: declared defaults and keys present in
-     * the configuration file. Both the canonical and the legacy variable name are accepted.
+     * the configuration file.
      */
-    private fun environmentValues(eligible: Set<String>): Map<String, String> {
-        val values = LinkedHashMap<String, String>()
-        for (key in eligible) {
-            val canonicalName = PropertyKeys.envName(key)
-            val legacyName = PropertyKeys.envName(legacyKey(key))
-            val canonicalValue = env[canonicalName]
-            val legacyValue = env[legacyName]
-            if (canonicalValue != null && legacyValue != null && canonicalValue != legacyValue) {
-                warn(
-                    "Environment variables $canonicalName and $legacyName carry different values, " +
-                        "using $canonicalName",
-                )
-            }
-            (canonicalValue ?: legacyValue)?.let { values[key] = it }
-        }
-        return values
-    }
+    private fun environmentValues(eligible: Set<String>): Map<String, String> =
+        eligible.mapNotNull { key ->
+            env[PropertyKeys.envName(key)]?.let { key to it }
+        }.toMap()
 
     private fun prefixedSystemProperties(): Map<String, String> =
-        systemProperties.filterKeys {
-            it.startsWith(PropertyKeys.CANONICAL_PREFIX) || it.startsWith(PropertyKeys.LEGACY_PREFIX)
-        }
+        systemProperties.filterKeys { it.startsWith(PropertyKeys.CANONICAL_PREFIX) }
 
-    /**
-     * Canonicalizes one source. When a canonical key and its legacy alias appear in the same source
-     * with different values the canonical value wins and both names are reported.
-     */
-    private fun canonicalize(source: Map<String, String>, sourceName: String): Map<String, String> {
-        val values = LinkedHashMap<String, String>()
-        val seenAs = HashMap<String, String>()
-        for ((rawKey, value) in source) {
-            val key = PropertyKeys.canonical(rawKey)
-            val previousRawKey = seenAs[key]
-            if (previousRawKey == null) {
-                values[key] = value
-                seenAs[key] = rawKey
-                continue
-            }
-            if (values[key] == value) continue
-            if (rawKey == key) {
-                values[key] = value
-                seenAs[key] = rawKey
-            }
-            warn(
-                "Properties $key and ${legacyKey(key)} carry different values in $sourceName, " +
-                    "using $key",
-            )
-        }
-        return values
+    private companion object {
+        const val CONF_DIRECTORY = "conf"
+        const val FILE_NAME = "leveret.properties"
     }
-
-    private fun legacyKey(canonicalKey: String): String =
-        PropertyKeys.LEGACY_PREFIX + canonicalKey.removePrefix(PropertyKeys.CANONICAL_PREFIX)
 }

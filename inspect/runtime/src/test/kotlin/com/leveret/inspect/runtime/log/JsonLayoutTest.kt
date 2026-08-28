@@ -15,7 +15,7 @@ class JsonLayoutTest {
 
     @Test
     fun `json record carries the specified fields on one line`() {
-        val rendered = JsonLayout("web", nodeName = null).render(event("started\nsecond line"))
+        val rendered = JsonLayout("web").render(event("started\nsecond line"))
         assertThat(rendered.trimEnd()).doesNotContain("\n")
         assertThat(rendered).contains("\"process\":\"web\"")
             .contains("\"severity\":\"INFO\"")
@@ -27,10 +27,9 @@ class JsonLayoutTest {
     }
 
     @Test
-    fun `node name and stacktrace appear when present`() {
-        val rendered = JsonLayout("ce", nodeName = "node-1").render(event("boom", IllegalStateException("bad")))
-        assertThat(rendered).contains("\"nodename\":\"node-1\"")
-            .contains("\"stacktrace\":[")
+    fun `stacktrace appears when the event carries a throwable`() {
+        val rendered = JsonLayout("ce").render(event("boom", IllegalStateException("bad")))
+        assertThat(rendered).contains("\"stacktrace\":[")
             .contains("IllegalStateException")
     }
 }

@@ -19,7 +19,7 @@ rather than redefining them.
 
 In scope:
 
-- settings loading with deterministic precedence, alias resolution, and validation;
+- settings loading with deterministic precedence and validation;
 - runtime directory preparation and temporary-directory cleaning;
 - process identities, launch topology, and readiness aggregation;
 - child process launch, supervision, and output draining;
@@ -34,38 +34,40 @@ Out of scope for this part (owned elsewhere or deferred):
 - search, web, and compute behavior — this part only launches and gates them;
 - relational schema, migrations, and pool behavior (`platform/persistence`);
 - HTTP routing and health payloads (`platform/http-api`);
-- multi-node clustering: only the rejection paths that the runtime must honor are implemented;
+- multi-node clustering, in any form;
 - archive construction, service wrappers, platform packaging scripts, bundled runtime images.
 
 ## 3. Naming and compatibility policy
 
-Product, packages, documentation, log filenames, and canonical configuration keys use Leveret Inspect
-naming. Identifiers that the specification marks release-coupled — the local command-file layout,
-process keys, and process indexes — are preserved verbatim so existing scanners, operator tooling, and
-bundled analyzers remain interoperable.
+All naming is Leveret Inspect's own. The upstream release marks several identifiers as
+release-coupled for interoperability with its own scanners and operator tooling; Leveret Inspect is
+the only consumer of this node, so those identifiers carry no compatibility value here and are not
+reproduced. The specification's behavior is implemented; its vendor-specific spellings are not.
 
 | Surface | Decision |
 |---|---|
 | Java package root | `com.leveret.inspect.runtime` |
-| Canonical property prefix | `leveret.` |
-| Legacy property prefix | `sonar.` accepted as a compatibility alias for every canonical key |
-| Base configuration file | `conf/leveret.properties`, falling back to `conf/sonar.properties` |
-| Environment variable names | canonical name uppercased with dots and dashes replaced by underscores; the legacy-prefixed form is also accepted |
-| Process keys and indexes | `app` 0, `es` 1, `web` 2, `ce` 3 — verbatim |
-| Command-file name and layout | `sharedmemory`, five 513-byte slots — verbatim |
-| Monitor log file | `leveret.log` |
-| Child log files | `es.log`, `web.log`, `ce.log` |
+| Property prefix | `leveret.` only; no alias prefix is accepted |
+| Base configuration file | `conf/leveret.properties` |
+| Environment variable names | property name uppercased with dots and dashes replaced by underscores |
+| Process keys and indexes | `app` 0, `search` 1, `web` 2, `ce` 3 |
+| Command-file name and layout | `sharedmemory`, five 513-byte slots |
+| Log files | `leveret.log`, `search.log`, `web.log`, `ce.log` |
 
-Alias resolution rules:
+Human-readable process names are `Leveret Inspect`, `Search`, `Web Server`, and `Compute Engine`.
 
-- a canonical key and its legacy alias carrying equal values resolve silently;
-- a canonical key and its legacy alias carrying different values resolve to the canonical value and
-  emit a warning naming both keys;
-- a legacy-only key resolves to the canonical key and is eligible for every precedence source that the
-  canonical key is eligible for.
+Deliberately not implemented, because Leveret Inspect will not use them:
 
-Human-readable process names are `Leveret Inspect`, `Search`, `Web Server`, and `Compute Engine`. The
-search process key stays `es` because it is part of the preserved command-file layout.
+- an alias property prefix and a second configuration file name;
+- multi-node clustering, including the cluster-activation setting, the restart-rejection branch, and
+  the cluster node name that would label log records;
+- suppression of the upstream search engine's external-options environment variable;
+- the upstream hard-stop helper's working-directory quirk, which resolves a relative temporary path
+  against the caller's working directory and can therefore report success without stopping the node.
+  Leveret Inspect resolves that path against installation home instead.
+
+Suppression of generic JVM tool options is kept: it prevents an inherited agent configuration from
+silently attaching to child processes.
 
 ## 4. Stack and build
 
@@ -85,7 +87,7 @@ children are separate operating-system processes, not separate distributions.
 
 ```
 runtime/src/main/kotlin/com/leveret/inspect/runtime/
-  config/     Settings, precedence, aliases, argument parsing, validation
+  config/     Settings, precedence, argument parsing, validation
   fs/         Directory resolution, creation, temporary-directory cleaning
   ipc/        Memory-mapped command file and per-process command views
   proc/       Process identities, child lifecycle, JVM options, launcher, readiness probes
@@ -101,9 +103,9 @@ Responsibilities and boundaries:
 | Unit | Responsibility | Depends on |
 |---|---|---|
 | `config.Settings` | immutable resolved key-value view with typed accessors | — |
-| `config.SettingsLoader` | source ordering, alias resolution, derived home, defaults | `Settings` |
+| `config.SettingsLoader` | source ordering, derived home, defaults | `Settings` |
 | `config.CommandLineParser` | `-Dkey=value` argument parsing and rejection | — |
-| `config.SettingsValidator` | connection-provider and cluster validation before the guarded phase | `Settings` |
+| `config.SettingsValidator` | connection-provider validation before the guarded phase | `Settings` |
 | `fs.RuntimeFileSystem` | resolve, verify, create, and clean runtime directories | `Settings` |
 | `ipc.CommandFile` | mapped byte layout, slot allocation, slot clearing | `fs` |
 | `ipc.ProcessCommands` | one process's flags, ping field, and system-information URL | `CommandFile` |
@@ -125,10 +127,10 @@ Responsibilities and boundaries:
 
 For a recognized key, later sources override earlier ones:
 
-1. `conf/leveret.properties`, otherwise `conf/sonar.properties`, decoded as UTF-8;
+1. `conf/leveret.properties`, decoded as UTF-8;
 2. environment variables;
 3. application arguments in `-Dkey=value` form;
-4. JVM system properties whose names begin with the canonical or legacy prefix;
+4. JVM system properties whose names begin with `leveret.`;
 5. the runtime-owned installation home;
 6. defaults, applied only to keys still unset.
 
@@ -172,8 +174,8 @@ module access — cannot be given a different value; an attempted override fails
 Exact duplicates are collapsed with insertion order retained. Proxy-related system properties
 propagate unless the process option list already defines the same property.
 
-The search-specific external options variable is ignored with a warning. Web and compute children do
-not inherit generic JVM tool options.
+Web and compute children do not inherit generic JVM tool options, so an inherited agent
+configuration cannot silently attach to them.
 
 ### 6.4 Stop and log properties
 
@@ -183,7 +185,7 @@ not inherit generic JVM tool options.
 | `leveret.ce.gracefulStopTimeOutInMs` | `21600000` | integer of at least 1 |
 | `leveret.enableStopCommand` | absent or false | enables the graceful-stop command watcher |
 | `leveret.log.level` | `INFO` | global threshold; `INFO`, `DEBUG`, `TRACE` |
-| `leveret.log.level.<app\|web\|ce\|es>` | unset | per-process override, higher precedence than global |
+| `leveret.log.level.<app\|search\|web\|ce>` | unset | per-process override, higher precedence than global |
 | `leveret.log.console` | `false` | forward child log output to monitor standard output |
 | `leveret.log.jsonOutput` | `false` | select the JSON layout |
 | `leveret.log.rollingPolicy` | `time:yyyy-MM-dd` | `time:<pattern>`, `size:<file-size>`, or `none` |
@@ -194,12 +196,10 @@ always runs regardless of the stop-command property.
 
 ### 6.5 Validation performed before the guarded phase
 
-Settings validation runs before child scheduling and, on failure, terminates with nonzero status:
-
-- the connection URL must be a nonempty `jdbc:<provider>:` form whose provider, case-normalized, is
-  one of `h2`, `sqlserver`, `oracle`, `postgresql`; any other value fails;
-- cluster activation is recognized and, when set, disables internal restart and narrows the enabled
-  child set as the specification describes.
+Settings validation runs before child scheduling and, on failure, terminates with nonzero status: the
+connection URL, when present, must be a nonempty `jdbc:<provider>:` form whose provider,
+case-normalized, is one of `h2`, `sqlserver`, `oracle`, `postgresql`; any other value fails. No other
+pre-guard validation is performed here.
 
 Full connection, pool, and migration behavior belongs to `platform/persistence`. This part exposes a
 validation hook so that the persistence implementation can extend validation without duplicating the
@@ -210,7 +210,7 @@ loading algorithm.
 | Process | Key | Index | Log prefix | Display name |
 |---|---|---:|---|---|
 | Monitor | `app` | 0 | `leveret` | Leveret Inspect |
-| Search | `es` | 1 | `es` | Search |
+| Search | `search` | 1 | `search` | Search |
 | Web server | `web` | 2 | `web` | Web Server |
 | Compute engine | `ce` | 3 | `ce` | Compute Engine |
 
@@ -286,9 +286,8 @@ boundary, and the handoff properties file can contain effective secrets.
 Internal restart: web or compute sets the restart flag; the supervisor acknowledges it, moves the node
 to `RESTARTING`, gracefully stops all enabled children, reloads configuration, resets temporary
 filesystem and command state, reconfigures monitor logging, resets shared application state, and
-schedules children again. Data, web, log, and temporary paths and cluster activation must not change
-across an internal restart; a rejected reload or failed reschedule is logged and converted to a hard
-stop. Internal restart is rejected while cluster activation is set.
+schedules children again. Data, web, log, and temporary paths must not change across an internal
+restart; a rejected reload or failed reschedule is logged and converted to a hard stop.
 
 An unexpected child exit is never an automatic per-child restart. With no stop or restart in progress,
 the supervisor hard-stops the whole node.
@@ -303,17 +302,16 @@ Hard stop follows the same reverse order. A hard-stopped child has a one-second 
 supervisor waits up to one minute, then forcibly destroys any remaining process, closes streams,
 drains output readers, and finalizes child state. A graceful-stop timeout escalates into this path.
 
-The standalone hard-stop requester derives installation home only to read the configuration file. It
-resolves a relative temporary path against its own working directory rather than installation home, so
-a correct invocation runs with installation home as working directory or configures an absolute
-temporary path. It writes the monitor hard-stop flag, and on a detected configuration or input-output
-failure prints an error to standard error and exits 1.
+The standalone hard-stop requester derives installation home, reads the configuration file from it,
+and resolves a relative temporary path against that home, so it targets the running node from any
+working directory. It writes the monitor hard-stop flag, and on a detected configuration or
+input-output failure prints an error to standard error and exits 1.
 
 ## 11. Failure behavior
 
 - Settings loading, settings validation, and logging configuration run before the guarded startup
   phase. Their failures prevent child scheduling and terminate with nonzero status. This includes
-  malformed application arguments, an unreadable configuration file, connection or cluster validation
+  malformed application arguments, an unreadable configuration file, connection validation
   failures, and unsupported logging configuration.
 - Directory preparation, command construction, mandatory-option violations, and launch failures occur
   inside the guarded phase: they are logged as startup failures, applicable children are stopped, and
@@ -330,7 +328,7 @@ failure prints an error to standard error and exits 1.
 
 ## 12. Logging
 
-Each process writes a dedicated active log under the log directory: `leveret.log`, `es.log`,
+Each process writes a dedicated active log under the log directory: `leveret.log`, `search.log`,
 `web.log`, `ce.log`. Child standard output and standard error are merged and drained so early startup
 and crash output stay observable, and are additionally forwarded to monitor standard output when
 console logging is enabled.
@@ -351,7 +349,7 @@ Development is test-first: a failing test per behavior, then the minimal impleme
 
 Unit coverage:
 
-- precedence across all five sources, alias conflict warning, derived home override, malformed
+- precedence across all four configured sources, derived home override, malformed
   argument rejection, environment eligibility;
 - directory resolution, non-directory rejection, one-level temporary cleaning with command-file
   retention, data and log preservation;
@@ -378,7 +376,7 @@ children hosted by the child entry point. The specification's ten acceptance sce
 | 7 Internal restart rejects immutable change | reload reports the immutable property and the node hard-stops |
 | 8 Logging modes remain compatible | file prefixes, default plain daily rotation with 7 periods, JSON fields, per-process threshold |
 | 9 Command state is reset across monitors | stale flags cannot make a child ready or trigger restart |
-| 10 Hard-stop requester targets the intended file | home-relative invocation stops the node; foreign working directory does not |
+| 10 Hard-stop requester targets the intended file | the running node stops from any working directory, including a relative temporary path |
 
 Smoke verification for the part is a real monitor launch that reaches operational state with stub
 children and then stops in reverse order, observed from the log files.
@@ -386,8 +384,8 @@ children and then stops in reverse order, observed from the log files.
 ## 14. Risks and deferrals
 
 - The search readiness address keys are provisional and transfer to `platform/search-indexing`.
-- Cluster mode is implemented only as recognized rejection and enabled-child narrowing; no
-  multi-node coordination is built.
+- Clustering is out of scope by decision, not deferral: no cluster setting is recognized and no
+  multi-node coordination exists.
 - The connection-setting validation implemented here is the minimum the monitor needs before the
   guarded phase; `platform/persistence` extends it through the validation hook.
 - Memory-mapped file behavior differs across operating systems in flush timing; integration tests

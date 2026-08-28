@@ -3,14 +3,11 @@ package com.leveret.inspect.runtime.config
 import com.leveret.inspect.runtime.proc.ProcessId
 
 /**
- * Canonical configuration keys, their defaults, and the translations between the canonical prefix,
- * the accepted legacy alias prefix, and environment-variable names.
+ * Configuration keys, their defaults, and the translation from a key to its environment-variable
+ * name.
  */
 object PropertyKeys {
     const val CANONICAL_PREFIX = "leveret."
-
-    /** Compatibility alias prefix; every canonical key is also addressable through it. */
-    const val LEGACY_PREFIX = "sonar."
 
     const val PATH_HOME = "leveret.path.home"
     const val PATH_DATA = "leveret.path.data"
@@ -19,7 +16,7 @@ object PropertyKeys {
     const val PATH_WEB = "leveret.path.web"
 
     const val ENABLE_STOP_COMMAND = "leveret.enableStopCommand"
-    const val CLUSTER_ENABLED = "leveret.cluster.enabled"
+
     const val JDBC_URL = "leveret.jdbc.url"
 
     const val LOG_LEVEL = "leveret.log.level"
@@ -31,18 +28,11 @@ object PropertyKeys {
     const val SEARCH_HOST = "leveret.search.host"
     const val SEARCH_PORT = "leveret.search.port"
 
-    /**
-     * Property segment naming a process in JVM-option and stop-timeout keys. The search process is
-     * named `search` there, while its process key stays `es` because that key addresses the
-     * release-coupled command-file layout.
-     */
-    private fun segment(id: ProcessId): String = if (id == ProcessId.SEARCH) "search" else id.key
+    fun javaOpts(id: ProcessId): String = "$CANONICAL_PREFIX${id.key}.javaOpts"
 
-    fun javaOpts(id: ProcessId): String = "$CANONICAL_PREFIX${segment(id)}.javaOpts"
+    fun javaAdditionalOpts(id: ProcessId): String = "$CANONICAL_PREFIX${id.key}.javaAdditionalOpts"
 
-    fun javaAdditionalOpts(id: ProcessId): String = "$CANONICAL_PREFIX${segment(id)}.javaAdditionalOpts"
-
-    fun gracefulStopTimeout(id: ProcessId): String = "$CANONICAL_PREFIX${segment(id)}.gracefulStopTimeOutInMs"
+    fun gracefulStopTimeout(id: ProcessId): String = "$CANONICAL_PREFIX${id.key}.gracefulStopTimeOutInMs"
 
     fun logLevel(id: ProcessId): String = "$LOG_LEVEL.${id.key}"
 
@@ -68,10 +58,6 @@ object PropertyKeys {
         gracefulStopTimeout(ProcessId.WEB) to "240000",
         gracefulStopTimeout(ProcessId.COMPUTE) to "21600000",
     )
-
-    /** Rewrites a legacy-prefixed key to its canonical name; other keys are returned unchanged. */
-    fun canonical(key: String): String =
-        if (key.startsWith(LEGACY_PREFIX)) CANONICAL_PREFIX + key.substring(LEGACY_PREFIX.length) else key
 
     /** Environment-variable name of a key: uppercase, dots and dashes replaced by underscores. */
     fun envName(key: String): String = key.uppercase().replace('.', '_').replace('-', '_')

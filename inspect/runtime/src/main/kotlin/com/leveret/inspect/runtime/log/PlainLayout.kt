@@ -7,11 +7,11 @@ import ch.qos.logback.core.LayoutBase
 import java.time.Instant
 
 /**
- * Renders one log event as an operator-readable line: timestamp, severity, optional node name,
- * process key, thread identity, shortened logger name, and message. A throwable follows its message
- * as an indented stack trace so crash detail stays in the file.
+ * Renders one log event as an operator-readable line: timestamp, severity, process key, thread
+ * identity, shortened logger name, and message. A throwable follows its message as an indented stack
+ * trace so crash detail stays in the file.
  */
-class PlainLayout(private val processKey: String, private val nodeName: String?) : LayoutBase<ILoggingEvent>() {
+class PlainLayout(private val processKey: String) : LayoutBase<ILoggingEvent>() {
     private val loggerNames = TargetLengthBasedClassNameAbbreviator(LOGGER_NAME_TARGET_LENGTH)
 
     override fun doLayout(event: ILoggingEvent): String = render(event)
@@ -20,9 +20,6 @@ class PlainLayout(private val processKey: String, private val nodeName: String?)
         val out = StringBuilder(RECORD_CAPACITY)
         out.append(LOG_TIMESTAMP.format(Instant.ofEpochMilli(event.timeStamp)))
         out.append(' ').append(event.level.toString().padEnd(SEVERITY_WIDTH))
-        if (!nodeName.isNullOrEmpty()) {
-            out.append(' ').append(nodeName)
-        }
         out.append(' ').append(processKey)
         out.append('[').append(event.threadName).append(']')
         out.append(' ').append(loggerNames.abbreviate(event.loggerName))

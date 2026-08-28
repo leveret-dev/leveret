@@ -14,11 +14,11 @@
 
 - Target baseline is release `26.8.0.126808`; no behavior from later releases.
 - Java package root is `com.leveret.inspect.runtime`. Product naming is Leveret Inspect everywhere.
-- Canonical property prefix is `leveret.`; the `sonar.` prefix is accepted as a compatibility alias for every canonical key. Equal values resolve silently; differing values resolve to the canonical value and emit a warning naming both keys.
-- Base configuration file is `conf/leveret.properties`, falling back to `conf/sonar.properties`.
-- Process keys and indexes are verbatim: `app` 0, `es` 1, `web` 2, `ce` 3. Five slots reserved; indexes outside 0 through 4 are rejected.
-- Command file is named `sharedmemory` in the temporary directory; each slot is exactly 513 bytes: five one-byte flags (`UP`, hard stop, graceful stop, restart, `OPERATIONAL`), one eight-byte ping field, one 500-byte ASCII system-information URL field.
-- Log files are `leveret.log`, `es.log`, `web.log`, `ce.log`. Supported levels are `INFO`, `DEBUG`, `TRACE`.
+- Property prefix is `leveret.` only. No alias prefix is accepted anywhere: not in the configuration file, environment names, application arguments, or system properties.
+- Base configuration file is `conf/leveret.properties`. There is no second file name.
+- Process keys and indexes: `app` 0, `search` 1, `web` 2, `ce` 3. Five slots reserved; indexes outside 0 through 4 are rejected.
+- Log files are `leveret.log`, `search.log`, `web.log`, `ce.log`. Supported levels are `INFO`, `DEBUG`, `TRACE`.
+- Not implemented by decision, because Leveret Inspect will not use them: an alias property prefix, a second configuration file name, multi-node clustering in any form (no cluster setting, no restart-rejection branch, no cluster node name in log records), suppression of the upstream search engine's external-options environment variable, and the upstream hard-stop helper's working-directory quirk. Suppression of generic JVM tool options is kept. Tasks 3, 5, 7, 9, and 10 were executed before this decision and were amended afterwards; Tasks 11 through 14 below already reflect it.
 - Timing constants: readiness poll 500 ms; search health retry 100 ms up to 600 attempts per check; child hard-stop deadline 1 s; supervisor hard-stop wait 1 min; child graceful timeout is configured value plus 30 s; supervisor graceful wait is configured value plus 60 s.
 - Default graceful timeouts: web `240000` ms, compute `21600000` ms; both must parse as integers of at least 1.
 - No implementation may consult upstream source. The specification and this plan are the only inputs.
@@ -1326,9 +1326,9 @@ git commit -m "feat: add child launcher, output draining, and readiness probes"
 - Consumes: `ChildHandler`, `ManagedProcess`, `NodeLifecycle`, `Settings`, `SettingsLoader`, `ProcessCommands`.
 - Produces:
   - `class Scheduler(private val settings: Settings, private val children: Map<ProcessId, ChildHandler>, private val monitorCommands: ProcessCommands, private val reloader: Reloader, private val clock: Clock = Clock.systemUTC())` with `val lifecycle: NodeLifecycle`, `fun schedule()`, `fun awaitTermination()`, `fun stop()`, `fun hardStop()`, `fun requestRestart()`, `fun enabledProcesses(): List<ProcessId>`, `val startOrder: List<ProcessId>` = search, web, compute, `val stopOrder: List<ProcessId>` = compute, web, search.
-  - `class Reloader(private val loader: SettingsLoader)` with `fun reload(current: Settings, args: Array<String>): Settings`, throwing `IllegalStateException` naming the offending key when any of `leveret.path.data`, `leveret.path.web`, `leveret.path.logs`, `leveret.path.temp`, `leveret.cluster.enabled` changed.
+  - `class Reloader(private val loader: SettingsLoader)` with `fun reload(current: Settings, args: Array<String>): Settings`, throwing `IllegalStateException` naming the offending key when any of `leveret.path.data`, `leveret.path.web`, `leveret.path.logs`, `leveret.path.temp` changed.
   - `class StopWatchers(private val monitorCommands: ProcessCommands, private val scheduler: Scheduler, private val stopCommandEnabled: Boolean)` with `fun start()`, `fun stop()`, and a registered shutdown hook that stops the watchers and performs a blocking graceful node stop.
-  - Gating rules: web is scheduled only after search is operational; compute only after web and search are operational; an unexpected child exit with no stop or restart in progress hard-stops every remaining child; the node reaches `OPERATIONAL` only after every enabled child has emitted its operational event; cluster activation disables `requestRestart`.
+  - Gating rules: web is scheduled only after search is operational; compute only after web and search are operational; an unexpected child exit with no stop or restart in progress hard-stops every remaining child; the node reaches `OPERATIONAL` only after every enabled child has emitted its operational event.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1411,9 +1411,21 @@ class SchedulerTest {
   }
 
   @Test
-  fun `cluster activation rejects internal restart`() {
-    val harness = SchedulerHarness(Settings(mapOf("leveret.cluster.enabled" to "true")))
-    assertThat(harness.scheduler.requestRestart()).isFalse()
+  fun `restart is acknowledged and reschedules children`() {
+    val harness = SchedulerHarness()
+    harness.scheduler.schedule()
+    ProcessId.entries.filter { it != ProcessId.APP }.forEach(harness::markOperational)
+    await().atMost(5, TimeUnit.SECONDS).untilAsserted {
+      assertThat(harness.scheduler.lifecycle.state).isEqualTo(NodeLifecycle.State.OPERATIONAL)
+    }
+
+    assertThat(harness.scheduler.requestRestart()).isTrue()
+
+    assertThat(harness.stopOrderObserved())
+      .containsExactly(ProcessId.COMPUTE, ProcessId.WEB, ProcessId.SEARCH)
+    await().atMost(5, TimeUnit.SECONDS).untilAsserted {
+      assertThat(harness.startedProcesses()).contains(ProcessId.SEARCH)
+    }
   }
 }
 ```
@@ -1485,9 +1497,9 @@ git commit -m "feat: add scheduler, reload, and stop escalation"
 **Interfaces:**
 - Consumes: everything above.
 - Produces:
-  - `object SettingsValidator { val PROVIDERS = setOf("h2", "sqlserver", "oracle", "postgresql"); fun validate(settings: Settings) }` throwing `IllegalArgumentException` for a connection URL that is present but not a `jdbc:<provider>:` form with a recognized, case-normalized provider; cluster activation is recognized and returned through `fun clusterEnabled(settings: Settings): Boolean`.
+  - `object SettingsValidator { val PROVIDERS = setOf("h2", "sqlserver", "oracle", "postgresql"); fun validate(settings: Settings) }` throwing `IllegalArgumentException` for a connection URL that is present but not a `jdbc:<provider>:` form with a recognized, case-normalized provider. No other pre-guard validation.
   - `fun main(args: Array<String>)` in `App.kt`: load settings, validate, configure monitor logging, prepare directories and clear every command slot, then enter the guarded phase that schedules children and awaits termination. Pre-guard failures print to standard error and exit nonzero. Guarded-phase failures are logged and the monitor exits 0.
-  - `fun main(args: Array<String>)` in `Shutdowner.kt`: read the configuration file relative to the derived home, resolve a relative temporary path against the current working directory, write the monitor hard-stop flag, and on a detected configuration or input-output failure print to standard error and exit 1.
+  - `fun main(args: Array<String>)` in `Shutdowner.kt`: read `conf/leveret.properties` from the derived installation home, resolve a relative temporary path against that home, write the monitor hard-stop flag, and on a detected configuration or input-output failure print to standard error and exit 1.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1549,7 +1561,7 @@ class ShutdownerTest {
   }
 
   @Test
-  fun `relative temp resolves against working directory not home`(@TempDir home: Path, @TempDir elsewhere: Path) {
+  fun `relative temp resolves against installation home from any working directory`(@TempDir home: Path, @TempDir elsewhere: Path) {
     Files.createDirectories(home.resolve("conf"))
     Files.writeString(home.resolve("conf/leveret.properties"), "leveret.path.temp=temp")
     Files.createDirectories(home.resolve("temp"))
@@ -1557,9 +1569,9 @@ class ShutdownerTest {
     Shutdowner.requestHardStop(home, workingDirectory = elsewhere)
 
     CommandFile(home.resolve("temp")).use {
-      assertThat(it.view(ProcessId.APP.index).askedForHardStop).isFalse()
+      assertThat(it.view(ProcessId.APP.index).askedForHardStop).isTrue()
     }
-    assertThat(elsewhere.resolve("temp/sharedmemory")).exists()
+    assertThat(elsewhere.resolve("temp")).doesNotExist()
   }
 }
 ```
@@ -1571,7 +1583,7 @@ Expected: FAIL — unresolved references `SettingsValidator`, `Shutdowner`.
 
 - [ ] **Step 3: Write minimal implementation**
 
-`SettingsValidator.validate` returns early when the URL key is absent; otherwise it requires the `jdbc:` prefix, extracts the token up to the next colon, lowercases it, and requires membership in `PROVIDERS`. `Shutdowner` exposes `requestHardStop(home: Path, workingDirectory: Path)` for testing and a `main` that derives home from the running artifact and uses the process working directory. `App.main` follows the two-phase structure: everything up to and including directory preparation and command-slot clearing runs unguarded; the scheduling call is wrapped so that its failures are logged before exiting 0.
+`SettingsValidator.validate` returns early when the URL key is absent; otherwise it requires the `jdbc:` prefix, extracts the token up to the next colon, lowercases it, and requires membership in `PROVIDERS`. `Shutdowner` exposes `requestHardStop(home: Path, workingDirectory: Path)`, where `workingDirectory` is accepted only to prove it does not influence resolution, and a `main` that derives home from the running artifact. `App.main` follows the two-phase structure: everything up to and including directory preparation and command-slot clearing runs unguarded; the scheduling call is wrapped so that its failures are logged before exiting 0.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1674,7 +1686,7 @@ class NodeAcceptanceTest {
 }
 ```
 
-Add the remaining scenario methods in the same file and style: scenario 2 precedence through `start("-Dleveret.log.level=DEBUG")` against a config file and environment value; scenario 4 by killing the web child process and asserting the remaining children die without restart; scenario 6 by having the stub child set its restart flag and asserting reload plus rescheduling; scenario 7 by changing the temporary path before that restart and asserting the node hard-stops with the property named in the monitor log; scenario 8 by asserting file names, default plain records with daily rotation and seven retained periods, then a JSON run with the documented field set and a per-process threshold; scenario 10 by invoking the hard-stop requester from home and from a foreign working directory.
+Add the remaining scenario methods in the same file and style: scenario 2 precedence through `start("-Dleveret.log.level=DEBUG")` against a config file and environment value; scenario 4 by killing the web child process and asserting the remaining children die without restart; scenario 6 by having the stub child set its restart flag and asserting reload plus rescheduling; scenario 7 by changing the temporary path before that restart and asserting the node hard-stops with the property named in the monitor log; scenario 8 by asserting file names, default plain records with daily rotation and seven retained periods, then a JSON run with the documented field set and a per-process threshold; scenario 10 by invoking the hard-stop requester from a foreign working directory with a relative temporary path and asserting the running node stops.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -1743,7 +1755,7 @@ Expected: FAIL — template file missing.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Write the template with one commented block per recognized key showing its default value, and a distribution `Sync` task in `runtime/build.gradle.kts` that copies the template into the built layout under `conf/`. Write `docs/operating-the-node.md` describing directories, the precedence order, the legacy-alias policy, readiness, stop and hard stop, and log locations.
+Write the template with one commented block per recognized key showing its default value, and a distribution `Sync` task in `runtime/build.gradle.kts` that copies the template into the built layout under `conf/`. Write `docs/operating-the-node.md` describing directories, the precedence order, readiness, stop and hard stop, and log locations.
 
 - [ ] **Step 4: Run test to verify it passes**
 

@@ -8,18 +8,15 @@ import java.time.Instant
 /**
  * Renders one log event as a single-line JSON object.
  *
- * Field order is fixed: node name when present, process key, diagnostic-context entries, timestamp,
- * severity, logger, message, and the stack trace when the event carries a throwable.
+ * Field order is fixed: process key, diagnostic-context entries, timestamp, severity, logger,
+ * message, and the stack trace when the event carries a throwable.
  */
-class JsonLayout(private val processKey: String, private val nodeName: String?) : LayoutBase<ILoggingEvent>() {
+class JsonLayout(private val processKey: String) : LayoutBase<ILoggingEvent>() {
     override fun doLayout(event: ILoggingEvent): String = render(event)
 
     fun render(event: ILoggingEvent): String {
         val out = StringBuilder(RECORD_CAPACITY)
         out.append('{')
-        if (!nodeName.isNullOrEmpty()) {
-            field(out, "nodename", nodeName)
-        }
         field(out, "process", processKey)
         for ((key, value) in diagnosticContext(event)) {
             field(out, key, value)
@@ -93,6 +90,6 @@ class JsonLayout(private val processKey: String, private val nodeName: String?) 
         const val RECORD_CAPACITY = 256
 
         /** Field names the record renders itself, so a diagnostic-context entry never shadows one. */
-        val OWNED_FIELDS = setOf("nodename", "process", "timestamp", "severity", "logger", "message", "stacktrace")
+        val OWNED_FIELDS = setOf("process", "timestamp", "severity", "logger", "message", "stacktrace")
     }
 }

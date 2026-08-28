@@ -46,7 +46,7 @@ class CommandFactory(
             id = id,
             arguments = arguments,
             environmentAdditions = emptyMap(),
-            suppressedEnvironment = suppressedEnvironment(id),
+            suppressedEnvironment = suppressedEnvironment(),
             settingsFile = settingsFile,
         )
     }
@@ -66,10 +66,8 @@ class CommandFactory(
         }
     }
 
-    private fun suppressedEnvironment(id: ProcessId): Set<String> = when (id) {
-        ProcessId.SEARCH -> setOf(SEARCH_EXTERNAL_OPTIONS)
-        else -> setOf(GENERIC_JVM_TOOL_OPTIONS)
-    }
+    /** Children never inherit generic JVM tool options, so no ambient agent attaches to them. */
+    private fun suppressedEnvironment(): Set<String> = setOf(GENERIC_JVM_TOOL_OPTIONS)
 
     private fun writeHandoffFile(id: ProcessId): Path {
         val properties = Properties()
@@ -109,7 +107,6 @@ class CommandFactory(
         /** Margin added to the operator's grace period before the child escalates internally. */
         const val CHILD_TIMEOUT_MARGIN_MS = 30_000L
 
-        private const val SEARCH_EXTERNAL_OPTIONS = "ES_JAVA_OPTS"
         private const val GENERIC_JVM_TOOL_OPTIONS = "JAVA_TOOL_OPTIONS"
 
         private val PROXY_PROPERTIES = listOf(

@@ -46,13 +46,13 @@ class CommandFactoryTest {
     }
 
     @Test
-    fun `search command has no handoff file and suppresses external options variable`(@TempDir home: Path) {
+    fun `search command has no handoff file`(@TempDir home: Path) {
         val fs = fileSystem(home)
         val command = CommandFactory(pathSettings(home), fs, "java")
             .createFor(ProcessId.SEARCH, "com.example.Search", "search.jar")
 
         assertThat(command.settingsFile).isNull()
-        assertThat(command.suppressedEnvironment).contains("ES_JAVA_OPTS")
+        assertThat(command.suppressedEnvironment).containsExactly("JAVA_TOOL_OPTIONS")
     }
 
     @Test
@@ -61,7 +61,7 @@ class CommandFactoryTest {
         val command = CommandFactory(pathSettings(home), fs, "java")
             .createFor(ProcessId.WEB, "com.example.Main", "app.jar")
 
-        assertThat(command.suppressedEnvironment).contains("JAVA_TOOL_OPTIONS")
+        assertThat(command.suppressedEnvironment).containsExactly("JAVA_TOOL_OPTIONS")
     }
 
     @Test
