@@ -1,0 +1,302 @@
+{
+  "analyzers/css/specification.md": {
+    "mtime": 1787806600.2095551,
+    "seen": 1787810324.3505979,
+    "ast_hash": "77962d687880b3c0574c3cb9727e2872",
+    "semantic_hash": ""
+  },
+  "analyzers/dotnet/specification.md": {
+    "mtime": 1787809918.1153822,
+    "seen": 1787810324.350601,
+    "ast_hash": "a293b873321d044a87ad1bdf83f66475",
+    "semantic_hash": ""
+  },
+  "analyzers/embedded-web-yaml/specification.md": {
+    "mtime": 1787804781.4784217,
+    "seen": 1787810324.350603,
+    "ast_hash": "a8ba2c4f0a0b6576000ca009f3c92201",
+    "semantic_hash": ""
+  },
+  "analyzers/flex/specification.md": {
+    "mtime": 1787804810.702167,
+    "seen": 1787810324.350604,
+    "ast_hash": "333bc100cc0e35d29098ead4be67d639",
+    "semantic_hash": ""
+  },
+  "analyzers/go/specification.md": {
+    "mtime": 1787802758.713496,
+    "seen": 1787810324.3506079,
+    "ast_hash": "ee84389c286e3d209682b1ed4618a578",
+    "semantic_hash": ""
+  },
+  "analyzers/html/specification.md": {
+    "mtime": 1787804800.5823653,
+    "seen": 1787810324.3506088,
+    "ast_hash": "e5d6050bece814adaf73a0144386d580",
+    "semantic_hash": ""
+  },
+  "analyzers/infrastructure-as-code/specification.md": {
+    "mtime": 1787809782.486188,
+    "seen": 1787810324.3506088,
+    "ast_hash": "746fa618bfe07cef21fa190fc84f1272",
+    "semantic_hash": ""
+  },
+  "analyzers/java-symbolic-execution/specification.md": {
+    "mtime": 1787804742.529461,
+    "seen": 1787810324.35061,
+    "ast_hash": "c461fd950a8fb90a7b13f9892c593c2f",
+    "semantic_hash": ""
+  },
+  "analyzers/java/specification.md": {
+    "mtime": 1787804742.5173228,
+    "seen": 1787810324.350611,
+    "ast_hash": "5bcca5c538e110d4561a3b71b2174a55",
+    "semantic_hash": ""
+  },
+  "analyzers/javascript/specification.md": {
+    "mtime": 1787806590.5921998,
+    "seen": 1787810324.350611,
+    "ast_hash": "637609986d342bdb78c57cfe801bfbdd",
+    "semantic_hash": ""
+  },
+  "analyzers/jsp-java-embedding/specification.md": {
+    "mtime": 1787809751.5090437,
+    "seen": 1787810324.350612,
+    "ast_hash": "465cdd9ef51455c6c69a31f27dc2aed7",
+    "semantic_hash": ""
+  },
+  "analyzers/kotlin/specification.md": {
+    "mtime": 1787804779.1674995,
+    "seen": 1787810324.350612,
+    "ast_hash": "a53bb2923f7093c5bbc6f301356f788b",
+    "semantic_hash": ""
+  },
+  "analyzers/php/specification.md": {
+    "mtime": 1787805837.8147142,
+    "seen": 1787810324.3506129,
+    "ast_hash": "e1fc47b5ac2087fd0737648709b0b3f2",
+    "semantic_hash": ""
+  },
+  "analyzers/python/specification.md": {
+    "mtime": 1787809414.6308813,
+    "seen": 1787810324.350614,
+    "ast_hash": "019ed19930961b4f40b7c215b3009aea",
+    "semantic_hash": ""
+  },
+  "analyzers/ruby/specification.md": {
+    "mtime": 1787806650.9010248,
+    "seen": 1787810324.350614,
+    "ast_hash": "4d206308d3754b2bf5c3a133fcb527de",
+    "semantic_hash": ""
+  },
+  "analyzers/rust/specification.md": {
+    "mtime": 1787809273.9112267,
+    "seen": 1787810324.350615,
+    "ast_hash": "416b0fe6f8d0160d2ab4469bc8278910",
+    "semantic_hash": ""
+  },
+  "analyzers/scala/specification.md": {
+    "mtime": 1787804820.852153,
+    "seen": 1787810324.350615,
+    "ast_hash": "4aa1f9ffbb8647d69183a840055a035e",
+    "semantic_hash": ""
+  },
+  "analyzers/text-and-secrets/specification.md": {
+    "mtime": 1787804082.529601,
+    "seen": 1787810324.350616,
+    "ast_hash": "ec061ddba1c56ecf7f63c06d828860a8",
+    "semantic_hash": ""
+  },
+  "analyzers/typescript/specification.md": {
+    "mtime": 1787809946.6122391,
+    "seen": 1787810324.350616,
+    "ast_hash": "eba7dd59a3dfe71dd222599ac35bb650",
+    "semantic_hash": ""
+  },
+  "analyzers/xml/specification.md": {
+    "mtime": 1787806661.999953,
+    "seen": 1787810324.3506172,
+    "ast_hash": "26d2106926eb2040ac41590b2893c089",
+    "semantic_hash": ""
+  },
+  "integrations/azure-devops/specification.md": {
+    "mtime": 1787804227.3333616,
+    "seen": 1787810324.3506181,
+    "ast_hash": "2e7a07dcce8dfd7502d2bbb8e9ff8355",
+    "semantic_hash": ""
+  },
+  "integrations/bitbucket/specification.md": {
+    "mtime": 1787804172.1060998,
+    "seen": 1787810324.3506181,
+    "ast_hash": "df6e3cbdc25ffbf8a81ea76b694648b7",
+    "semantic_hash": ""
+  },
+  "integrations/github/specification.md": {
+    "mtime": 1787804711.512744,
+    "seen": 1787810324.3506188,
+    "ast_hash": "b1d4fa3e54ac238d8b3461b1b70c481f",
+    "semantic_hash": ""
+  },
+  "integrations/gitlab/specification.md": {
+    "mtime": 1787802690.7578526,
+    "seen": 1787810324.3506188,
+    "ast_hash": "26a572bde39ec9b920ef90844d7ee378",
+    "semantic_hash": ""
+  },
+  "integrations/jacoco/specification.md": {
+    "mtime": 1787804696.7825556,
+    "seen": 1787810324.3506198,
+    "ast_hash": "aaa44e0548d8b12c799651831b16df8b",
+    "semantic_hash": ""
+  },
+  "integrations/ldap-authentication/specification.md": {
+    "mtime": 1787802491.4350045,
+    "seen": 1787810324.350621,
+    "ast_hash": "003efc089d2095a210aa9daf214d6232",
+    "semantic_hash": ""
+  },
+  "integrations/saml-authentication/specification.md": {
+    "mtime": 1787804785.0592413,
+    "seen": 1787810324.350621,
+    "ast_hash": "3e9e6cf68479de707eab29a30123564b",
+    "semantic_hash": ""
+  },
+  "integrations/scanner-engine/specification.md": {
+    "mtime": 1787809748.0820918,
+    "seen": 1787810324.350622,
+    "ast_hash": "66dba42efa6a5b89c20f7dbe750b7a02",
+    "semantic_hash": ""
+  },
+  "manifest/component-inventory.md": {
+    "mtime": 1787801121.4417615,
+    "seen": 1787810324.350622,
+    "ast_hash": "ec769bfa229fb7c113f6169ccd6d0edc",
+    "semantic_hash": ""
+  },
+  "manifest/coordination-design.md": {
+    "mtime": 1787799780.6501744,
+    "seen": 1787810324.350623,
+    "ast_hash": "dcfd191d8ad7ab50ceb2e5e03456a317",
+    "semantic_hash": ""
+  },
+  "manifest/coverage-index.md": {
+    "mtime": 1787810286.518656,
+    "seen": 1787810324.350623,
+    "ast_hash": "f8b7aa1e477b13981e6c45f038f406b9",
+    "semantic_hash": ""
+  },
+  "manifest/dependency-map.md": {
+    "mtime": 1787801195.7319767,
+    "seen": 1787810324.350624,
+    "ast_hash": "e0dcd913a5d26a656dbd4b0b6531d074",
+    "semantic_hash": ""
+  },
+  "manifest/execution-plan.md": {
+    "mtime": 1787810345.2368724,
+    "seen": 1787810400.410163,
+    "ast_hash": "2791274939589044640cda76250a50c5",
+    "semantic_hash": ""
+  },
+  "manifest/license-map.md": {
+    "mtime": 1787801167.5911553,
+    "seen": 1787810324.350625,
+    "ast_hash": "c9584430cda2eec77c568b09a34bd93b",
+    "semantic_hash": ""
+  },
+  "manifest/release-baseline.md": {
+    "mtime": 1787800161.576104,
+    "seen": 1787810324.350626,
+    "ast_hash": "d6dd1ebef153c563fbfcd6f78d9eae95",
+    "semantic_hash": ""
+  },
+  "manifest/review-report.md": {
+    "mtime": 1787810359.121306,
+    "seen": 1787810400.410166,
+    "ast_hash": "7a3a0f67d32aaacb540945ce848649a9",
+    "semantic_hash": ""
+  },
+  "platform/analysis-results/specification.md": {
+    "mtime": 1787809901.9287252,
+    "seen": 1787810324.3506272,
+    "ast_hash": "2ab37daabc089d1bdecbb50ac42e5c4a",
+    "semantic_hash": ""
+  },
+  "platform/clean-as-you-code-statistics/specification.md": {
+    "mtime": 1787804260.3520324,
+    "seen": 1787810324.3506281,
+    "ast_hash": "ea1b6e17aef89f561acfc3a0f304278f",
+    "semantic_hash": ""
+  },
+  "platform/compute-engine/specification.md": {
+    "mtime": 1787810120.4304864,
+    "seen": 1787810324.3506281,
+    "ast_hash": "f2be7ba301a3ae08f832db0caa5ce136",
+    "semantic_hash": ""
+  },
+  "platform/events-notifications/specification.md": {
+    "mtime": 1787804586.5710285,
+    "seen": 1787810324.350629,
+    "ast_hash": "62605d3b5c6e003782568dd110daa319",
+    "semantic_hash": ""
+  },
+  "platform/http-api/specification.md": {
+    "mtime": 1787804626.328804,
+    "seen": 1787810324.3506298,
+    "ast_hash": "806e3c73ba8e1f060c00906bc79dd8c5",
+    "semantic_hash": ""
+  },
+  "platform/identity-access/specification.md": {
+    "mtime": 1787804758.4628172,
+    "seen": 1787810324.3506298,
+    "ast_hash": "f0f4508e92d58589135976e43dbfe739",
+    "semantic_hash": ""
+  },
+  "platform/persistence/specification.md": {
+    "mtime": 1787804701.8238914,
+    "seen": 1787810324.350631,
+    "ast_hash": "fd41ab3f69cb7b65185f36f5e125e7b9",
+    "semantic_hash": ""
+  },
+  "platform/plugin-extension-runtime/specification.md": {
+    "mtime": 1787804504.4049425,
+    "seen": 1787810324.350632,
+    "ast_hash": "b05472ea8cdd0223de2b0860872c5e57",
+    "semantic_hash": ""
+  },
+  "platform/process-runtime/specification.md": {
+    "mtime": 1787804515.50187,
+    "seen": 1787810324.350632,
+    "ast_hash": "eac1447d4b4f4e5ad6f0f12195b50a0a",
+    "semantic_hash": ""
+  },
+  "platform/project-configuration/specification.md": {
+    "mtime": 1787804858.8234868,
+    "seen": 1787810324.350633,
+    "ast_hash": "f61eed404bca7dd0041aed958e5a530e",
+    "semantic_hash": ""
+  },
+  "platform/scanner-gateway/specification.md": {
+    "mtime": 1787804718.4181857,
+    "seen": 1787810324.350633,
+    "ast_hash": "0bd4b7c7e35cc1c4085b2baa19e328c5",
+    "semantic_hash": ""
+  },
+  "platform/search-indexing/specification.md": {
+    "mtime": 1787810128.5864277,
+    "seen": 1787810324.350634,
+    "ast_hash": "06daed01294d91ba90c63185d3a0a202",
+    "semantic_hash": ""
+  },
+  "platform/telemetry-monitoring/specification.md": {
+    "mtime": 1787804586.5743077,
+    "seen": 1787810324.350634,
+    "ast_hash": "e57d6114abd1736df783e75a2c2a8875",
+    "semantic_hash": ""
+  },
+  "platform/web-ui/specification.md": {
+    "mtime": 1787804238.9831297,
+    "seen": 1787810324.350635,
+    "ast_hash": "01664b3d6651b6303c2cdf4c6e9537e4",
+    "semantic_hash": ""
+  }
+}
