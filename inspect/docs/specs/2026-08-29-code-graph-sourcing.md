@@ -75,11 +75,11 @@ That single fact reframes `platform/code-graph`: it is not a part that writes se
 
 | Tier | Producer | Runs where | Confidence | Requires from the target | Languages |
 |---|---|---|---|---|---|
-| A | Eclipse JDT Core | worker process | `resolved` | a classpath; a build tool able to resolve one | Java |
+| A | Eclipse JDT Core | worker process | `resolved` | a classpath, assembled from dependency declarations without invoking the target's build (rung 1 of section 5.3) | Java |
 | A | Kotlin Analysis API standalone | worker process, **one per target language version** | `resolved` | a classpath, and a compiler frontend matching the target's Kotlin version | Kotlin |
 | A | scip-go, scip-typescript, scip-python | separate tool process | `resolved` | a resolvable dependency tree per language | Go, TypeScript, JavaScript, Python |
 | A | scip-java | the target's own build | `resolved` | **a successful build, executing the target's build logic** | Java, opportunistic only |
-| B | SootUp | worker process | `resolved` at bytecode granularity | **compiled classes, so a successful build** | any JVM language, opportunistic only |
+| B | SootUp | worker process | `resolved` at bytecode granularity | **class files** — published artifacts read at rung 1, or an opt-in build at rung 3 | any JVM language, opportunistic |
 | C | tree-sitter via `jtreesitter` | in-process | `name-only` | nothing but source text | everything else |
 
 Tier C is the only tier that belongs in the service process: it needs nothing but bytes, cannot execute anything, and is bounded by parse cost. It is also the floor every other tier degrades to.
@@ -92,7 +92,7 @@ The spikes answered "can this producer resolve references", and they answered it
 
 **The bytecode tier was measured on the one codebase whose classes were already sitting in a build directory.** Its 961 cross-boundary edges are real and its verdict holds, but its requirement is now stated honestly: compiled classes mean a successful build, which is the same barrier that made scip-java opportunistic. Both are opportunistic together. A checkout that does not build gets Tier A source resolution where a classpath can be assembled, and Tier C where it cannot.
 
-**The Java measurement is the one that transfers**, because it ran against an external checkout with a classpath obtained from the target's own build metadata in 2.8 seconds without compiling. That is the shape all Tier A producers should have: read the target's dependency declarations, resolve a classpath, never execute the target's build.
+**The Java measurement transfers furthest, and its framing needs one correction.** It ran against an external checkout, and it obtained the classpath in 2.8 seconds without compiling — but by invoking the target's build tool, which is rung 2 of the ladder in section 5.3 and does execute target-authored build logic. The shape Tier A should have is rung 1: parse the dependency declarations, resolve the artifacts ourselves, and treat build-tool invocation as an opt-in fallback for targets whose declarations we cannot resolve.
 
 ### 5.2 Why analysis runs in worker processes
 
@@ -101,9 +101,34 @@ The single-process decision in the scope decision cut a supervised topology whos
 - **Resource blowups are routine, not exceptional.** The bytecode spike reached 8.2 million edges, 503 seconds, and 11 GB on one configuration of a 750-line input. The Java spike peaked at 890 MB on 203k lines. In-process, those are the product dying rather than one analysis failing. A worker takes `-Xmx` and a deadline; the service survives the kill.
 - **Target input is hostile until proven otherwise.** Parsers, class readers, and archive readers over attacker-influenced input are a well-known failure surface — malformed archives, pathological nesting, adversarial identifiers. Per-file failure isolation, which the analyzer specifications already require, is only credible if a crash is contained.
 - **Version multiplicity is inherent.** Different targets need different compiler frontends, and a service that analyzes several targets cannot hold conflicting compiler versions in one classloader. Worker processes make version selection a launch argument instead of a classloading problem — which is why the classloader-isolation machinery cut from the plugin runtime does not need to come back.
-- **We never execute target code.** Reading a class file is not running it. This rules Tier A and B in and marks scip-java's compiler-plugin route, which runs the target's own build logic, as the highest-trust-cost producer we have — usable when a user asks for it on a project they trust, never as a default.
+- **Nothing under analysis executes.** Reading a class file is not running it, so isolation is about containing crashes and resource blowups rather than sandboxing code. The one producer that does execute target-authored logic is scip-java, which drives the target's own build; section 5.3 puts that on rung 2 and above, opt-in per target and never a default.
 
 The service process keeps what it always kept: settings, logging, the store, the queries, and the name-only tier. Resolution runs beside it and reports facts over a pipe or a file. That is a smaller change than it sounds — the producers in the table are already separate processes in three of six rows, and the two in-process rows were the ones this correction moved.
+
+### 5.3 Nothing under analysis ever runs
+
+The target is a checkout at rest. We read source text, dependency metadata, and class files as bytes; we never load a target class into a classloader, never instantiate anything, never execute the program or its tests. That is worth stating because it settles two questions and creates a third.
+
+**It settles what "untrusted input" means.** The risk is malformed and adversarial *data* fed to parsers, class readers, and archive readers — stack exhaustion, pathological nesting, decompression bombs, quadratic identifier handling — not target code executing in our process. Worker isolation is about containing a crash and a resource blowup, not about sandboxing execution, because there is no execution to sandbox.
+
+**It settles the escalation ladder**, which I have been conflating. Four rungs, and the product's default sits on the first:
+
+| Rung | What it touches | Executes target-authored code? | Policy |
+|---|---|---|---|
+| 1. Files at rest | source text, dependency declarations, lockfiles, published class files and archives | no | **always allowed, the default** |
+| 2. Build-tool query | invoking the target's build tool to print a resolved classpath | **yes — build scripts, plugins, and extensions run** | opt-in per target |
+| 3. Full build | compiling the target to produce class files and generated sources | yes | opt-in per target |
+| 4. Program or test execution | running the target or its suite | yes | **never us** |
+
+The Java spike reached rung 2 and reported it as build-free, which is true about compilation and misleading about execution: `dependency:build-classpath` completed in 2.8 seconds without compiling, but it ran the target's build tool, and a build file is a program. For rung 1 to carry Tier A, classpath assembly must come from parsing dependency declarations and resolving artifacts from a cache ourselves, with build-tool invocation as the opt-in fallback rather than the primary path. That is a correction to the spike's framing, not to its numbers.
+
+Rung 3 has a specific consequence on the JVM that no measurement here exercised: **generated sources do not exist in a checkout at rest.** Annotation processors and code generators — the JVM ecosystem is full of them — produce types that hand-written code references. Without a build those references have no declaration to bind to, so they land in the unresolved set for a reason that is neither a producer defect nor a hostile input. It is simply a target whose source is incomplete until something runs. The honest behaviour is to detect the generator's presence from the build declarations and say so on the answer, rather than reporting a confidently thin graph.
+
+Rung 4 stays outside the product permanently, which keeps two earlier decisions consistent: runtime profiles and hot paths were cut because no goal names performance, and test attribution is an *import* of a report someone else produced by running tests — the coverage tool runs, we never do. Fix verification, likewise, means re-running **analysis** over a named scope, never running the program to see whether it still works.
+
+**And it creates the third question, which is the interesting one.** A static graph cannot see edges that only exist while the program runs: dependency injection, service loaders, reflection, dynamic proxies, annotation-driven dispatch, configuration-named handler classes, `invokedynamic` targets the bytecode tier already loses. These are not unresolved references. An unresolved reference is a known unknown — we saw an identifier and could not bind it. A runtime-wired edge is an *unknown unknown*: nothing at the call site hints that the edge exists at all, so it is invisible rather than unresolved, and a blast radius that omits it silently is exactly the failure section 7 of the scope decision calls worse than no answer.
+
+The store therefore needs a third honesty channel beside resolved facts and the unresolved set: **runtime-wiring sites**. These are statically detectable even when the edge they imply is not — reflection and service-loader calls, injection annotations, proxy factories, class names appearing as configuration string literals. Detect the sites, count them within the affected set, and report the count on every impact answer. The local grammar tool's framework synthesizers, which guess these edges and tag them `heuristic`, are the prior art for the guessing; the discipline we add is that a guess and a count are different products, and an impact answer must carry the count whether or not it carries the guess.
 
 ## 6. Kotlin: resolved by measurement, not by frontend
 
@@ -172,10 +197,11 @@ The production precedent settles it: every batch indexer surveyed calls the comp
 7. **Recovery of the unresolved set per producer** — re-lexing and position-diffing where the producer records nothing, per section 7.
 8. **Target inspection and producer selection** — read the target's build declarations, resolve a classpath without executing its build, detect each language's version, choose and cache the matching producer, and record producer identity, version, and configuration with every fact.
 9. **Worker supervision** — launch a producer with a heap cap and a deadline, contain its crash to one analysis, and degrade to the next tier down on failure rather than reporting a thin graph as complete.
+10. **Runtime-wiring site detection** — reflection, service loaders, injection annotations, proxy factories, and class names in configuration literals, counted within any affected set so an impact answer states how much of the program's real wiring a static graph cannot see.
 
 ## 10. Revised cost
 
-Section 7 of the scope decision costed this part **Large**, driven by per-language emitters. Every one of those emitters now has an existing producer: Java in-process through JDT, Kotlin in-process through the Analysis API at the version we already pin, Go and TypeScript and Python out-of-process behind one format, breadth through an embeddable parser, and an additive bytecode tier.
+Section 7 of the scope decision costed this part **Large**, driven by per-language emitters. Every one of those emitters now has an existing producer: Java through JDT in a worker, Kotlin through the Analysis API in a per-version worker, Go and TypeScript and Python out-of-process behind one format, breadth through an embeddable parser in the service process, and an opportunistic bytecode tier where class files exist.
 
 **Revised: Medium. No compiler frontend of our own is in scope.** What remains is what nobody supplies and always was the real work: the store, the confidence model, the unresolved-set recovery, the edge-kind derivation, the delta protocol, the queries, and the orchestration across producers with graceful degradation.
 
@@ -219,6 +245,9 @@ Carried forward as unmeasured, and now the more important gap: every number abov
 | Target source, archives, and class files are untrusted input to parsers and class readers | contain a crash to one worker and one analysis, never execute target code, and treat archive reading as a hostile-input surface. A producer that runs the target's own build (scip-java) is opt-in per project and never a default |
 | A target's language version may have no frontend we can obtain | degrade to the name-only tier and tag the facts, rather than reporting a resolved-looking graph built from a mismatched frontend |
 | Producer identity becomes part of the data's meaning | store producer, version, and configuration with every fact; the SCIP moniker drift already proves that two runs of one producer can disagree about a symbol's key |
+| **Runtime-wired edges are invisible, not unresolved** — dependency injection, service loaders, reflection, proxies, annotation-driven dispatch, configuration-named classes | detect the wiring *sites* statically and report their count within every affected set; a guess about the edge is a separate, `heuristic`-tagged product from the count, and the count ships whether the guess does or not |
+| Generated sources do not exist in a checkout at rest, and the JVM ecosystem generates heavily | detect generators from the build declarations and state their presence on the answer; their absent types land in the unresolved set for a reason that is neither a producer defect nor hostile input |
+| Rung 2 of the escalation ladder looks free and is not — invoking a build tool executes target-authored build logic | prefer parsing dependency declarations and resolving artifacts ourselves; make build-tool invocation opt-in per target and say so in the answer's provenance |
 
 ## 13. Traps recorded so they are not re-litigated
 
