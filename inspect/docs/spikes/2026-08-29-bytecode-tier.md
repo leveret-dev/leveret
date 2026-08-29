@@ -1,6 +1,6 @@
 # Spike: Bytecode tier value (SootUp)
 
-> **Scope status, 2026-08-29 (final):** briefly cut, then **restored at rung 3** — the product compiles the target inside a sandbox it owns rather than asking the customer to build, so the class files this tier needs are ours to produce (`docs/specs/2026-08-29-code-graph-sourcing.md` §2, §5.3). The numbers below stand as the tier's justification; what they do not establish is how often an unfamiliar repository compiles unattended, which is the open question that decides whether this tier fires in practice.
+> **Scope status, 2026-08-29 (final):** briefly cut, then **restored at rung 3 as an opportunistic tier** — we compile the target in a sandbox we own rather than asking the customer to build, so the class files are ours to produce when the compile succeeds (`docs/specs/2026-08-29-code-graph-sourcing.md` §2, §5.3, §5.5). It frequently will not: private dependencies need credentials we refuse to request, and non-standard build strategies are not reproducible from a checkout. The numbers below justify the tier wherever it fires; no feature may depend on it firing.
 
 **Date:** 2026-08-29
 **Question:** Build a call graph over our own compiled classes with SootUp and count edges that cross into dependency or platform code — edges no source tier can produce. Acceptance: a number that either justifies the tier or kills it.
