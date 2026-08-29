@@ -6,14 +6,11 @@ plugins {
 
 dependencies {
     implementation(project(":runtime"))
-    implementation(libs.slf4j.api)
     implementation(libs.hikari)
     implementation(libs.h2)
-    implementation(libs.postgresql)
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
     testRuntimeOnly(libs.junit.platform.launcher)
-    testImplementation(libs.logback.classic)
 }
 
 kotlin {

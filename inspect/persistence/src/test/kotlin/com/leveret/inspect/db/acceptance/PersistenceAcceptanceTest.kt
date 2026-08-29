@@ -1,106 +1,147 @@
 package com.leveret.inspect.db.acceptance
 
-import com.leveret.inspect.db.charset.CharsetChecker
-import com.leveret.inspect.db.charset.CheckerState
 import com.leveret.inspect.db.config.DatabaseKeys
 import com.leveret.inspect.db.config.DatabaseSettings
-import com.leveret.inspect.db.dialect.Dialect
-import com.leveret.inspect.db.migration.DdlChange
-import com.leveret.inspect.db.migration.MigrationContext
-import com.leveret.inspect.db.migration.MigrationEngine
-import com.leveret.inspect.db.migration.MigrationHistory
-import com.leveret.inspect.db.migration.MigrationRegistry
-import com.leveret.inspect.db.migration.MigrationStatus
-import com.leveret.inspect.db.migration.VersionState
 import com.leveret.inspect.db.pool.Database
-import com.leveret.inspect.db.pool.EmbeddedDatabase
-import com.leveret.inspect.db.schema.ColumnDef
-import com.leveret.inspect.db.schema.ColumnType
-import com.leveret.inspect.db.schema.CreateTableBuilder
+import com.leveret.inspect.db.schema.Schema
 import com.leveret.inspect.db.session.SessionFactory
+import com.leveret.inspect.runtime.config.PropertyKeys
 import com.leveret.inspect.runtime.config.Settings
-import java.net.ServerSocket
+import java.nio.file.Files
 import java.nio.file.Path
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
-/** The specification's acceptance scenarios, end to end against a real embedded database. */
+/**
+ * The module's smoke proof, end to end against a real file on disk: resolve the store from runtime
+ * settings, lay a schema down, write through a session, and survive a version change.
+ */
 class PersistenceAcceptanceTest {
-    private val claims = object : DdlChange() {
-        override fun statements(dialect: Dialect) = CreateTableBuilder("claims", dialect)
-            .column(ColumnDef("uuid", ColumnType.VARCHAR, nullable = false, limit = ColumnDef.IDENTIFIER_LENGTH))
-            .column(ColumnDef("state", ColumnType.VARCHAR, nullable = false, limit = 20))
-            .primaryKey("uuid")
-            .build()
+    private val version1 = listOf(
+        "create table symbol (id int primary key, name varchar(200) not null)",
+        "create index symbol_name on symbol (name)",
+    )
+
+    // Reusing the index name is deliberate: it only creates cleanly if the rebuild dropped every
+    // object of the old version, not just its tables.
+    private val version2 = listOf(
+        "create table symbol (id int primary key, name varchar(200) not null, kind varchar(40))",
+        "create index symbol_name on symbol (name)",
+    )
+
+    @Test
+    fun `a store resolved from settings is created on disk and holds committed writes`(
+        @TempDir home: Path,
+    ) {
+        val dataDir = Files.createDirectories(home.resolve("data"))
+
+        opened(home) { sessions ->
+            Schema(sessions).ensure(1, version1)
+
+            assertThat(dataDir.resolve("leveret.mv.db"))
+                .describedAs("the store is one embedded file inside the runtime data directory")
+                .exists()
+
+            sessions.open().use { session ->
+                session.update("insert into symbol (id, name) values (1, 'discarded')")
+                session.rollback()
+                session.update("insert into symbol (id, name) values (1, 'kept')")
+                session.commit()
+            }
+
+            assertThat(names(sessions))
+                .describedAs("the rolled-back insert left nothing and the committed one persisted")
+                .containsExactly("kept")
+        }
     }
 
     @Test
-    fun `scenario 1 and 2 embedded selection and its precedence`() {
-        val defaults = Settings(DatabaseKeys.defaults)
-        assertThat(DatabaseSettings.from(defaults) {}.url).isEqualTo("jdbc:h2:tcp://127.0.0.1:9092/leveret")
+    fun `a failing batch leaves every batch committed before it durable`(@TempDir home: Path) {
+        Files.createDirectories(home.resolve("data"))
 
-        val warnings = mutableListOf<String>()
-        val withBoth = Settings(
-            DatabaseKeys.defaults + mapOf(
-                DatabaseKeys.EMBEDDED_PORT to "9600",
-                DatabaseKeys.URL to "jdbc:postgresql://db.internal/leveret",
-            ),
-        )
-        assertThat(DatabaseSettings.from(withBoth) { warnings += it }.embedded).isTrue()
-        assertThat(warnings).hasSize(1)
-    }
+        opened(home) { sessions ->
+            Schema(sessions).ensure(1, version1)
 
-    @Test
-    fun `scenario 6 7 8 and 9 migration lifecycle over a real database`(@TempDir dataDir: Path) {
-        val port = ServerSocket(0).use { it.localPort }
-        EmbeddedDatabase(port, dataDir).use { embedded ->
-            embedded.start()
-            val settings = Settings(
-                DatabaseKeys.defaults + mapOf(DatabaseKeys.EMBEDDED_PORT to port.toString()),
-            )
-            Database(DatabaseSettings.from(settings) {}).use { database ->
-                database.start()
-                val sessions = SessionFactory(database)
-                val history = MigrationHistory(sessions, database.dialect)
-                val context = MigrationContext(sessions, database.dialect)
-                val registry = MigrationRegistry().register("2026_09_001", "create claims", claims)
-
-                val engine = MigrationEngine(registry, history, context)
-                assertThat(engine.version()).isEqualTo(VersionState.FRESH_INSTALL)
-                engine.run()
-                assertThat(engine.state.status).isEqualTo(MigrationStatus.MIGRATION_SUCCEEDED)
-                assertThat(engine.version()).isEqualTo(VersionState.UP_TO_DATE)
-
-                sessions.openReadOnly().use { session ->
-                    CharsetChecker.handlerFor(database.dialect)
-                        .check(session, CheckerState.STARTUP, listOf("claims"))
-                }
-
-                sessions.openWriter().use { session ->
-                    session.update("insert into claims (uuid, state) values ('u1', 'PENDING')")
-                    session.commit()
-                }
-                val claim = {
-                    sessions.openWriter().use { session ->
-                        val changed = session.update(
-                            "update claims set state = 'IN_PROGRESS' where uuid = 'u1' and state = 'PENDING'",
-                        )
-                        session.commit()
-                        changed
+            // Row 120 repeats an identifier already written by the first batch, so the third batch
+            // fails after the first two have committed.
+            val rows = (10..129).toList() + 20
+            sessions.open().use { session ->
+                assertThatThrownBy {
+                    session.batch(
+                        "insert into symbol (id, name) values (?, ?)",
+                        rows = rows,
+                        batchSize = 50,
+                    ) { statement, id ->
+                        statement.setInt(1, id)
+                        statement.setString(2, "symbol-$id")
                     }
-                }
-                assertThat(claim()).isEqualTo(1)
-                assertThat(claim()).isZero()
+                }.describedAs("the duplicate identifier reaches the caller").isNotNull()
+            }
 
-                history.record(2026_12_001L)
-                val newer = MigrationEngine(registry, history, context)
-                assertThat(newer.version()).isEqualTo(VersionState.REQUIRES_DOWNGRADE)
-                newer.run()
-                assertThat(newer.state.status).isEqualTo(MigrationStatus.NOT_SUPPORTED)
+            assertThat(names(sessions))
+                .describedAs("the two batches that committed before the failure survived it")
+                .hasSize(100)
+        }
+    }
 
-                assertThat(database.stats().maxActive).isEqualTo(60)
+    @Test
+    fun `a matching version leaves data alone and a changed version rebuilds the store`(
+        @TempDir home: Path,
+    ) {
+        Files.createDirectories(home.resolve("data"))
+
+        opened(home) { sessions ->
+            Schema(sessions).ensure(1, version1)
+            sessions.open().use { session ->
+                session.update("insert into symbol (id, name) values (1, 'kept')")
+                session.commit()
             }
         }
+
+        // A second Database over the same file stands in for a later run of the engine.
+        opened(home) { sessions ->
+            Schema(sessions).ensure(1, version1)
+            assertThat(names(sessions))
+                .describedAs("re-running ensure at the stamped version is a no-op")
+                .containsExactly("kept")
+        }
+
+        opened(home) { sessions ->
+            Schema(sessions).ensure(2, version2)
+            assertThat(names(sessions))
+                .describedAs("a version change rebuilt the store, discarding derivable rows")
+                .isEmpty()
+
+            sessions.open().use { session ->
+                session.update("insert into symbol (id, name, kind) values (1, 'rebuilt', 'class')")
+                session.commit()
+                assertThat(session.select("select kind from symbol") { it.getString(1) })
+                    .describedAs("the rebuilt store has the new schema, not the old one")
+                    .containsExactly("class")
+            }
+        }
+
+        opened(home) { sessions ->
+            Schema(sessions).ensure(2, version2)
+            assertThat(names(sessions))
+                .describedAs("the new version is stamped, so the next run rebuilds nothing")
+                .containsExactly("rebuilt")
+        }
+    }
+
+    private fun opened(home: Path, body: (SessionFactory) -> Unit) {
+        val settings = Settings(
+            DatabaseKeys.defaults + mapOf(PropertyKeys.PATH_HOME to home.toString()),
+        )
+        Database(DatabaseSettings.from(settings)).use { database ->
+            database.start()
+            body(SessionFactory(database))
+        }
+    }
+
+    private fun names(sessions: SessionFactory): List<String> = sessions.open().use { session ->
+        session.select("select name from symbol order by id") { it.getString(1) }
     }
 }

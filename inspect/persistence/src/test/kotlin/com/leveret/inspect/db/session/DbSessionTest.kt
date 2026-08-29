@@ -1,7 +1,6 @@
 package com.leveret.inspect.db.session
 
 import com.leveret.inspect.db.config.DatabaseSettings
-import com.leveret.inspect.db.config.PoolSettings
 import com.leveret.inspect.db.pool.Database
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
@@ -17,15 +16,12 @@ class DbSessionTest {
         database = Database(
             DatabaseSettings(
                 url = "jdbc:h2:mem:session-${System.nanoTime()};DB_CLOSE_DELAY=-1",
-                username = "",
-                password = "",
-                embedded = true,
-                pool = PoolSettings(4, 1, 1000, 600000, 180000, 1800000, 5000),
+                poolSize = 4,
             ),
         )
         database.start()
         sessions = SessionFactory(database)
-        sessions.openWriter().use { session ->
+        sessions.open().use { session ->
             session.execute("create table claims (id int primary key, state varchar(20), body clob)")
             session.commit()
         }
@@ -36,7 +32,7 @@ class DbSessionTest {
 
     @Test
     fun `rollback discards and commit persists`() {
-        sessions.openWriter().use { session ->
+        sessions.open().use { session ->
             session.update("insert into claims (id, state) values (?, ?)") {
                 it.setInt(1, 1)
                 it.setString(2, "PENDING")
@@ -55,12 +51,12 @@ class DbSessionTest {
 
     @Test
     fun `conditional claim reports affected rows so a lost race is visible`() {
-        sessions.openWriter().use { session ->
+        sessions.open().use { session ->
             session.update("insert into claims (id, state) values (1, 'PENDING')")
             session.commit()
         }
         val claim = {
-            sessions.openWriter().use { session ->
+            sessions.open().use { session ->
                 val changed = session.update(
                     "update claims set state = 'IN_PROGRESS' where id = 1 and state = 'PENDING'",
                 )
@@ -74,7 +70,7 @@ class DbSessionTest {
 
     @Test
     fun `batch commits per batch and leaves earlier batches durable`() {
-        sessions.openWriter().use { session ->
+        sessions.open().use { session ->
             val written = session.batch(
                 "insert into claims (id, state) values (?, ?)",
                 rows = (1..250).toList(),
@@ -91,7 +87,7 @@ class DbSessionTest {
     @Test
     fun `streamed values persist through a prepared statement`() {
         val body = "x".repeat(100_000)
-        sessions.openWriter().use { session ->
+        sessions.open().use { session ->
             session.prepare("insert into claims (id, state, body) values (?, ?, ?)").use { statement ->
                 statement.setInt(1, 1)
                 statement.setString(2, "PENDING")
@@ -100,13 +96,13 @@ class DbSessionTest {
             }
             session.commit()
         }
-        sessions.openReadOnly().use { session ->
+        sessions.open().use { session ->
             val stored = session.select("select body from claims where id = 1") { it.getString(1) }
             assertThat(stored).containsExactly(body)
         }
     }
 
-    private fun count(): Int = sessions.openReadOnly().use { session ->
+    private fun count(): Int = sessions.open().use { session ->
         session.select("select count(*) from claims") { it.getInt(1) }.single()
     }
 }

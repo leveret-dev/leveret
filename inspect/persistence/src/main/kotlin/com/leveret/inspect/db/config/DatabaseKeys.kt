@@ -1,40 +1,22 @@
 package com.leveret.inspect.db.config
 
-import com.leveret.inspect.runtime.config.PropertyKeys
-
-/** Database property names and their defaults. Loading and precedence belong to the process runtime. */
+/**
+ * Database property names and their defaults. Loading and precedence belong to the process runtime.
+ *
+ * The engine owns its store, so there is no connection contract to configure: the store lives in the
+ * runtime data directory and the URL key exists only to relocate it — an in-memory database for a
+ * test, or a different filesystem for an operator whose data directory is unsuitable.
+ */
 object DatabaseKeys {
-    const val URL = PropertyKeys.JDBC_URL
-    const val USERNAME = "leveret.jdbc.username"
-    const val PASSWORD = "leveret.jdbc.password"
-    const val EMBEDDED_PORT = "leveret.embeddedDatabase.port"
-    const val MAX_ACTIVE = "leveret.jdbc.maxActive"
-    const val MIN_IDLE = "leveret.jdbc.minIdle"
-    const val MAX_WAIT = "leveret.jdbc.maxWait"
-    const val IDLE_TIMEOUT = "leveret.jdbc.idleTimeout"
-    const val KEEPALIVE = "leveret.jdbc.keepaliveTime"
-    const val MAX_LIFETIME = "leveret.jdbc.maxLifetime"
-    const val VALIDATION_TIMEOUT = "leveret.jdbc.validationTimeout"
-    const val AUTO_UPGRADE = "leveret.autoDatabaseUpgrade"
+    const val URL = "leveret.db.url"
+    const val POOL_SIZE = "leveret.db.poolSize"
 
-    const val DEFAULT_EMBEDDED_PORT = 9092
-    const val EMBEDDED_DATABASE_NAME = "leveret"
+    const val DEFAULT_POOL_SIZE = 8
 
-    /** A configured zero wait is this finite sentinel, never an indefinite wait. */
-    const val MAX_WAIT_SENTINEL = 2147483647
-
-    const val MIN_MAX_WAIT = 250
+    /** Base name of the embedded store inside the data directory. */
+    const val STORE_NAME = "leveret"
 
     val defaults: Map<String, String> = mapOf(
-        USERNAME to "",
-        PASSWORD to "",
-        MAX_ACTIVE to "60",
-        MIN_IDLE to "10",
-        MAX_WAIT to "8000",
-        IDLE_TIMEOUT to "600000",
-        KEEPALIVE to "180000",
-        MAX_LIFETIME to "1800000",
-        VALIDATION_TIMEOUT to "5000",
-        AUTO_UPGRADE to "false",
+        POOL_SIZE to DEFAULT_POOL_SIZE.toString(),
     )
 }
