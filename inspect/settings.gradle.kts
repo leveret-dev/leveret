@@ -7,3 +7,4 @@ dependencyResolutionManagement {
 rootProject.name = "leveret-inspect"
 
 include("runtime")
+include("persistence")
