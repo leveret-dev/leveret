@@ -1290,6 +1290,8 @@ class IdentifiersTest {
             { Identifiers.table("groups") },
             { Identifiers.column("value") },
             { Identifiers.column("select") },
+            { Identifiers.table("second") },
+            { Identifiers.column("year") },
         )
         rejected.forEach { call ->
             assertThatThrownBy(call).isInstanceOf(IllegalArgumentException::class.java)
@@ -1362,16 +1364,26 @@ object Identifiers {
     const val MAX_TABLE_LENGTH = 25
     const val MAX_CONSTRAINT_LENGTH = 30
 
-    /** Reserved words rejected with no exemptions; Leveret Inspect has no legacy schema to preserve. */
+    /**
+     * Reserved words rejected with no exemptions, taken from the strictest supported dialect so a name
+     * that validates here needs no quoting on any of them. H2 reserves temporal unit words such as
+     * `second` and `year` that PostgreSQL accepts, and an unquoted table named after one fails only at
+     * migration time otherwise.
+     */
     val RESERVED = setOf(
-        "all", "alter", "and", "any", "as", "asc", "between", "by", "case", "cast", "check", "column",
-        "constraint", "create", "cross", "current_date", "current_time", "current_timestamp", "default",
-        "delete", "desc", "distinct", "drop", "else", "end", "except", "exists", "false", "for",
-        "foreign", "from", "full", "group", "groups", "having", "in", "index", "inner", "insert",
-        "intersect", "into", "is", "join", "key", "left", "like", "limit", "not", "null", "offset",
-        "on", "or", "order", "outer", "primary", "references", "right", "select", "set", "table",
-        "then", "true", "union", "unique", "update", "user", "using", "value", "values", "when",
-        "where", "with",
+        "all", "alter", "and", "any", "array", "as", "asc", "asymmetric", "authorization", "between",
+        "by", "case", "cast", "check", "column", "constraint", "create", "cross", "current_catalog",
+        "current_date", "current_path", "current_role", "current_schema", "current_time",
+        "current_timestamp", "current_user", "day", "default", "delete", "desc", "distinct", "drop",
+        "else", "end", "except", "exists", "false", "fetch", "filter", "for", "foreign", "from", "full",
+        "group", "groups", "having", "hour", "if", "ilike", "in", "index", "inner", "insert",
+        "intersect", "interval", "into", "is", "join", "key", "leading", "left", "like", "limit",
+        "localtime", "localtimestamp", "minus", "minute", "month", "natural", "not", "null", "offset",
+        "on", "or", "order", "outer", "over", "partition", "primary", "qualify", "range", "references",
+        "regexp", "right", "row", "rownum", "second", "select", "session_user", "set", "some",
+        "symmetric", "system_user", "table", "then", "to", "top", "trailing", "true", "uescape",
+        "union", "unique", "unknown", "update", "user", "using", "value", "values", "when", "where",
+        "window", "with", "year",
     )
 
     private val shape = Regex("[a-z][a-z0-9_]*")
@@ -1855,13 +1867,13 @@ class MigrationStepTest {
     fun `a multi statement ddl step commits per statement so a later failure keeps earlier work`() {
         val step = object : DdlChange() {
             override fun statements(dialect: Dialect) = listOf(
-                "create table first (id int)",
-                "create table second (id int)",
-                "create table second (id int)",
+                "create table alpha (id int)",
+                "create table beta (id int)",
+                "create table beta (id int)",
             )
         }
         assertThatThrownBy { step.execute(context) }.isInstanceOf(Exception::class.java)
-        assertThat(tables()).contains("FIRST", "SECOND")
+        assertThat(tables()).contains("ALPHA", "BETA")
     }
 
     @Test

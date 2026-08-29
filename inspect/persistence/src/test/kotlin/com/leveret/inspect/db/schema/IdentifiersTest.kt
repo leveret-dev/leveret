@@ -23,6 +23,8 @@ class IdentifiersTest {
             { Identifiers.table("groups") },
             { Identifiers.column("value") },
             { Identifiers.column("select") },
+            { Identifiers.table("second") },
+            { Identifiers.column("year") },
         )
         rejected.forEach { call ->
             assertThatThrownBy(call).isInstanceOf(IllegalArgumentException::class.java)
