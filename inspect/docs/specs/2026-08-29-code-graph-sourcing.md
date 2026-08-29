@@ -259,3 +259,30 @@ Carried forward as unmeasured, and now the more important gap: every number abov
 - **Spoon's** permissive licence choice does not remove EPL exposure, because its compiler backend is JDT. If JDT's fidelity is what you want, depend on JDT.
 - **"It is on Maven Central so it is a library"** — scip-java publishes a jar whose `main` drives an external build. Only the bindings are genuinely embeddable, and they only decode.
 - **`workspace/symbol` with an empty query** looks like a bulk enumeration primitive and is refused in practice by the implementations that matter.
+
+## 14. How the upstream product sources resolution inputs, per language
+
+Recorded because the question "does resolution need the target's build?" already has a large, shipped answer, and our own clean-room corpus documents it with provenance. Nothing here comes from reading upstream code; every claim cites a specification in this repository. The pattern matters more than the details: **there is no single mechanism. Each language family gets semantics a different way, and only two families need the target's build at all.**
+
+The frame is a client-side scanner that runs where the environment is — a developer machine or a build agent — walks the tree from configured source roots, classifies each file main or test, invokes analyzers in its own process, collects version-control data, and publishes a report. The server receives facts and never touches the target's source, classpath, or build. That split is what lets environment-dependent work happen where the environment exists. [`specs/integrations/scanner-engine/specification.md` §Sources and tests, §Report steps]
+
+| Family | Where semantics come from | Needs the target's build? |
+|---|---|---|
+| Java | ECJ parsing plus binding resolution over configured `binaries`, `libraries`, test variants, and a JDK home; a class-to-source index maps binary names back to files | **yes, for full fidelity** — and it degrades rather than fails |
+| Kotlin | one standalone K2 Analysis API session per sensor, its library module assembled from the *Java* classpath properties in binaries-then-libraries order, entries accepted only when their first bytes identify a ZIP archive | same as Java |
+| JavaScript, TypeScript | a bundled Node runtime driven over a loopback bridge; type information from discovered or configured `tsconfig.json` programs, with orphan files grouped into fallback programs | no build, but installed dependencies supply the types |
+| Python | its own parser, a project symbol table with fully qualified module names, an import-relationship index, and **bundled version-filtered type stubs** | no |
+| Go | a **bundled native parser binary per platform**, roughly 7.3 to 7.6 MB each, driven per directory batch with module context from `go.mod` | no |
+| Anything else | import somebody else's report: SARIF 2.1.0 plus per-language linter formats, failures isolated per file and run | no — the other tool ran |
+
+Four things in that table are worth taking, and one is worth taking as a warning.
+
+**Degradation is explicit, rule-level, and never invented.** With no classpath, Java analysis "continues with binding recovery, emits classpath/unresolved-type warnings, and may produce fewer semantic findings rather than invented symbols"; Kotlin's incomplete classpath "can reduce semantic detections without preventing syntax-only rules"; the TypeScript contract states outright that "missing type information must never be replaced with guessed types; type-dependent rules remain silent." That is the same discipline our confidence field exists to enforce, arrived at independently. [`specs/analyzers/java/specification.md` §14 scenario 5; `specs/analyzers/kotlin/specification.md` §4; `specs/analyzers/typescript/specification.md` §failure behavior]
+
+**There is already a named mode for "no build available".** An internal scan mode shares one batch and one classpath across main and test files, suppresses the missing-classpath warnings, and — the important part — **filters the active rule set to the checks that still work without full semantics**. So the answer to a target with no classpath is not a thinner graph presented as complete; it is a smaller, declared set of checks. [`specs/analyzers/java/specification.md` §4.3, §Processing]
+
+**Two of the three languages we planned to reach through separate indexer tools are solved by bundling the frontend instead.** Go needs no toolchain on the machine because the parser ships as a native binary; Python needs no environment because the type stubs ship with the analyzer. That is a materially different trade from shelling out to an indexer that requires the target's own toolchain, and it is cheaper on the "arbitrary target" axis this document cares about: nothing to install, nothing to resolve, no version negotiation with the target. Section 5's out-of-process SCIP rows should be re-examined against it.
+
+**The execution line sits exactly where we put ours.** The corpus records that a compatible implementation "must parse but never execute project code or Gradle scripts", that resolution "does not require executing project methods or static initializers", and that implementations must "never execute project scripts merely to discover metadata" — that last one refuses even the metadata-discovery shortcut, which is stricter than rung 2 of section 5.3. [`specs/analyzers/kotlin/specification.md` §13; `specs/analyzers/java/specification.md` §13; `specs/analyzers/javascript/specification.md` §trust boundaries]
+
+**The warning: the .NET family is what happens when a language's only path is the build.** Its analysis is orchestrated by the build system with analyzers running inside the compilation, and without that orchestration the sensor imports no results at all — not degraded results, none. Any language whose resolution we can only obtain through the target's build inherits that cliff, which is why our own Java path is a source-plus-classpath resolver first and a build-integrated producer only opportunistically.
