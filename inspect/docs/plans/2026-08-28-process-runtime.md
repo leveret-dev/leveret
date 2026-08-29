@@ -39,7 +39,7 @@
 - Consumes: nothing.
 - Produces: Gradle project `:runtime` with Kotlin JVM toolchain 21, `slf4j-api`, `logback-classic`, `junit-jupiter`, `assertj-core` on the appropriate configurations; `./gradlew :runtime:test` runs JUnit 5 platform tests.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```kotlin
 package com.leveret.inspect.runtime
@@ -55,12 +55,12 @@ class ToolchainTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./gradlew :runtime:test`
 Expected: FAIL — no Gradle project, no wrapper, or unresolved `assertj`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `settings.gradle.kts`:
 
@@ -123,12 +123,12 @@ tasks.test { useJUnitPlatform() }
 
 Generate the wrapper: `gradle wrapper --gradle-version 8.11.1` (or copy an existing wrapper).
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `./gradlew :runtime:test`
 Expected: PASS, 1 test.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add settings.gradle.kts build.gradle.kts runtime gradle gradlew gradlew.bat
@@ -150,7 +150,7 @@ git commit -m "build: add runtime module with kotlin 21 toolchain"
   - `companion object { const val MAX_PROCESSES = 5; fun fromKey(key: String): ProcessId; fun fromIndex(index: Int): ProcessId }`, both throwing `IllegalArgumentException` on unknown input.
   - `val ProcessId.logFileName: String` returning `"$logPrefix.log"`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```kotlin
 package com.leveret.inspect.runtime.proc
@@ -186,12 +186,12 @@ class ProcessIdTest {
 
 Note: index 4 is a reserved but unassigned slot, so `fromIndex(4)` has no identity and throws; slot allocation in Task 5 still accepts 0 through 4.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./gradlew :runtime:test --tests '*ProcessIdTest'`
 Expected: FAIL — unresolved reference `ProcessId`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```kotlin
 package com.leveret.inspect.runtime.proc
@@ -221,12 +221,12 @@ enum class ProcessId(
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `./gradlew :runtime:test --tests '*ProcessIdTest'`
 Expected: PASS, 2 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add runtime/src/main/kotlin/com/leveret/inspect/runtime/proc/ProcessId.kt runtime/src/test/kotlin/com/leveret/inspect/runtime/proc/ProcessIdTest.kt
@@ -255,7 +255,7 @@ git commit -m "feat: add process identities"
 
 Key naming: canonical JVM-option keys are `leveret.search.javaOpts`, `leveret.web.javaOpts`, `leveret.ce.javaOpts` (search uses the word `search`, not the process key `es`); per-process log levels use the process key: `leveret.log.level.app`, `.es`, `.web`, `.ce`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 package com.leveret.inspect.runtime.config
@@ -375,12 +375,12 @@ class CommandLineParserTest {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `./gradlew :runtime:test --tests '*config*'`
 Expected: FAIL — unresolved references `SettingsLoader`, `PropertyKeys`, `CommandLineParser`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `PropertyKeys` holds the canonical names, the default map, `canonical(key)` (rewrites a leading `sonar.` to `leveret.`), and `envName(key)` (uppercase, dots and dashes to underscores). Defaults:
 
@@ -410,12 +410,12 @@ val defaults: Map<String, String> = mapOf(
 
 `SettingsLoader.load` performs, in order: read the base file (canonical name, else legacy name; missing produces `warn` and an empty map; an existing unreadable path throws `IllegalStateException`); canonicalize and conflict-check every file key; overlay environment values for eligible keys (a key is eligible when it is declared in `defaults` or present in the file), accepting both canonical and legacy environment names; overlay parsed arguments; overlay system properties whose names start with either prefix; set `PATH_HOME` to the absolute home; finally fill absent keys from `defaults`. Conflict checking applies per source: when both a canonical key and its alias appear in the same source with unequal values, keep the canonical value and call `warn` with both names.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./gradlew :runtime:test --tests '*config*'`
 Expected: PASS, 9 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add runtime/src/main/kotlin/com/leveret/inspect/runtime/config runtime/src/test/kotlin/com/leveret/inspect/runtime/config
@@ -436,7 +436,7 @@ git commit -m "feat: add settings loading with alias resolution and precedence"
   - `class RuntimeFileSystem(settings: Settings)` with `val home: Path`, `val dataDir: Path`, `val logsDir: Path`, `val tempDir: Path`, `val webDir: Path`, `fun reset()`, and `fun cleanTempDir(retain: Set<Path>)`.
   - `reset()` creates every directory when absent, throws `IllegalStateException` when a configured path exists as a non-directory or cannot be created, and cleans the temporary directory one level deep.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```kotlin
 package com.leveret.inspect.runtime.fs
@@ -506,21 +506,21 @@ class RuntimeFileSystemTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./gradlew :runtime:test --tests '*RuntimeFileSystemTest'`
 Expected: FAIL — unresolved reference `RuntimeFileSystem`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Resolve each directory property against `home`, normalize to absolute. `reset()` validates and creates each directory, then calls `cleanTempDir(emptySet())`. `cleanTempDir(retain)` walks the immediate children of `tempDir`, skipping retained paths, deleting files directly and directories recursively. Any input-output failure becomes `IllegalStateException` naming the path.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `./gradlew :runtime:test --tests '*RuntimeFileSystemTest'`
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add runtime/src/main/kotlin/com/leveret/inspect/runtime/fs runtime/src/test/kotlin/com/leveret/inspect/runtime/fs
@@ -545,7 +545,7 @@ git commit -m "feat: add runtime filesystem preparation and temp cleaning"
   - `systemInfoUrl` setter throws `IllegalArgumentException` when the encoded value exceeds `MAX_URL_BYTES`.
   - `acknowledgeRestart()` clears the restart flag; the requester keeps its request set until it observes the cleared flag.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```kotlin
 package com.leveret.inspect.runtime.ipc
@@ -631,21 +631,21 @@ class CommandFileTest {
 
 Replace `ProcessId.CE_INDEX_FOR_TEST` with `ProcessId.COMPUTE.index`; it is written here only to flag that the test must use the compute slot.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./gradlew :runtime:test --tests '*CommandFileTest'`
 Expected: FAIL — unresolved reference `CommandFile`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Open the file with `FileChannel.open(path, CREATE, READ, WRITE)`, map `SLOT_SIZE * ProcessId.MAX_PROCESSES` bytes as a single `MappedByteBuffer`, and back each view with an absolute offset into that buffer. Flag writes store 1 or 0. The ping field stores `System.currentTimeMillis()` on `ping()` and returns the stored value. URL writes encode US-ASCII, zero-fill the remainder, and reject oversized input before writing. `close()` closes the channel; the mapping is released by the garbage collector.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `./gradlew :runtime:test --tests '*CommandFileTest'`
 Expected: PASS, 6 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add runtime/src/main/kotlin/com/leveret/inspect/runtime/ipc runtime/src/test/kotlin/com/leveret/inspect/runtime/ipc
@@ -669,7 +669,7 @@ git commit -m "feat: add memory mapped command file"
   - `class ChildLifecycle` with `enum class State { INIT, STARTING, STARTED, OPERATIONAL, STOPPING, HARD_STOPPING, FINALIZE_STOPPING, STOPPED }`, `val state: State`, `fun tryToMoveTo(target: State): Boolean`.
   - Both are synchronized; a rejected transition returns `false` and leaves state unchanged.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 package com.leveret.inspect.runtime.supervise
@@ -749,21 +749,21 @@ class ChildLifecycleTest {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `./gradlew :runtime:test --tests '*LifecycleTest'`
 Expected: FAIL — unresolved references.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Each class holds an `EnumMap<State, Set<State>>` transition table and a `synchronized` `tryToMoveTo` that returns `false` when the target is absent from the current state's set. Node table exactly as the Global Constraints and design section 8 list. Child table: `INIT` to `STARTING`; `STARTING` to `STARTED`, `STOPPING`, `HARD_STOPPING`, `FINALIZE_STOPPING`; `STARTED` to `OPERATIONAL`, `STOPPING`, `HARD_STOPPING`, `FINALIZE_STOPPING`; `OPERATIONAL` to `STOPPING`, `HARD_STOPPING`, `FINALIZE_STOPPING`; `STOPPING` to `HARD_STOPPING`, `FINALIZE_STOPPING`; `HARD_STOPPING` to `FINALIZE_STOPPING`; `FINALIZE_STOPPING` to `STOPPED`; `STOPPED` terminal.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./gradlew :runtime:test --tests '*LifecycleTest'`
 Expected: PASS, 5 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add runtime/src/main/kotlin/com/leveret/inspect/runtime/supervise/NodeLifecycle.kt runtime/src/main/kotlin/com/leveret/inspect/runtime/proc/ChildLifecycle.kt runtime/src/test/kotlin/com/leveret/inspect/runtime/supervise/NodeLifecycleTest.kt runtime/src/test/kotlin/com/leveret/inspect/runtime/proc/ChildLifecycleTest.kt
@@ -788,7 +788,7 @@ git commit -m "feat: add node and child lifecycle state machines"
   - `class CommandFactory(private val settings: Settings, private val fs: RuntimeFileSystem, private val javaExecutable: String)` with `fun createFor(id: ProcessId, mainClass: String, classpath: String): ChildCommand`.
   - `createFor` writes the effective settings to a temporary properties file for web and compute, adding the internal keys `process.key`, `process.index`, `process.gracefulStopTimeout` (configured value plus 30000), `process.sharedDir`; suppresses the search external-options variable and generic JVM tool options; propagates system proxy properties unless the process option list already sets the same property name.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 package com.leveret.inspect.runtime.proc
@@ -910,23 +910,23 @@ class CommandFactoryTest {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `./gradlew :runtime:test --tests '*JvmOptionsTest' --tests '*CommandFactoryTest'`
 Expected: FAIL — unresolved references `JvmOptions`, `CommandFactory`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `JvmOptions` keeps a `LinkedHashSet<String>` seeded with the rendered mandatory options. `add` validates, then checks each mandatory prefix: if the candidate starts with that prefix and does not equal the mandatory rendering, throw. `addFromSettings` splits the primary and additional option strings on whitespace and adds each.
 
 `CommandFactory.createFor` builds mandatory options per process — UTF-8 encoding, headless mode, the temporary directory system property, and required module access — then process options from settings. For web and compute it writes the handoff properties file into the temporary directory using `Files.createTempFile(tempDir, id.key + "-", ".properties")` and passes its path as the child argument after the main class. Search receives no handoff file.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./gradlew :runtime:test --tests '*JvmOptionsTest' --tests '*CommandFactoryTest'`
 Expected: PASS, 7 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add runtime/src/main/kotlin/com/leveret/inspect/runtime/proc/JvmOptions.kt runtime/src/main/kotlin/com/leveret/inspect/runtime/proc/CommandFactory.kt runtime/src/test/kotlin/com/leveret/inspect/runtime/proc/JvmOptionsTest.kt runtime/src/test/kotlin/com/leveret/inspect/runtime/proc/CommandFactoryTest.kt
@@ -952,7 +952,7 @@ git commit -m "feat: add jvm option validation and child command construction"
   - `class JsonLayout(private val processKey: String, private val nodeName: String?)` with `fun render(event: ILoggingEvent): String` producing one terminated record with fields `nodename` when present, `process`, non-excluded diagnostic-context entries, `timestamp`, `severity`, `logger`, `message`, and `stacktrace` as an array when a throwable exists; newlines in the message are normalized to spaces.
   - `class PlainLayout(private val processKey: String, private val nodeName: String?)` with the same `render` signature, emitting timestamp, severity, optional node name, process key, thread identity, shortened logger name, and message.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 package com.leveret.inspect.runtime.log
@@ -1031,21 +1031,21 @@ class JsonLayoutTest {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `./gradlew :runtime:test --tests '*log*'`
 Expected: FAIL — unresolved references `LogConfig`, `RollingPolicy`, `JsonLayout`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `LogConfig.levelFor` reads the per-process key then the global key, maps `INFO`, `DEBUG`, `TRACE` to Logback levels and throws otherwise. `rollingPolicy` parses the prefix before the first colon. `configure` builds a `LoggerContext`, attaches one file appender targeting `fs.logsDir.resolve(id.logFileName)` with the selected layout and policy, sets the root level, and adds a console appender for the monitor when console logging is enabled. Layouts render fields by hand; the JSON writer escapes quotes, backslashes, and control characters and replaces newlines in the message with spaces.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./gradlew :runtime:test --tests '*log*'`
 Expected: PASS, 5 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add runtime/src/main/kotlin/com/leveret/inspect/runtime/log runtime/src/test/kotlin/com/leveret/inspect/runtime/log
@@ -1067,7 +1067,7 @@ git commit -m "feat: add process log configuration and layouts"
   - `class ChildEntryPoint(private val settings: Settings, private val commands: ProcessCommands, private val component: MonitoredComponent)` with `fun launch()`, `companion object { fun fromHandoffFile(path: Path): ChildEntryPoint }` reading `process.key`, `process.index`, `process.gracefulStopTimeout`, `process.sharedDir`.
   - `launch()` starts the component, publishes `up` once the component is no longer down, publishes `operational` once the component reports operational, then polls the command slot every 500 ms; on a graceful-stop flag it calls `stop()` within the handoff timeout, on a hard-stop flag it calls `hardStop()` with a one-second deadline, and returns after the component halts.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```kotlin
 package com.leveret.inspect.runtime
@@ -1144,21 +1144,21 @@ class ChildEntryPointTest {
 
 Add `testImplementation("org.awaitility:awaitility:4.2.2")` to `runtime/build.gradle.kts` and a matching `awaitility` entry in `gradle/libs.versions.toml` as part of this task.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./gradlew :runtime:test --tests '*ChildEntryPointTest'`
 Expected: FAIL — unresolved references `ChildEntryPoint`, `MonitoredComponent`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `launch()` calls `component.start()`, then loops at 500 ms: set `up` once when `isUp()` first returns true; set `operational` once when `isOperational()` first returns true; check `askedForHardStop` first, then `askedForStop`. Graceful stop runs `component.stop()` on the calling thread bounded by the handoff timeout; exceeding it escalates to `hardStop()`. Hard stop runs `component.hardStop()` with a one-second bound. Return once the component has halted.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `./gradlew :runtime:test --tests '*ChildEntryPointTest'`
 Expected: PASS, 2 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add runtime/src/main/kotlin/com/leveret/inspect/runtime/ChildEntryPoint.kt runtime/src/test/kotlin/com/leveret/inspect/runtime/ChildEntryPointTest.kt runtime/build.gradle.kts gradle/libs.versions.toml
@@ -1185,7 +1185,7 @@ git commit -m "feat: add reusable child entry point"
   - `interface SearchHealth { fun status(): Status }` and `enum class Status { GREEN, YELLOW, RED, UNAVAILABLE }`; `class HttpSearchHealth(private val host: String, private val port: Int, private val retryDelay: Duration = Duration.ofMillis(100), private val maxAttempts: Int = 600) : SearchHealth`, retrying only connection refusal, treating GREEN and YELLOW as operational.
   - `class ChildHandler(val id: ProcessId, private val process: ManagedProcess, private val pollInterval: Duration = Duration.ofMillis(500), private val onOperational: (ProcessId) -> Unit, private val onUnexpectedExit: (ProcessId) -> Unit)` with `val lifecycle: ChildLifecycle`, `fun start()`, `fun awaitOperational(timeout: Duration): Boolean`, `fun stopGracefully(timeout: Duration): Boolean`, `fun hardStop(timeout: Duration)`, `fun finalizeStop()`. `onOperational` fires exactly once per child.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 package com.leveret.inspect.runtime.proc
@@ -1286,12 +1286,12 @@ class SearchHealthTest {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `./gradlew :runtime:test --tests '*ProcessLauncherTest' --tests '*SearchHealthTest'`
 Expected: FAIL — unresolved references.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `ProcessLauncher.launch` builds a `ProcessBuilder`, applies `environmentAdditions`, removes `suppressedEnvironment`, calls `redirectErrorStream(true)`, starts the process, and reads its merged output on a daemon thread that forwards each line to `logLine` and, when `consoleOutput` is set, to standard output. All drain exceptions are caught and discarded.
 
@@ -1299,12 +1299,12 @@ Expected: FAIL — unresolved references.
 
 `ChildHandler` owns a `ChildLifecycle`, installs a watcher thread that observes process exit and calls `onUnexpectedExit` when no stop is in progress, and polls readiness at `pollInterval`, firing `onOperational` exactly once. Search children use the `SearchHealth`-backed `ManagedProcess`; web and compute children use the command-slot-backed one.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./gradlew :runtime:test --tests '*ProcessLauncherTest' --tests '*SearchHealthTest'`
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add runtime/src/main/kotlin/com/leveret/inspect/runtime/proc runtime/src/test/kotlin/com/leveret/inspect/runtime/proc
@@ -1330,7 +1330,7 @@ git commit -m "feat: add child launcher, output draining, and readiness probes"
   - `class StopWatchers(private val monitorCommands: ProcessCommands, private val scheduler: Scheduler, private val stopCommandEnabled: Boolean)` with `fun start()`, `fun stop()`, and a registered shutdown hook that stops the watchers and performs a blocking graceful node stop.
   - Gating rules: web is scheduled only after search is operational; compute only after web and search are operational; an unexpected child exit with no stop or restart in progress hard-stops every remaining child; the node reaches `OPERATIONAL` only after every enabled child has emitted its operational event.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 package com.leveret.inspect.runtime.supervise
@@ -1462,21 +1462,21 @@ class ReloaderTest {
 
 `FixedSettingsLoader` is a small test double created in this task that returns a preset `Settings` from `load`.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `./gradlew :runtime:test --tests '*SchedulerTest' --tests '*ReloaderTest'`
 Expected: FAIL — unresolved references `Scheduler`, `Reloader`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `Scheduler.schedule()` moves the node to `STARTING`, then starts children on a single scheduling thread that re-evaluates gates whenever a child publishes an operational event. `stop()` moves to `STOPPING`, iterates `stopOrder`, gives each child its configured timeout plus 60 s, escalates a survivor through `hardStop`, then `FINALIZE_STOPPING` and `STOPPED`. `hardStop()` follows the same order with the 1-minute bound and forcible destruction. `requestRestart()` returns `false` when cluster activation is set; otherwise it acknowledges the request, moves to `RESTARTING`, stops children, reloads through `Reloader`, resets temporary state, and schedules again; a reload or reschedule failure logs and converts to `hardStop()`.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./gradlew :runtime:test --tests '*SchedulerTest' --tests '*ReloaderTest'`
 Expected: PASS, 7 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add runtime/src/main/kotlin/com/leveret/inspect/runtime/supervise runtime/src/test/kotlin/com/leveret/inspect/runtime/supervise
@@ -1501,7 +1501,7 @@ git commit -m "feat: add scheduler, reload, and stop escalation"
   - `fun main(args: Array<String>)` in `App.kt`: load settings, validate, configure monitor logging, prepare directories and clear every command slot, then enter the guarded phase that schedules children and awaits termination. Pre-guard failures print to standard error and exit nonzero. Guarded-phase failures are logged and the monitor exits 0.
   - `fun main(args: Array<String>)` in `Shutdowner.kt`: read `conf/leveret.properties` from the derived installation home, resolve a relative temporary path against that home, write the monitor hard-stop flag, and on a detected configuration or input-output failure print to standard error and exit 1.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 package com.leveret.inspect.runtime.config
@@ -1576,21 +1576,21 @@ class ShutdownerTest {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `./gradlew :runtime:test --tests '*SettingsValidatorTest' --tests '*ShutdownerTest'`
 Expected: FAIL — unresolved references `SettingsValidator`, `Shutdowner`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `SettingsValidator.validate` returns early when the URL key is absent; otherwise it requires the `jdbc:` prefix, extracts the token up to the next colon, lowercases it, and requires membership in `PROVIDERS`. `Shutdowner` exposes `requestHardStop(home: Path, workingDirectory: Path)`, where `workingDirectory` is accepted only to prove it does not influence resolution, and a `main` that derives home from the running artifact. `App.main` follows the two-phase structure: everything up to and including directory preparation and command-slot clearing runs unguarded; the scheduling call is wrapped so that its failures are logged before exiting 0.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./gradlew :runtime:test --tests '*SettingsValidatorTest' --tests '*ShutdownerTest'`
 Expected: PASS, 5 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add runtime/src/main/kotlin/com/leveret/inspect/runtime/App.kt runtime/src/main/kotlin/com/leveret/inspect/runtime/Shutdowner.kt runtime/src/main/kotlin/com/leveret/inspect/runtime/config/SettingsValidator.kt runtime/src/test/kotlin/com/leveret/inspect/runtime/config/SettingsValidatorTest.kt runtime/src/test/kotlin/com/leveret/inspect/runtime/ShutdownerTest.kt
@@ -1611,7 +1611,7 @@ git commit -m "feat: add monitor entry point, settings validation, and hard stop
 - Consumes: `App`, `Scheduler`, `CommandFile`, `ChildEntryPoint`, `HttpSearchHealth`.
 - Produces: `class TestNode(private val home: Path)` with `fun writeConfig(vararg lines: String)`, `fun start(vararg args: String)`, `fun awaitOperational(timeout: Duration)`, `fun logLines(id: ProcessId): List<String>`, `fun commands(id: ProcessId): ProcessCommands`, `fun stopGracefully()`, `fun exitCode(): Int`. `StubChildMain` hosts a `MonitoredComponent` through `ChildEntryPoint`, becoming operational after a configurable delay; `StubSearchMain` serves a configurable health colour on a configured port.
 
-- [ ] **Step 1: Write the failing acceptance tests**
+- [x] **Step 1: Write the failing acceptance tests**
 
 Write one test method per specification scenario, all through `TestNode`:
 
@@ -1688,21 +1688,21 @@ class NodeAcceptanceTest {
 
 Add the remaining scenario methods in the same file and style: scenario 2 precedence through `start("-Dleveret.log.level=DEBUG")` against a config file and environment value; scenario 4 by killing the web child process and asserting the remaining children die without restart; scenario 6 by having the stub child set its restart flag and asserting reload plus rescheduling; scenario 7 by changing the temporary path before that restart and asserting the node hard-stops with the property named in the monitor log; scenario 8 by asserting file names, default plain records with daily rotation and seven retained periods, then a JSON run with the documented field set and a per-process threshold; scenario 10 by invoking the hard-stop requester from a foreign working directory with a relative temporary path and asserting the running node stops.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `./gradlew :runtime:test --tests '*NodeAcceptanceTest'`
 Expected: FAIL — unresolved reference `TestNode`.
 
-- [ ] **Step 3: Write the harness and close remaining gaps**
+- [x] **Step 3: Write the harness and close remaining gaps**
 
 `TestNode` lays out `conf/`, `data/`, `logs/`, `temp/`, `web/` under the temporary home; builds the monitor classpath from the test runtime classpath; starts the monitor with `ProcessHandle`-visible arguments; and points the search, web, and compute commands at `StubSearchMain`, `StubChildMain`, and `StubChildMain`. Implement whatever production behavior these tests expose as missing — most likely monitor log wording and the restart acknowledgement path — until every scenario passes.
 
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 Run: `./gradlew :runtime:test`
 Expected: PASS, all unit and acceptance tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add runtime/src/test/kotlin/com/leveret/inspect/runtime/acceptance
@@ -1723,7 +1723,7 @@ git commit -m "test: add process runtime acceptance scenarios"
 - Consumes: `PropertyKeys.defaults`.
 - Produces: an operator configuration template whose commented keys are exactly the canonical keys this part recognizes, and a distribution task that places the template under `conf/`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```kotlin
 package com.leveret.inspect.runtime
@@ -1748,21 +1748,21 @@ class DistributionTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./gradlew :runtime:test --tests '*DistributionTest'`
 Expected: FAIL — template file missing.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Write the template with one commented block per recognized key showing its default value, and a distribution `Sync` task in `runtime/build.gradle.kts` that copies the template into the built layout under `conf/`. Write `docs/operating-the-node.md` describing directories, the precedence order, readiness, stop and hard stop, and log locations.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `./gradlew :runtime:test --tests '*DistributionTest'`
 Expected: PASS, 1 test.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add runtime/src/main/assembly runtime/build.gradle.kts docs/operating-the-node.md runtime/src/test/kotlin/com/leveret/inspect/runtime/DistributionTest.kt
