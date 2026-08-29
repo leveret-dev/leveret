@@ -46,7 +46,7 @@
   - `object H2Dialect : Dialect` and `object PostgresDialect : Dialect`.
   - `object Dialects { fun of(provider: String): Dialect }`, throwing `IllegalArgumentException` for any other token.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```kotlin
 package com.leveret.inspect.db.dialect
@@ -90,12 +90,12 @@ class DialectTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./gradlew :persistence:test`
 Expected: FAIL — project `:persistence` does not exist.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `settings.gradle.kts` gains one line after `include("runtime")`:
 
@@ -222,12 +222,12 @@ object Dialects {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `./gradlew :persistence:test`
 Expected: PASS, 3 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add settings.gradle.kts gradle/libs.versions.toml persistence
@@ -253,7 +253,7 @@ git commit -m "build: add persistence module with database dialects"
   - `data class DatabaseSettings(val url: String, val username: String, val password: String, val embedded: Boolean, val pool: PoolSettings)` with `val provider: String`, `val dialect: Dialect`, `val autoUpgrade: Boolean` and `companion object { fun from(settings: Settings, warn: (String) -> Unit): DatabaseSettings }`.
 - Narrowed: `SettingsValidator.PROVIDERS` becomes `setOf("h2", "postgresql")`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```kotlin
 package com.leveret.inspect.db.config
@@ -346,12 +346,12 @@ Add to `runtime/src/test/kotlin/com/leveret/inspect/runtime/config/SettingsValid
     }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `./gradlew :persistence:test :runtime:test`
 Expected: FAIL — unresolved reference `DatabaseKeys`; runtime assertion sees four providers.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `DatabaseKeys.kt`:
 
@@ -504,12 +504,12 @@ In `SettingsValidator.kt`, narrow the provider set to the implemented dialects a
     val PROVIDERS = setOf("h2", "postgresql")
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./gradlew :persistence:test :runtime:test`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add persistence/src runtime/src/main/kotlin/com/leveret/inspect/runtime/config/SettingsValidator.kt runtime/src/test/kotlin/com/leveret/inspect/runtime/config/SettingsValidatorTest.kt
@@ -531,7 +531,7 @@ git commit -m "feat: add database settings and narrow accepted providers"
   - `class Database(private val settings: DatabaseSettings) : AutoCloseable` with `val dialect: Dialect`, `fun start()`, `val writer: DataSource`, `val readOnly: DataSource`, `fun stats(): PoolStats`, `override fun close()`.
   - Accessing `writer` or `readOnly` before `start()` throws `IllegalStateException`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```kotlin
 package com.leveret.inspect.db.pool
@@ -607,12 +607,12 @@ class DatabaseTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./gradlew :persistence:test --tests '*DatabaseTest'`
 Expected: FAIL — unresolved reference `Database`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```kotlin
 package com.leveret.inspect.db.pool
@@ -694,12 +694,12 @@ class Database(private val settings: DatabaseSettings) : AutoCloseable {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `./gradlew :persistence:test --tests '*DatabaseTest'`
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add persistence/src
@@ -724,7 +724,7 @@ git commit -m "feat: add pooled writer and read-only data sources"
   - `class SqlProfiler(private val logger: Logger = LoggerFactory.getLogger("sql"))` with `val enabled: Boolean`, `fun prepare(connection: Connection, sql: String): PreparedStatement`, `fun statement(connection: Connection): Statement`.
 - Later tasks: `DbSession` obtains every statement through `SqlProfiler`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 package com.leveret.inspect.db.profiling
@@ -830,12 +830,12 @@ class SqlProfilerTest {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `./gradlew :persistence:test --tests '*Sql*Test'`
 Expected: FAIL — unresolved references `SqlLogFormatter` and `SqlProfiler`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```kotlin
 package com.leveret.inspect.db.profiling
@@ -939,12 +939,12 @@ class SqlProfiler(private val logger: Logger = LoggerFactory.getLogger(LOGGER_NA
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./gradlew :persistence:test --tests '*Sql*Test'`
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add persistence/src
@@ -969,7 +969,7 @@ git commit -m "feat: add sql trace profiling"
   - `class SessionFactory(private val database: Database, private val profiler: SqlProfiler = SqlProfiler())` with `fun openWriter(): DbSession` and `fun openReadOnly(): DbSession`.
   - `object LargeInputs` with `const val PARTITION_SIZE = 1000`, `fun <I, O> read(input: Collection<I>, block: (List<I>) -> Collection<O>): List<O>`, `fun <I> update(input: Collection<I>, block: (List<I>) -> Int): Int`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 package com.leveret.inspect.db.session
@@ -1100,12 +1100,12 @@ class LargeInputsTest {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `./gradlew :persistence:test --tests '*Session*' --tests '*LargeInputs*'`
 Expected: FAIL — unresolved references `SessionFactory`, `LargeInputs`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```kotlin
 package com.leveret.inspect.db.session
@@ -1233,12 +1233,12 @@ class SessionFactory(
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./gradlew :persistence:test --tests '*Session*' --tests '*LargeInputs*'`
 Expected: PASS, 5 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add persistence/src
@@ -1262,7 +1262,7 @@ git commit -m "feat: add database sessions with batching and partitioning"
   - `enum class ColumnType { VARCHAR, TEXT, BINARY, BOOLEAN, TINY, SMALL, INTEGER, BIGINT, DECIMAL, TIMESTAMP }`.
   - `data class ColumnDef(val name: String, val type: ColumnType, val nullable: Boolean = true, val limit: Int? = null, val default: Any? = null, val autoIncrement: Boolean = false)` with `fun render(dialect: Dialect): String` and `companion object { const val VARCHAR_MAX_LENGTH = 4000; const val IDENTIFIER_LENGTH = 40 }`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 package com.leveret.inspect.db.schema
@@ -1346,12 +1346,12 @@ class ColumnDefTest {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `./gradlew :persistence:test --tests '*Identifiers*' --tests '*ColumnDef*'`
 Expected: FAIL — unresolved references `Identifiers`, `ColumnDef`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```kotlin
 package com.leveret.inspect.db.schema
@@ -1479,12 +1479,12 @@ data class ColumnDef(
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./gradlew :persistence:test --tests '*Identifiers*' --tests '*ColumnDef*'`
 Expected: PASS, 6 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add persistence/src
@@ -1507,7 +1507,7 @@ git commit -m "feat: add identifier validation and column model"
   - `class CreateTableBuilder(private val table: String, private val dialect: Dialect)` with `fun column(column: ColumnDef): CreateTableBuilder`, `fun primaryKey(vararg columns: String): CreateTableBuilder`, `fun primaryKeyName(name: String): CreateTableBuilder`, `fun build(): List<String>`.
   - `object SchemaStatements` with `fun createIndex(table: String, name: String, columns: List<String>, unique: Boolean = false): String`, `fun dropIndex(table: String, name: String, dialect: Dialect): String`, `fun renameIndex(from: String, to: String, dialect: Dialect): String`, `fun addColumn(table: String, column: ColumnDef, dialect: Dialect): String`, `fun dropColumn(table: String, column: String): String`, `fun setNullable(table: String, column: ColumnDef, dialect: Dialect): List<String>`, `fun renameTable(from: String, to: String): String`, `fun renameConstraint(table: String, from: String, to: String, dialect: Dialect): String`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 package com.leveret.inspect.db.schema
@@ -1636,12 +1636,12 @@ class SchemaStatementsTest {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `./gradlew :persistence:test --tests '*CreateTableBuilder*' --tests '*SchemaStatements*'`
 Expected: FAIL — unresolved references.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```kotlin
 package com.leveret.inspect.db.schema
@@ -1738,12 +1738,12 @@ object SchemaStatements {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./gradlew :persistence:test --tests '*CreateTableBuilder*' --tests '*SchemaStatements*'`
 Expected: PASS, 6 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add persistence/src
@@ -1771,7 +1771,7 @@ git commit -m "feat: add schema ddl builders"
   - `data class Migration(val number: Long, val description: String, val step: MigrationStep)`.
   - `class MigrationRegistry` with `fun register(number: String, description: String, step: MigrationStep): MigrationRegistry`, `fun all(): List<Migration>`, `fun above(recorded: Long?): List<Migration>`, `val maximum: Long?`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 package com.leveret.inspect.db.migration
@@ -1898,12 +1898,12 @@ class MigrationStepTest {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `./gradlew :persistence:test --tests '*Migration*'`
 Expected: FAIL — unresolved references `MigrationNumber`, `MigrationRegistry`, `MigrationContext`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```kotlin
 package com.leveret.inspect.db.migration
@@ -1996,12 +1996,12 @@ class MigrationRegistry {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./gradlew :persistence:test --tests '*Migration*'`
 Expected: PASS, 5 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add persistence/src
@@ -2024,7 +2024,7 @@ git commit -m "feat: add migration numbers, steps, and registry"
   - `enum class VersionState { FRESH_INSTALL, UP_TO_DATE, REQUIRES_UPGRADE, REQUIRES_DOWNGRADE }`.
   - `object DatabaseVersion { fun state(recordedMaximum: Long?, registryMaximum: Long?): VersionState }`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```kotlin
 package com.leveret.inspect.db.migration
@@ -2089,12 +2089,12 @@ class MigrationHistoryTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./gradlew :persistence:test --tests '*MigrationHistoryTest'`
 Expected: FAIL — unresolved reference `MigrationHistory`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```kotlin
 package com.leveret.inspect.db.migration
@@ -2159,12 +2159,12 @@ object DatabaseVersion {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `./gradlew :persistence:test --tests '*MigrationHistoryTest'`
 Expected: PASS, 3 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add persistence/src
@@ -2187,7 +2187,7 @@ git commit -m "feat: add migration history and version state"
   - `class MigrationState(private val clock: Clock = Clock.systemUTC())`, single-threaded, with `val status: MigrationStatus`, `val startedAt: Instant?`, `val error: Throwable?`, `val completed: Int`, `val total: Int`, `fun expectedFinish(): Instant?`, `fun required()`, `fun notSupported()`, `fun start(total: Int)`, `fun stepCompleted()`, `fun failed(error: Throwable)`, `fun succeeded()`.
   - `class MigrationEngine(private val registry: MigrationRegistry, private val history: MigrationHistory, private val context: MigrationContext, val state: MigrationState = MigrationState())` with `fun run()` and `fun version(): VersionState`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```kotlin
 package com.leveret.inspect.db.migration
@@ -2312,12 +2312,12 @@ class MigrationEngineTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./gradlew :persistence:test --tests '*MigrationEngineTest'`
 Expected: FAIL — unresolved references `MigrationEngine`, `MigrationState`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```kotlin
 package com.leveret.inspect.db.migration
@@ -2453,12 +2453,12 @@ class MigrationEngine(
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `./gradlew :persistence:test --tests '*MigrationEngineTest'`
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add persistence/src
@@ -2482,7 +2482,7 @@ git commit -m "feat: add migration engine with progress state"
   - `class PostgresCharsetHandler : CharsetHandler`, failing on a non-UTF-8 database encoding in every state and, in `UPGRADE` and `STARTUP`, on any varchar column of the supplied tables whose collation is neither inherited nor UTF-8.
   - `object CharsetChecker { fun handlerFor(dialect: Dialect): CharsetHandler }`, throwing `IllegalArgumentException` for any other dialect.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```kotlin
 package com.leveret.inspect.db.charset
@@ -2541,12 +2541,12 @@ class CharsetCheckerTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./gradlew :persistence:test --tests '*CharsetCheckerTest'`
 Expected: FAIL — unresolved reference `CharsetChecker`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```kotlin
 package com.leveret.inspect.db.charset
@@ -2614,12 +2614,12 @@ object CharsetChecker {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `./gradlew :persistence:test --tests '*CharsetCheckerTest'`
 Expected: PASS, with the PostgreSQL test reported as skipped unless `LEVERET_TEST_POSTGRES_URL` is set.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add persistence/src
@@ -2639,7 +2639,7 @@ git commit -m "feat: add charset and collation verification"
 - Produces:
   - `class EmbeddedDatabase(private val port: Int = DatabaseKeys.DEFAULT_EMBEDDED_PORT, private val baseDir: Path) : AutoCloseable` with `fun start()`, `val url: String`, `override fun close()`. The server binds loopback only and refuses to start twice.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```kotlin
 package com.leveret.inspect.db.pool
@@ -2682,12 +2682,12 @@ class EmbeddedDatabaseTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `./gradlew :persistence:test --tests '*EmbeddedDatabaseTest'`
 Expected: FAIL — unresolved reference `EmbeddedDatabase`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```kotlin
 package com.leveret.inspect.db.pool
@@ -2728,12 +2728,12 @@ class EmbeddedDatabase(
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `./gradlew :persistence:test --tests '*EmbeddedDatabaseTest'`
 Expected: PASS, 2 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add persistence/src
@@ -2754,7 +2754,7 @@ git commit -m "feat: add embedded database server"
 - Consumes: every unit from Tasks 1 through 12.
 - Produces: no new production types. The operator template documents every database key with its default, and the distribution test asserts the database keys appear.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```kotlin
 package com.leveret.inspect.db.acceptance
@@ -2880,23 +2880,23 @@ Extend `runtime/src/test/kotlin/com/leveret/inspect/runtime/DistributionTest.kt`
     }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `./gradlew :persistence:test --tests '*PersistenceAcceptanceTest' :runtime:test --tests '*DistributionTest'`
 Expected: FAIL — acceptance class missing; template lacks the database keys.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Add a database section to `runtime/src/main/assembly/conf/leveret.properties`, keeping the existing comment style: every key above with its default value, the note that an absent URL and port select the embedded database on port 9092, the supported provider tokens `h2` and `postgresql`, the sizing guidance of roughly 1.2 times the maximum HTTP worker count for `leveret.jdbc.maxActive`, the note that `leveret.jdbc.maxWait=0` means the finite `2147483647` ms sentinel, and the warning that the embedded database is for evaluation only.
 
 Add a "Database" section to `docs/operating-the-node.md` documenting: embedded versus external selection, the two supported providers, credential handling, pool sizing, the forward-only migration contract with `leveret.autoDatabaseUpgrade`, what `REQUIRES_DOWNGRADE` means for recovery, and that SQL trace logging through logger `sql` is privileged diagnostic output.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `./gradlew :persistence:test :runtime:test`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add persistence/src runtime/src docs/operating-the-node.md
