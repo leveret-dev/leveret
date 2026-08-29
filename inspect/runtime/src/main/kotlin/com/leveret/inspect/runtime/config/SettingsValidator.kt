@@ -8,7 +8,8 @@ package com.leveret.inspect.runtime.config
  * persistence part, which extends this check without duplicating settings loading.
  */
 object SettingsValidator {
-    val PROVIDERS = setOf("h2", "sqlserver", "oracle", "postgresql")
+    /** Only implemented dialects are accepted; Oracle and SQL Server are not implemented by decision. */
+    val PROVIDERS = setOf("h2", "postgresql")
 
     fun validate(settings: Settings) {
         val url = settings.optional(PropertyKeys.JDBC_URL) ?: return

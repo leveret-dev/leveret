@@ -1,5 +1,6 @@
 package com.leveret.inspect.runtime.config
 
+import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatCode
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -12,11 +13,19 @@ class SettingsValidatorTest {
         listOf(
             "jdbc:h2:tcp://127.0.0.1:9092/inspect",
             "jdbc:PostgreSQL://db/inspect",
-            "jdbc:oracle:thin:@host:1521/x",
-            "jdbc:sqlserver://db;databaseName=inspect",
         ).forEach { url ->
             assertThatCode { SettingsValidator.validate(withUrl(url)) }.doesNotThrowAnyException()
         }
+    }
+
+    @Test
+    fun `only implemented providers are accepted`() {
+        assertThat(SettingsValidator.PROVIDERS).containsExactlyInAnyOrder("h2", "postgresql")
+        listOf("jdbc:oracle:thin:@host:1521/x", "jdbc:sqlserver://db;databaseName=inspect")
+            .forEach { url ->
+                assertThatThrownBy { SettingsValidator.validate(withUrl(url)) }
+                    .isInstanceOf(IllegalArgumentException::class.java)
+            }
     }
 
     @Test
