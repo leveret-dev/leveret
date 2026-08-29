@@ -71,24 +71,49 @@ One claim in the first draft of this document was wrong and is struck: recovered
 
 That single fact reframes `platform/code-graph`: it is not a part that writes semantic frontends. It is a part that **ingests resolved facts from producers of differing fidelity, records how each fact was obtained, and answers reachability questions over the result.**
 
-### The tier model, per language
+### What a checkout at rest actually yields
 
-**Two rules govern this table.** The analysis target is somebody else's codebase, not ours — every spike measured a producer against source the engine happens to share a JVM with, so section 5.1 states what that does and does not prove. And after the trim rule in section 2, every row must work from a checkout at rest: no customer build integration, no requirement that their build has run, no expectation that our toolchains exist in their environment.
+**Correction, and it matters more than the trim it follows.** The three-value confidence vocabulary — `resolved`, `name-only`, `heuristic` — has no slot for facts that are decidable without a type checker, so writing it made me collapse "no compiler-backed resolver for language X" into "no semantic route for language X". That inference is wrong. Most of what goals 4 and 5 need is decidable from source, dependency declarations, and artifacts we can fetch ourselves — for every language, not just the two with an adoptable compiler frontend.
 
-| Tier | Producer | Runs where | Confidence | Requires from the target | Languages |
-|---|---|---|---|---|---|
-| A | Eclipse JDT Core | worker process | `resolved` | dependency declarations plus the archives they name, resolved from a local artifact cache or a declared repository — never a build | Java |
-| A | Kotlin Analysis API standalone | worker process, **one per target language version** | `resolved` | the same classpath, plus a compiler frontend matching the target's Kotlin version | Kotlin |
-| C | tree-sitter via `jtreesitter` | in-process | `name-only` | nothing but source text | everything else, including Go, TypeScript, JavaScript, and Python until a bundled frontend lands |
-| Import | any SCIP or SARIF artifact the customer already produces | in-process reader | as the producer earned it, recorded per producer | nothing — the artifact either exists or it does not | whatever the producer covered |
+The unit of confidence is therefore not a tier but the **basis of each fact**:
 
-Tier C is the only tier inside the service process: it needs nothing but bytes, cannot execute anything, and is bounded by parse cost. It is also the floor every other tier degrades to.
+| Fact | Basis | Needs a type checker? |
+|---|---|---|
+| Declarations: qualified name, kind, range, and syntactic visibility | parse tree | no |
+| File and module import edges | import statements plus the language's own module and path rules | **no — these are decidable, not guessed** |
+| Binding within a file or a scope | scope rules | no |
+| Cross-file binding where the import graph leaves exactly one reachable candidate | import-scoped name resolution | no |
+| Declared and annotated types | the source states them: TypeScript annotations, Go's static types, Python annotations, JSDoc tags | no |
+| External symbol attribution: which package a name comes from, and its declared signature | dependency declarations plus declarations read out of the artifacts they name | no |
+| Overload selection, generic instantiation, inheritance-precise dispatch, implicit conversion | type inference over the whole program | **yes** |
+| Dependency injection, reflection, proxies, configuration-named classes | nothing static | invisible; counted, never guessed silently |
 
-Three rows that were here before the trim are gone, and what each cost us is worth stating rather than hiding:
+**Import-scoped resolution is the line I misdrew.** Global name matching over this repository finds 120 unresolved references whose name matches some indexed declaration — but 676 candidate pairings for those 120, roughly 5.6 candidates each, which is why a name-matched edge deserves no confidence. Resolving the *same* reference only against declarations reachable through that file's own import edges collapses most of those candidate sets to one. A fact that survives that test is not a guess; it is a resolved fact obtained without a type checker. Of the 740 references the grammar-based tool failed on here, **315 are dotted** — they carry a qualified prefix that the import graph plus the dependency's own declarations can bind directly.
 
-- **The bytecode tier (SootUp, WALA, OPAL).** It needed compiled class files, which means the customer's build has run. Cut. The measured loss is real and specific: 961 resolved call edges into dependency and platform code, where the source tiers produce none, 86% of them mapped to an exact source file and line. That capability now has no home, and blast radius stops at the library boundary. The library survives in the dependency list for one narrow purpose that needs no build — reading dependency archives as classpath metadata for Tier A. Evidence retained in `docs/spikes/2026-08-29-bytecode-tier.md`.
-- **scip-java.** It drives the customer's Gradle, Maven, or Bazel build and executes their build logic. Cut outright; JDT covers Java from a classpath alone.
-- **scip-go, scip-typescript, scip-python as required producers.** Each needs the customer's language toolchain and a resolved dependency tree. They stay as import paths only. The consequence is blunt: **Go, TypeScript, JavaScript, and Python drop to the name-only tier today.** Section 14 records the alternative that keeps them semantic without touching the customer's environment — bundle the frontend, as a comparable product does with a native Go parser, a Node runtime, and shipped Python type stubs. That is now the highest-value open item in this document.
+**We can fetch the declarations we lack.** This capability was already accepted for Java and Kotlin: resolve the archives named by the dependency declarations, read them, never build. There is no reason it stops at the JVM, and stopping it there is what produced the false cliff:
+
+- **Go** module distribution *is source*. Fetching the modules a `go.mod` declares yields complete declarations with their static types, parseable with a grammar and no Go toolchain anywhere.
+- **TypeScript and JavaScript** packages commonly ship type declarations, and where they do not, a separate declaration package usually exists. Verified locally in an eleven-package tree: eleven `.d.ts` files, several packages exposing `index.d.ts`. Fetching declared packages gives external signatures without `npm install` and without running the compiler.
+- **Python** type stubs are distributed independently of the packages, which is why a comparable product simply bundles them (section 14); wheels also often carry inline stubs. `[INFERENCE — the wheel side was not verified locally]`
+
+That turns "name-only until a bundled frontend lands" into something much narrower: **every language reaches declarations, the import graph, scope-local binding, and import-scoped cross-file binding today; a bundled or fetched declaration set raises external symbols to resolved; only type-inference-dependent precision and runtime wiring stay out of reach.**
+
+### The producer table, restated
+
+Every row works from a checkout at rest: no customer build integration, no requirement that their build has run, no expectation that our toolchains exist in their environment. And every row is measured against somebody else's codebase, not ours — section 5.1 says what the spikes do and do not prove.
+
+| Producer | Runs where | Facts it earns | Requires from the target |
+|---|---|---|---|
+| Eclipse JDT Core | worker process | everything up to and including type-inference precision, for Java | dependency declarations plus the archives they name |
+| Kotlin Analysis API standalone | worker process, one per target language version | the same, for Kotlin | the same classpath, plus a matching compiler frontend |
+| Grammar parse plus our own resolver — `jtreesitter` | in-process | declarations, imports, scope binding, import-scoped cross-file binding, declared and annotated types | source text only |
+| The same, plus fetched dependency declarations | in-process, network at rest | adds external symbol attribution and signatures | dependency declarations and reachable artifacts |
+| Any SCIP or SARIF artifact the customer already produced | in-process reader | whatever that producer earned, recorded against it | nothing; it exists or it does not |
+
+Two producers were cut by the trim and what they cost is worth stating rather than hiding:
+
+- **The bytecode tier (SootUp, WALA, OPAL)** needed compiled class files, which means the customer's build has run. Cut. The measured loss is specific: 961 resolved call edges into dependency and platform code, 86% mapped to an exact source file and line. Note what the fetch capability above partly replaces — the *declarations* of those dependencies become reachable, so calls into them can be attributed and typed; what stays lost is the dependency's own internal call graph. Evidence retained in `docs/spikes/2026-08-29-bytecode-tier.md`.
+- **scip-java** drives the customer's build and executes their build logic. Cut outright; JDT covers Java from a classpath alone. The other SCIP producers remain as import paths, since each needs the customer's language toolchain — but they are now a bonus rather than the only semantic route for their languages.
 
 ### 5.1 Self-analysis is not the product
 
@@ -135,6 +160,18 @@ Rung 4 stays outside the product permanently, which keeps two earlier decisions 
 **And it creates the third question, which is the interesting one.** A static graph cannot see edges that only exist while the program runs: dependency injection, service loaders, reflection, dynamic proxies, annotation-driven dispatch, configuration-named handler classes, `invokedynamic` targets the bytecode tier already loses. These are not unresolved references. An unresolved reference is a known unknown — we saw an identifier and could not bind it. A runtime-wired edge is an *unknown unknown*: nothing at the call site hints that the edge exists at all, so it is invisible rather than unresolved, and a blast radius that omits it silently is exactly the failure section 7 of the scope decision calls worse than no answer.
 
 The store therefore needs a third honesty channel beside resolved facts and the unresolved set: **runtime-wiring sites**. These are statically detectable even when the edge they imply is not — reflection and service-loader calls, injection annotations, proxy factories, class names appearing as configuration string literals. Detect the sites, count them within the affected set, and report the count on every impact answer. The local grammar tool's framework synthesizers, which guess these edges and tag them `heuristic`, are the prior art for the guessing; the discipline we add is that a guess and a count are different products, and an impact answer must carry the count whether or not it carries the guess.
+
+### 5.4 Evidence a checkout carries that is not a graph edge
+
+The graph is not the only thing an at-rest checkout gives us, and the earlier framing quietly ignored three channels that a code-review product lives on.
+
+**Comments are semi-formal type and intent evidence.** JSDoc `@param {Type}` and `@returns`, Python docstring type conventions, KDoc and Javadoc `@param`, and inline `@type` pragmas state types that the language itself does not require. For untyped JavaScript in particular, JSDoc is often the only declared typing in the codebase, and it binds through the same import graph as anything else. It earns its own basis — declared-in-comment — which is weaker than a checked type and much stronger than a name match, and it must be tagged as such rather than laundered into either neighbour.
+
+**The change under review is evidence no static index holds.** A pull request supplies the changed hunks, which localise every question; the title, body, and commit messages, which state intent; and reviewer comments, which state constraints the code cannot. Goals 2 and 3 — find flaws, suggest fixes — consume that directly: a finding inside a changed hunk with the author's stated intent beside it is a different product from the same finding surfaced in a repository sweep. This is review evidence, not graph structure, and the two must not be mixed in the store; but it is why a review product can be useful precisely where the graph is thinnest.
+
+**Whole-repository access enables inference a per-file tool cannot reach.** Because we hold everything at once: a name that is unique within the set reachable through a file's imports resolves without types; test-to-code pairing follows naming and directory convention; the class names in configuration literals can be matched against declarations, which is what turns a runtime-wiring *site* into a named candidate; and version-control history supplies co-change coupling, authorship, and churn. None of these needs a compiler, a build, or an execution.
+
+The discipline stays the one already stated: each of these is a distinct basis, recorded as such. A comment-declared type, a convention-matched test, and a checked type are three different claims, and an answer that presents them as one is the dishonest kind of confident.
 
 ## 6. Kotlin: resolved by measurement, not by frontend
 
