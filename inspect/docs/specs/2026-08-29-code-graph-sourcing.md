@@ -1,7 +1,7 @@
 # Code Graph Sourcing: Build, Improve, or Consume
 
 **Date:** 2026-08-29
-**Status:** Proposed — the spike in section 11 must run before `platform/code-graph` is planned
+**Status:** Approved. The four spikes in section 11 ran on 2026-08-29; results are recorded there and in `docs/spikes/`. `platform/code-graph` is now plannable, and **no compiler frontend of our own is required.**
 **Amends:** `docs/specs/2026-08-29-scope-decision.md` sections 7 and 12. Section 7 costed `platform/code-graph` as **Large**, driven by "one emitter per language analyzer". That assumption does not survive this evaluation.
 **Method:** four parallel source-verified library investigations, every licence read from the project's own licence file, every maintenance claim pinned to a release or commit date observed on 2026-08-29
 
@@ -63,7 +63,9 @@ The deterministic half is a real code-graph substrate, less mature than the othe
 
 ## 5. The finding that changes the plan
 
-**For Java, a compiler-backed resolver runs in our own process, needs no build, and is on Maven Central today.** Eclipse JDT Core's `ASTParser` with `setResolveBindings(true)` yields real ECJ bindings — `ITypeBinding`, `IMethodBinding`, `IVariableBinding` — from a plain list of classpath entries, with unresolved names surfacing as null or recovered bindings, which is exactly the signal our confidence tiers need. Pure Java, no second language runtime, EPL-2.0 file-scope copyleft that is safe to embed unmodified.
+**For Java, a compiler-backed resolver runs in our own process, needs no build, and is on Maven Central today.** Eclipse JDT Core's `ASTParser` with `setResolveBindings(true)` yields real ECJ bindings — `ITypeBinding`, `IMethodBinding`, `IVariableBinding` — from a plain list of classpath entries. Measured on 203,436 lines of external Java: **99.998% of reference names and 100% of call sites resolve with a classpath**, at roughly 20 ms per thousand lines, from 10 jars totalling 10.6 MB. Pure Java, no second language runtime, EPL-2.0 file-scope copyleft safe to embed unmodified.
+
+One claim in the first draft of this document was wrong and is struck: recovered bindings are **not** a usable `name-only` signal. `isRecovered()` is non-transitive — 51.9% of bindings that report `false` carry a recovered type underneath — it is never raised on calls at all, and 56% of the flags it does raise name the wrong symbol, one static-imported method recovering to a fabricated type. The correct ingest rule is `setBindingsRecovery(false)`, with a null binding becoming an unresolved-reference record. Details in `docs/spikes/2026-08-29-jdt-java-resolution.md`.
 
 That single fact reframes `platform/code-graph`: it is not a part that writes semantic frontends. It is a part that **ingests resolved facts from producers of differing fidelity, records how each fact was obtained, and answers reachability questions over the result.**
 
@@ -80,15 +82,21 @@ That single fact reframes `platform/code-graph`: it is not a part that writes se
 
 Tier C is the floor and is what both local tools already are — the difference is that owning it in-process removes a Node dependency and lets one confidence model span all tiers. Tier B is additive, never a substitute: it resolves calls into dependency and platform code that no source frontend sees, which is exactly where blast radius currently stops at a library boundary. It costs source-level detail (parameter names without debug info, exact ranges) and applies only to JVM targets.
 
-## 6. Kotlin is the real gap, and it is ours
+## 6. Kotlin: resolved by measurement, not by frontend
 
-Every other Tier-1 language has a compiler-backed producer we can consume. Kotlin has none we can simply adopt:
+This section asked whether Kotlin forces a frontend of our own. **It does not.** All three routes were run against `runtime/` and `persistence/` — 28 files, 2,839 references — and the result is unambiguous:
 
-- **scip-java's Kotlin support** is self-described as "less mature", Gradle-only, with no Maven and no Android support.
-- **Joern's `kotlin2cpg`** embeds `kotlin-compiler-embeddable` and is genuinely compiler-backed — but pins a specific compiler version per release, arrives with a Scala runtime, and risks classloader collision with our own Kotlin toolchain inside one process. That is the two-compiler-versions problem the single-process decision cut classloader isolation to avoid.
-- **The Kotlin Analysis API in standalone mode** is the official route to real K2/FIR resolution without a Gradle build, Apache-2.0 — but is published only to a JetBrains repository rather than Maven Central, carries an explicit no-stability statement from JetBrains, and has large parts marked experimental. A first-party JetBrains consumer reports ongoing issues against the same API.
+| Route | Refs resolved | Into libraries | Unresolved | Weight | Kotlin version | Verdict |
+|---|---:|---:|---:|---|---|---|
+| **Kotlin Analysis API standalone (K2)** | 2,839 | **1,119** | **0** | 17 artifacts, 79.7 MiB, no Scala | **2.4.0 — the version we already pin** | **adopt** |
+| Joern `kotlin2cpg` | 868 non-operator calls | 621 | 0 with classpath | 108 artifacts, 155.7 MiB, Scala 3.8.3 runtime | 2.3.21 embedded | out-of-process fallback |
+| scip-java Kotlin plugin | — | — | — | — | 2.2.0 embedded | **disqualified** |
 
-This matters more than any other line in this document, because Leveret Inspect is itself Kotlin and must be able to answer "what does this change break" about its own source. The honest position: **Kotlin resolution is the one frontend-shaped investment that may be unavoidable**, and which of the three routes it takes is a question for measurement, not argument.
+scip-java's Kotlin plugin cannot load into our compiler at all: `AnalyzerRegistrar is incompatible with the current version of the compiler`, caused by `AbstractMethodError: Missing implementation of resolved method 'abstract java.lang.String getPluginId()'`. It is unusable on any Kotlin at or above 2.3.
+
+The Analysis API route is the recommendation on three grounds beyond its numbers: its artifact version *equals* the Kotlin version the product already pins, so there is no version-skew to manage; it brings no second language runtime, with the IntelliJ platform classes it needs arriving inside the compiler jar rather than as separate artifacts; and with the dependency classpath withheld it degrades exactly as a tier should — 975 unresolved references whose top names are `assertThat` ×72, `Test` ×50, `use` ×31, reproducing the baseline's failure mode and confirming that the classpath is what buys the 1,119 library edges.
+
+`kotlin2cpg` stays documented as a fallback with two operational quirks worth remembering: it silently excludes any path containing a `test` segment with no override, and its `--classpath` flag rejects file paths, accepting only a directory of jars.
 
 ## 7. What SCIP gives us, and what it does not
 
@@ -109,9 +117,16 @@ What the wire format does **not** carry, verified by reading all 962 lines of th
 
 - **no visibility or access modifier** as structured data — only free text inside a rendered signature;
 - **no resolution confidence** — the format cannot say whether a symbol was compiler-verified or guessed, so confidence must be assigned per producer on ingest;
-- **no distinct `calls` role** — a call and a bare mention are both an occurrence with a symbol; distinguishing them means correlating the occurrence's syntax kind with its enclosing range, which is our logic to write;
-- **no unresolved-reference record** — an indexer that fails simply omits the symbol, so the unresolved set must be synthesized from identifier-shaped occurrences that carry none. This is the one place the local grammar tool is ahead of the entire precise-indexing ecosystem: its `unresolved_refs` table with a failed status and a retry tail is prior art worth copying outright;
+- **no usable `calls` role, and neither predicted signal exists** — the spike measured `syntax_kind` as `UnspecifiedSyntaxKind` on 100% of 49,457 occurrences, and `enclosing_range` present only on function and method *definitions*, never on references. The rule that does work is different and cheap: a non-definition occurrence whose descriptor is a method (`name().`) and whose range ends immediately before `(` or `[` is a call. Hand-checked on 95 occurrences across two named samples: 95 correct, recall 94.4% to 98.5%, with the false negatives being calls through function-typed fields. Definition `enclosing_range` is still enough to attribute a caller by interval containment — 3,991 of 3,992 calls got one;
+- **no unresolved-reference record, and it cannot be synthesized from occurrences** — this is worse than the first draft assumed. A reference the producer fails to resolve is not a symbol-less occurrence; it is *no occurrence at all*: zero of 22,763 occurrences lacked a symbol. Recovering the unresolved set means re-lexing the source and diffing identifier positions against the index, which the spike did: 24,948 of 65,573 identifier tokens uncovered, of which the genuine residue after removing language predeclared identifiers was 0 in one subject and 96 in the other. The local grammar tool's `unresolved_refs` table with a failed status and retry tail remains the only prior art that records this directly, and is worth copying outright;
 - **no delta protocol** — an index is a flat bag of per-file documents; replace-what-changed is ours.
+
+Four operational findings from the round trip that any ingest must handle, none of them visible in the schema:
+
+- **`local` symbols are document-scoped and collide.** Keyed by symbol string alone, 2,262 of 3,849 symbol entries in one subject and 5,931 of 8,517 in the other are lost. Document qualification is mandatory; the spike hit this as a live bug in its own reader.
+- **Moniker keys depend on producer configuration.** Two runs on the same revision differing only in the declared language version produced different keys for 174 of 1,828 symbols — 9.5%. The producer's configuration is part of the key's identity and must be recorded with the facts.
+- **Multi-module repositories are silently truncated.** One subject lost 38 files and 18.6% of its identifiers to modules outside the root, while the producer's own `missing` check reported nothing missing.
+- **An index is platform-specific and does not say so.** Build-constrained files simply have no document: a Windows-only source file is absent from an index produced on another platform, with no marker.
 
 For delta application, the design to mine is Glean's: facts are labelled with a unit, typically a file; a new database stacks new units' facts over a base with changed units' facts hidden, and ownership sets propagate through fact-to-fact references so nothing dangles — reported at roughly 7% storage overhead and under 10% query overhead. We cannot use the runtime (Haskell over C++ and RocksDB, Thrift, no JVM client) but the model answers our contract directly.
 
@@ -129,24 +144,32 @@ The production precedent settles it: every batch indexer surveyed calls the comp
 4. **Delta application** against our own store, on the unit-and-ownership model.
 5. **Persistence and query** — the embedded relational store, recursive reachability, bounded traversal with a truncation marker.
 6. **Orchestration** of producers whose runtimes differ, with graceful degradation to Tier C when a producer is absent, unbuildable, or stale.
-7. **A Kotlin resolution route**, per section 6.
+7. **Recovery of the unresolved set per producer** — re-lexing and position-diffing where the producer records nothing, per section 7.
 
 ## 10. Revised cost
 
-Section 7 costed this part **Large**, driven by per-language emitters. With Java resolved in-process by an existing library, Go, TypeScript, and Python resolved by existing producers behind one format, and breadth resolved by an embeddable parser, the frontend work collapses to Kotlin alone.
+Section 7 of the scope decision costed this part **Large**, driven by per-language emitters. Every one of those emitters now has an existing producer: Java in-process through JDT, Kotlin in-process through the Analysis API at the version we already pin, Go and TypeScript and Python out-of-process behind one format, breadth through an embeddable parser, and an additive bytecode tier.
 
-**Revised: Medium, plus one Kotlin spike whose outcome sets the remaining cost.** The store, the confidence model, the unresolved set, the delta protocol, and the queries are unchanged in scope — they were always the part nobody else supplies.
+**Revised: Medium. No compiler frontend of our own is in scope.** What remains is what nobody supplies and always was the real work: the store, the confidence model, the unresolved-set recovery, the edge-kind derivation, the delta protocol, the queries, and the orchestration across producers with graceful degradation.
 
-## 11. Spike before planning
+## 11. Spike results
 
-Four timeboxed questions, in dependency order. Each ends in a measurement recorded here, not an opinion.
+All four ran on 2026-08-29. Full measurements, commands, and failures are in `docs/spikes/`; the decisive numbers are here.
 
-1. **JDT against this repository's Java-free reality.** We have no Java yet, so measure JDT on an external Java project of moderate size: resolved binding rate with and without a classpath, wall-clock per thousand lines, and whether recovered bindings are a usable `name-only` signal. Acceptance: a resolved-edge count and a rate, plus the failure mode when a dependency is missing.
-2. **Kotlin, three routes, one measurement.** Run the Analysis API standalone route, `kotlin2cpg`, and scip-java's Kotlin plugin against `runtime/` and `persistence/`. Compare resolved reference counts against the 359-semantic-edge, 120-possible-miss baseline in section 12 of the scope decision, and record dependency weight and version-coupling risk for each. Acceptance: one route recommended with numbers, or an explicit finding that all three fail and a frontend is required.
-3. **SCIP round trip.** Produce an index with scip-go on a real Go repository, parse it in-process with the Maven Central bindings, and derive typed edges plus an unresolved set from occurrences. Acceptance: our schema populated from SCIP, with the derivation rules for `calls` versus `references` written down.
-4. **Bytecode tier value.** Build a call graph over our own compiled classes with SootUp and count edges that cross into dependency or platform code — edges no source tier can produce. Acceptance: a number that either justifies the tier or kills it.
+| Spike | Result | Findings |
+|---|---|---|
+| **JDT for Java** | 203,436 lines of external Java: **99.998%** of 251,399 reference names resolved, **100%** of 78,474 call sites, 51.5% of calls into the JDK or a dependency, 0 semantic errors, ~20 ms/kLOC, 890 MB peak. Without a classpath: 57.7% trustworthy, 42.7% of calls, and zero library edges. Embeddable floor measured at **10 jars, 10.6 MB**. Overload keys are stable and distinct across runs. | `2026-08-29-jdt-java-resolution.md` |
+| **Kotlin, three routes** | Analysis API standalone at Kotlin **2.4.0 — our own pinned version** — resolved all 2,839 references with **0 unresolved**, 1,119 into libraries, 17 artifacts, 79.7 MiB, no Scala runtime. `kotlin2cpg` works as an out-of-process fallback at 155.7 MiB with a Scala 3 runtime and a 2.3.21 compiler. scip-java's Kotlin plugin **cannot load into any Kotlin ≥ 2.3**. | `2026-08-29-kotlin-resolution.md` |
+| **SCIP round trip** | 44,401 lines indexed in 5.9 s, decoded in-process in **93 ms** via the Maven Central bindings. Every typed edge kind derivable. Both predicted derivation signals absent; a working call rule found and hand-checked at 95/95 with 94–98.5% recall. Unresolved set **not** synthesizable from occurrences. Moniker parse 265–560 ns per symbol. | `2026-08-29-scip-round-trip.md` |
+| **Bytecode tier** | **961 resolved call edges from our own bytecode into dependency and platform code** where the source-only baseline had zero, 86% mapped to an exact source file and line, 82 distinct dependency classes, plus 38 annotation references naming `Test` exactly. Rapid-type analysis only: class-hierarchy analysis with the JDK in scope produced 8.2 million edges in 503 s at 11 GB. | `2026-08-29-bytecode-tier.md` |
 
-Until 1 and 2 report, `platform/code-graph` is not plannable: the Kotlin answer determines whether this part is an ingestion layer or an ingestion layer plus a compiler frontend.
+Three results change the design rather than merely confirming it:
+
+1. **Kotlin needs no frontend of ours.** The one line item that could have kept a compiler frontend in scope is closed by an artifact that already matches our pinned compiler version.
+2. **The unresolved set is ours to recover, not merely to record.** SCIP producers emit no trace of a failed reference, so the recovery pass — re-lex, diff positions, subtract language predeclared identifiers — is a required component of the ingest path, not an optional nicety. It also means confidence tagging cannot be inferred from the index alone.
+3. **The bytecode tier is confirmed and bounded.** It buys exactly the edges the baseline could not see, and it must run with rapid-type analysis and the JDK excluded from scope. Class-hierarchy analysis at JDK scope is not a tuning choice, it is unusable.
+
+Carried forward as unmeasured: WALA against SootUp, delta re-analysis of a single changed class, and every measurement above at a corpus larger than 750 lines of our own Kotlin.
 
 ## 12. Risk register
 
@@ -158,6 +181,11 @@ Until 1 and 2 report, `platform/code-graph` is not plannable: the Kotlin answer 
 | `kotlin2cpg` pins its own embedded compiler version | if adopted, isolate it out of process rather than sharing a classloader with our toolchain |
 | EPL-2.0 (JDT, WALA) and LGPL-2.1 (SootUp) are weak copyleft | both permit use as unmodified linked dependencies; do not fork either into our tree without re-reading the terms |
 | Single-maintainer velocity across the SCIP family despite the independent organization | the format is stable and our reader is ours; a dead producer costs a tier, not the part |
+| The Kotlin Analysis API is not on Maven Central and is versioned against IDE bootstrap builds | the coordinate that works, `analysis-api-*-for-ide:2.4.0`, equals our pinned compiler version, so the repository declaration and the version bump are one decision; a Kotlin upgrade re-runs the Kotlin spike before it lands |
+| A classpath, not a build, is what buys library edges — and assembling one may itself need a build tool | measured: withholding the classpath costs Kotlin 975 unresolved references and Java all 35,287 dependency bindings. Where a classpath cannot be assembled, degrade to Tier C and tag the facts `name-only` rather than reporting a thin graph as complete |
+| Class-hierarchy analysis on the bytecode tier is unusable at JDK scope | measured at 8.2 million edges, 503 s, 11 GB. Rapid-type analysis with the JDK excluded is the only supported configuration; treat the algorithm and the scope as one setting, not two knobs |
+| SCIP moniker keys shift with producer configuration, and multi-module repositories are silently truncated | record the producer, its version, and its configuration alongside the facts; verify module coverage independently of the producer's own missing-document check, which reported nothing while 18.6% of identifiers were absent |
+| `invokedynamic` targets are lost on the bytecode tier | measured at 23 of 621 main edges, 7 of them genuine Kotlin lambda edges; the source tier covers these, which is one more reason the bytecode tier is additive only |
 
 ## 13. Traps recorded so they are not re-litigated
 
