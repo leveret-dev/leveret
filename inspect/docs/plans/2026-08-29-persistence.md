@@ -1280,7 +1280,7 @@ class IdentifiersTest {
 
     @Test
     fun `length shape and keywords are rejected without exemptions`() {
-        val rejected = listOf(
+        val rejected: List<() -> Unit> = listOf(
             { Identifiers.table("a".repeat(26)) },
             { Identifiers.constraint("c".repeat(31)) },
             { Identifiers.table("1issues") },
@@ -1329,7 +1329,7 @@ class ColumnDefTest {
     fun `large types differ per dialect`() {
         assertThat(ColumnDef("body", ColumnType.TEXT).render(H2Dialect)).isEqualTo("body clob null")
         assertThat(ColumnDef("body", ColumnType.TEXT).render(PostgresDialect)).isEqualTo("body text null")
-        assertThat(ColumnDef("blob", ColumnType.BINARY).render(PostgresDialect)).isEqualTo("blob bytea null")
+        assertThat(ColumnDef("payload", ColumnType.BINARY).render(PostgresDialect)).isEqualTo("payload bytea null")
     }
 
     @Test
