@@ -181,9 +181,29 @@ Files that stay as trimmed reference, each to carry a header pointing at this de
 | Collapsing the issue lifecycle to present-or-suppressed | users needing a third state, acknowledged but still reported. Cheap before launch, expensive after |
 | Deferring C# despite Roslyn being the strongest available semantic model | a build-free Roslyn workspace path that loads a checkout without build orchestration |
 
-## 11. Execution questions for the owner
+## 11. Execution questions — answered 2026-08-29
 
-1. **Specification prune**: delete the 21 files outright, relying on git history, or move them to `specs/archive/` with a pointer from this document?
-2. **Code prune**: apply section 8 to `runtime/` and `persistence/` now, or leave both modules intact until `platform/code-graph` needs the space?
+1. **Specification prune**: delete outright. Executed: 21 files, 7,156 lines, git history retains them.
+2. **Code prune**: apply section 8 now. Executed across seven commits; `runtime/` main source 1,980 → 529 lines, `persistence/` 862 → 221 lines, both suites green.
 
-Both are recorded here so that either answer leaves an auditable decision.
+## 12. External code-intelligence tool: build versus consume
+
+`platform/code-graph` is the largest proposed part, so the local code-intelligence tool this repository already runs was evaluated as a substitute rather than assumed away.
+
+**What it is.** A local code-intelligence indexer, version 1.6.0, MIT licensed, published on a public registry with a public repository. TypeScript on Node with a native kernel and 29 tree-sitter grammar extractors. It keeps a SQLite index per repository, exposes a CLI (`index`, `sync`, `query`, `explore`, `callers`, `callees`, `impact`) and a tool-server surface, and honours `DO_NOT_TRACK` for its usage counters. The MIT licence means vendoring, porting, or embedding are all legally available with attribution — the objection that would have ended this evaluation does not exist.
+
+**Schema alignment is high.** Its `nodes` table carries identity, kind, qualified name, file, language, ranges, signature, visibility, export flag, and return type; `edges` carries source, target, kind, line, column, and a provenance marker; `files` carries a content hash for incremental sync; and `unresolved_refs` is a first-class table with a pending/failed lifecycle, candidate lists, and a name-tail index for retry. That is the shape section 7 proposed, and it independently supplies the two items the specification corpus lacked entirely: per-symbol visibility and export flags, and the unresolved-reference set as an output rather than a swallowed failure. As a design blueprint it is worth more than the corpus was on this subject.
+
+**Resolution fidelity is the blocker.** Measured against this repository after the prune — 34 files, roughly 750 lines of main Kotlin — the index holds 370 nodes and 697 edges, of which 338 are structural `contains` and 359 are semantic (`calls` 223, `references` 55, `instantiates` 47, `imports` 34), against 740 references it failed to resolve. The honest breakdown matters: the large majority of those failures are external, `assertThat` 60 times, `Test` 38, then standard-library and test-framework names — references nothing in the repository can resolve without indexing dependencies, so recording them as unresolved is correct behaviour, not a defect. Only 120 failed references have a name matching any indexed node, and some of those are coincidental collisions on names like `contains` and `append`. Intra-repository resolution is therefore serviceable; dependency and type resolution are absent by design, because extraction is grammar-based with name matching and has no classpath, no inferred types, and so no overload, inheritance, or re-export discrimination. The provenance column is populated only for edges its callback and function-pointer synthesizers invent, so it marks synthesis rather than grading confidence.
+
+**Verdict.** Adopt the design, not the index.
+
+| Shape | Verdict |
+|---|---|
+| Keep consuming it as development tooling for this repository | **Yes, unchanged.** It already answers `callers`, `callees`, and `impact` for our own source today, which is a reason not to rush `platform/impact` for internal convenience — that part exists for the product, not for us. |
+| Mirror its schema in our own store, with attribution | **Yes.** Validated design, MIT, zero runtime coupling. `nodes` / `edges` / `unresolved_refs` / `files` with content hashes is the starting shape for `platform/code-graph`. |
+| Shell out to its CLI and read its SQLite file as the breadth tier for languages we own no frontend for, marking those edges name-only | **Deferred, with a trigger.** Costs a Node runtime in our distribution and couples us to an undocumented internal schema currently at its ninth migration. Trigger: a user needing structural answers for a language outside the Tier-1 set. |
+| Port the grammar-based extraction approach to the JVM for that same breadth tier | **Deferred behind the option above.** Same capability without Node in the distribution, at medium-to-large cost. Only worth it if the shell-out proves unacceptable in practice. |
+| Adopt its index as the product's graph | **No.** Section 3 fixes this product's identity on resolved facts an agent cannot recompute. A name-matched graph with no type resolution cannot carry goal 5's soundness claim, and building on it would make Leveret Inspect a wrapper over a tool it is supposed to differentiate from. |
+
+The compiler-backed frontends for Java, Kotlin, Python, Go, and TypeScript stay ours for exactly this reason: they are the difference between an edge that is resolved and an edge that shares a name. The per-edge confidence field proposed in section 7 (`resolved`, `name-only`, `heuristic`) is what lets both tiers coexist in one graph without the cheap tier quietly contaminating a blast-radius answer.
