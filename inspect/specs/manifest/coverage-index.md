@@ -1,5 +1,7 @@
 # Community Build Specification Coverage Index
 
+> **Superseded in part, 2026-08-29.** `docs/specs/2026-08-29-scope-decision.md` narrows the product to a code-intelligence and code-review engine. The completeness obligation below — every inventoried artifact mapping to a full specification — no longer governs implementation: 21 of the 42 specification files were removed as out of scope, and 21 remain as trimmed reference. This index stays as the record of what the clean-room audit covered. `release-baseline.md` and `license-map.md` remain authoritative for provenance and licensing.
+
 ## Baseline
 
 All entries target SonarQube Community Build `26.8.0.126808`, tag and commit `b33183b846cd47c7a811e280f5755f13d8fa8cc7`. License and provenance details are in `release-baseline.md` and `license-map.md`.

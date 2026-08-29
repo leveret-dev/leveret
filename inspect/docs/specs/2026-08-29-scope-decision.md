@@ -1,9 +1,9 @@
 # Scope Decision
 
 **Date:** 2026-08-29
-**Status:** Proposed — awaiting owner approval on the two execution questions in section 11
+**Status:** Approved. Specification prune executed; code prune executed in the commits that follow.
 **Supersedes:** the coverage obligation in `specs/manifest/coverage-index.md`, which required every inventoried upstream artifact to map to a full specification
-**Method:** six parallel read-only audits over the 34-file specification corpus (18,075 lines), each judging capabilities against the product goals below with per-row evidence
+**Method:** six parallel read-only audits over the 42-file specification corpus (18,075 lines including the manifest), each judging capabilities against the product goals below with per-row evidence
 
 ## 1. Product definition
 
@@ -163,7 +163,7 @@ Files whose every capability is cut, with survivors already recorded in sections
 
 `specs/platform/plugin-extension-runtime/`, `specs/platform/search-indexing/`, `specs/platform/identity-access/`, `specs/platform/web-ui/`, `specs/platform/events-notifications/`, `specs/platform/telemetry-monitoring/`, `specs/platform/clean-as-you-code-statistics/`, `specs/analyzers/php/`, `specs/analyzers/ruby/`, `specs/analyzers/scala/`, `specs/analyzers/rust/`, `specs/analyzers/dotnet/`, `specs/analyzers/css/`, `specs/analyzers/flex/`, `specs/analyzers/jsp-java-embedding/`, `specs/integrations/github/`, `specs/integrations/gitlab/`, `specs/integrations/bitbucket/`, `specs/integrations/azure-devops/`, `specs/integrations/ldap-authentication/`, `specs/integrations/saml-authentication/`
 
-That is 21 of 34 specification files, approximately 11,400 lines.
+That is 21 of the 42 specification files, 7,156 lines, removed in commit scope below. The 21 that remain are listed next.
 
 Files that stay as trimmed reference, each to carry a header pointing at this decision: `specs/platform/process-runtime/`, `specs/platform/persistence/`, `specs/platform/scanner-gateway/`, `specs/platform/compute-engine/`, `specs/platform/project-configuration/`, `specs/platform/analysis-results/`, `specs/platform/http-api/`, `specs/analyzers/java/`, `specs/analyzers/java-symbolic-execution/`, `specs/analyzers/kotlin/`, `specs/analyzers/python/`, `specs/analyzers/go/`, `specs/analyzers/javascript/`, `specs/analyzers/typescript/`, `specs/analyzers/html/`, `specs/analyzers/xml/`, `specs/analyzers/embedded-web-yaml/`, `specs/analyzers/infrastructure-as-code/`, `specs/analyzers/text-and-secrets/`, `specs/integrations/scanner-engine/`, `specs/integrations/jacoco/`.
 
