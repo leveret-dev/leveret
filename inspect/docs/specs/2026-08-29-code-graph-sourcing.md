@@ -170,6 +170,18 @@ Rung 5 stays outside the product permanently, which keeps two earlier decisions 
 
 The store therefore needs a third honesty channel beside resolved facts and the unresolved set: **runtime-wiring sites**. These are statically detectable even when the edge they imply is not — reflection and service-loader calls, injection annotations, proxy factories, class names appearing as configuration string literals. Detect the sites, count them within the affected set, and report the count on every impact answer. The local grammar tool's framework synthesizers, which guess these edges and tag them `heuristic`, are the prior art for the guessing; the discipline we add is that a guess and a count are different products, and an impact answer must carry the count whether or not it carries the guess.
 
+### 5.4 Evidence a checkout carries that is not a graph edge
+
+The graph is not the only thing an at-rest checkout gives us, and the earlier framing quietly ignored three channels that a code-review product lives on.
+
+**Comments are semi-formal type and intent evidence.** JSDoc `@param {Type}` and `@returns`, Python docstring type conventions, KDoc and Javadoc `@param`, and inline `@type` pragmas state types that the language itself does not require. For untyped JavaScript in particular, JSDoc is often the only declared typing in the codebase, and it binds through the same import graph as anything else. It earns its own basis — declared-in-comment — which is weaker than a checked type and much stronger than a name match, and it must be tagged as such rather than laundered into either neighbour.
+
+**The change under review is evidence no static index holds.** A pull request supplies the changed hunks, which localise every question; the title, body, and commit messages, which state intent; and reviewer comments, which state constraints the code cannot. Goals 2 and 3 — find flaws, suggest fixes — consume that directly: a finding inside a changed hunk with the author's stated intent beside it is a different product from the same finding surfaced in a repository sweep. This is review evidence, not graph structure, and the two must not be mixed in the store; but it is why a review product can be useful precisely where the graph is thinnest.
+
+**Whole-repository access enables inference a per-file tool cannot reach.** Because we hold everything at once: a name that is unique within the set reachable through a file's imports resolves without types; test-to-code pairing follows naming and directory convention; the class names in configuration literals can be matched against declarations, which is what turns a runtime-wiring *site* into a named candidate; and version-control history supplies co-change coupling, authorship, and churn. None of these needs a compiler, a build, or an execution.
+
+The discipline stays the one already stated: each of these is a distinct basis, recorded as such. A comment-declared type, a convention-matched test, and a checked type are three different claims, and an answer that presents them as one is the dishonest kind of confident.
+
 ### 5.5 Why escalation cannot be the foundation
 
 Two constraints make rungs 2 and 3 unreliable on precisely the repositories that matter, and neither is solvable by engineering on our side.
@@ -198,18 +210,6 @@ That inverts several judgments made earlier in this document:
 - **Orientation must be cheap and always available.** It sits on the critical path of every review, so it belongs at rung 1 by construction. A capability that only works when a sandbox build succeeds cannot be what tells the reviewer where to look.
 
 The identity boundary from the scope decision survives this intact and gets sharper: we own the facts and the pointing; the model owns the judgment and the prose. What changes is that pointing is now a first-class product of the graph, ranked beside the findings rather than behind them.
-
-### 5.4 Evidence a checkout carries that is not a graph edge
-
-The graph is not the only thing an at-rest checkout gives us, and the earlier framing quietly ignored three channels that a code-review product lives on.
-
-**Comments are semi-formal type and intent evidence.** JSDoc `@param {Type}` and `@returns`, Python docstring type conventions, KDoc and Javadoc `@param`, and inline `@type` pragmas state types that the language itself does not require. For untyped JavaScript in particular, JSDoc is often the only declared typing in the codebase, and it binds through the same import graph as anything else. It earns its own basis — declared-in-comment — which is weaker than a checked type and much stronger than a name match, and it must be tagged as such rather than laundered into either neighbour.
-
-**The change under review is evidence no static index holds.** A pull request supplies the changed hunks, which localise every question; the title, body, and commit messages, which state intent; and reviewer comments, which state constraints the code cannot. Goals 2 and 3 — find flaws, suggest fixes — consume that directly: a finding inside a changed hunk with the author's stated intent beside it is a different product from the same finding surfaced in a repository sweep. This is review evidence, not graph structure, and the two must not be mixed in the store; but it is why a review product can be useful precisely where the graph is thinnest.
-
-**Whole-repository access enables inference a per-file tool cannot reach.** Because we hold everything at once: a name that is unique within the set reachable through a file's imports resolves without types; test-to-code pairing follows naming and directory convention; the class names in configuration literals can be matched against declarations, which is what turns a runtime-wiring *site* into a named candidate; and version-control history supplies co-change coupling, authorship, and churn. None of these needs a compiler, a build, or an execution.
-
-The discipline stays the one already stated: each of these is a distinct basis, recorded as such. A comment-declared type, a convention-matched test, and a checked type are three different claims, and an answer that presents them as one is the dishonest kind of confident.
 
 ## 6. Kotlin: resolved by measurement, not by frontend
 
