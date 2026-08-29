@@ -15,11 +15,11 @@ Static analysis platform built from the specifications in `specs/`.
 Requires a JDK; bytecode targets JDK 25.
 
 ```sh
-./gradlew :runtime:test        # unit and acceptance tests
-./gradlew :runtime:installDist # runnable node under runtime/build/install
+./gradlew :runtime:test        # unit tests
+./gradlew :runtime:installDist # runnable installation under runtime/build/install
 ```
 
-Operating a built node: `docs/operating-the-node.md`.
+Operating a built installation: `docs/operating-the-engine.md`.
 
 ## Developer setup
 
