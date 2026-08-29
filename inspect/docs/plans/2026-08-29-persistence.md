@@ -1095,7 +1095,7 @@ class LargeInputsTest {
         assertThat(read).hasSize(2500)
 
         assertThat(LargeInputs.update(input) { it.size }).isEqualTo(2500)
-        assertThat(LargeInputs.read(emptyList<Int>()) { error("never called") }).isEmpty()
+        assertThat(LargeInputs.read<Int, Int>(emptyList()) { error("never called") }).isEmpty()
     }
 }
 ```
