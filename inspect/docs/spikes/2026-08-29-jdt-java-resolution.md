@@ -1,5 +1,7 @@
 # Spike: Eclipse JDT Core as an in-process, build-free Java resolver
 
+> **Scope status, 2026-08-29:** JDT is adopted, but the classpath acquisition used here is not. This run obtained the classpath by invoking the target's build tool, which executes target-authored build logic and is out of scope under the build-integration trim (`docs/specs/2026-08-29-code-graph-sourcing.md` §2, §5.3). The in-scope path is to parse dependency declarations and resolve the named archives from a local artifact cache or a declared repository. The `full` and `empty` columns below therefore bracket the answer — the real product sits between them, and closing that gap is the highest-priority unmeasured number in the sourcing document.
+
 **Date:** 2026-08-29
 **Question:** "We have no Java yet, so measure JDT on an external Java project of moderate size: resolved binding rate with and without a classpath, wall-clock per thousand lines, and whether recovered bindings are a usable `name-only` signal."
 **Verdict:** JDT resolves 99.998% of reference names and 100% of call sites with a classpath and 57.7% trustworthily without one, at ~20 ms/kLOC and 10.6 MB of embeddable jars — but `isRecovered()` is **not** a usable `name-only` signal: it is non-transitive, misses 55% of recovery-only bindings, and 56% of the flags it does raise name the wrong symbol.

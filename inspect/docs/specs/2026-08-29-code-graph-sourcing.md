@@ -13,27 +13,29 @@ The conclusion, stated first: **stop planning to write frontends; plan to ingest
 
 ## 2. Verdicts
 
+**Trim rule applied 2026-08-29, after the verdicts below were first written:** the product must deliver its full value from a checkout at rest. Nothing that requires a customer to wire us into their build, to have run their build, or to have our toolchain expectations met in their environment is in scope. Where such a producer would have added fidelity, it survives only as an *optional import* of an artifact the customer already produces for their own reasons. Rows changed by that rule say so.
+
 | Candidate | Licence | Last activity | Fidelity | Shape for us | Verdict |
 |---|---|---|---|---|---|
 | Local grammar indexer (`@colbymchenry/codegraph`) | MIT | release 2026-08-26 | name matching, no classpath | separate process, Node + native addon | keep as dev tooling; do not improve, do not fork |
 | Graphify (`graphifyy`) | Apache-2.0 | package current | tree-sitter + path resolution; plus a language-model narrative layer | Python CLI, output format only | keep as comprehension aid; never an input |
 | **Eclipse JDT Core** | EPL-2.0 | release 2026-06-09, commit 2026-08-02 | **real ECJ compiler bindings, classpath optional, no build required** | **embeddable JVM library, Maven Central** | **adopt for Java** |
-| **SCIP format + JVM bindings** | Apache-2.0 | schema v0.9.0 2026-06-29 | n/a (format) | `org.scip-code:scip-java-bindings`, in-process parse | **adopt as the ingestion format** |
-| **scip-go** | Apache-2.0 | commit 2026-08-14 | compiler-backed (`go/packages`) | separate process, emits SCIP | **consume output for Go** |
-| scip-java (Java) | Apache-2.0 | release v0.13.1 2026-07-02 | compiler-backed `javac` plugin; **requires a successful build** | separate process driving Gradle/Maven/Bazel | consume where the project builds; not the primary path |
-| scip-java (Kotlin) | Apache-2.0 | same | compiler-backed but self-rated "less mature", Gradle-only, no Maven, no Android | separate process | spike, do not assume |
-| scip-typescript | Apache-2.0 | commit 2025-10-03 | compiler-backed (`tsc`) | Node CLI, emits SCIP | consume output, dormancy risk noted |
-| scip-python | MIT | commit 2025-09-05 | compiler-backed (Pyright inference) | Node CLI, emits SCIP | consume output, dormancy risk noted |
+| **SCIP format + JVM bindings** | Apache-2.0 | schema v0.9.0 2026-06-29 | n/a (format) | `org.scip-code:scip-java-bindings`, in-process parse | **adopt as an optional import format** — free fidelity when a customer already produces an index, never a requirement |
+| scip-go | Apache-2.0 | commit 2026-08-14 | compiler-backed (`go/packages`) | separate process, emits SCIP | **not a required producer** — needs a Go toolchain and module resolution in the customer's environment; import only, and see section 14 on bundling a frontend instead |
+| scip-java (Java) | Apache-2.0 | release v0.13.1 2026-07-02 | compiler-backed `javac` plugin; **requires a successful build** | separate process driving Gradle/Maven/Bazel | **cut by the trim rule** — it needs the customer's build |
+| scip-java (Kotlin) | Apache-2.0 | same | cannot load into any Kotlin ≥ 2.3, measured | separate process | **cut** — disqualified on both counts |
+| scip-typescript | Apache-2.0 | commit 2025-10-03 | compiler-backed (`tsc`) | Node CLI, emits SCIP | **not a required producer** — needs the customer's installed dependency tree; import its output if they already emit it |
+| scip-python | MIT | commit 2025-09-05 | compiler-backed (Pyright inference) | Node CLI, emits SCIP | **not a required producer** — same reason; import only |
 | Joern `kotlin2cpg` / flatgraph | Apache-2.0 | commits 2026-08-28 | **embeds `kotlin-compiler-embeddable`** — genuinely compiler-backed Kotlin | Scala library, pinned compiler version | spike for Kotlin only |
 | Kotlin Analysis API (K2 standalone) | Apache-2.0 | tracks Kotlin releases | real K2/FIR resolution without Gradle | JVM library, **not on Maven Central**, no stability guarantee | spike for Kotlin only |
-| SootUp | LGPL-2.1 | release 2026-03-19 | bytecode, sound for its algorithm; needs compiled classes | embeddable JVM library, pure Java | adopt for the bytecode tier |
-| WALA | EPL-2.0 | release 2026-07-01 | bytecode, more precise dispatch analysis | embeddable JVM library, pure Java | spike against SootUp |
+| SootUp | LGPL-2.1 | release 2026-03-19 | bytecode, sound for its algorithm; **needs compiled classes** | embeddable JVM library, pure Java | **cut as a tier by the trim rule.** Keep the library only for reading dependency archives as classpath metadata, which needs no build |
+| WALA | EPL-2.0 | release 2026-07-01 | bytecode | embeddable JVM library | out of scope with the bytecode tier |
 | tree-sitter (`io.github.treesitter:jtreesitter`) | MIT | current | parse only, no resolution | **embeddable JVM library** | adopt as breadth substrate |
 | JavaParser symbol solver | Apache-2.0 / LGPL-3.0 | release 2026-06-01 | hand-written approximation of compiler semantics | embeddable JVM library | reject — JDT is higher fidelity at equal cost |
 | Spoon | CeCILL-C / MIT | release 2026-07-14 | JDT underneath | embeddable JVM library | reject — depend on JDT directly |
-| OPAL | BSD-2-Clause | commit 2026-01-19 | bytecode | JVM library, **pulls a Scala runtime** | spike only for its call-graph benchmark work |
+| OPAL | BSD-2-Clause | commit 2026-01-19 | bytecode | JVM library, pulls a Scala runtime | out of scope with the bytecode tier |
 | Depends | MIT | commit 2026-04-20 | ANTLR grammars, no build | pure-Java, runnable jar | spike for the non-Tier-1 breadth gap |
-| Kythe | Apache-2.0 | release 2026-07-16 | compiler-backed, **requires a successful build** | CLI extractors per language | conditional, never primary |
+| Kythe | Apache-2.0 | release 2026-07-16 | compiler-backed, **requires a successful build** | CLI extractors per language | **cut by the trim rule** |
 | Glean | BSD-3-Clause | commit 2026-08-28 | ingests others' facts | Haskell over C++ and RocksDB, Thrift, no JVM client | reject the runtime, **steal the incremental design** |
 | Stack graphs | Apache-2.0 / MIT | **archived** | syntactic name resolution, no types | Rust crates, no JVM binding | reject |
 | CodeQL | proprietary terms | active | best fidelity surveyed | CLI | **reject — licence forbids our use case** |
@@ -71,18 +73,22 @@ That single fact reframes `platform/code-graph`: it is not a part that writes se
 
 ### The tier model, per language
 
-**Read the "runs where" column carefully: the analysis target is somebody else's codebase, not ours.** Every spike measured a producer against source the engine happens to share a JVM with — our own Kotlin modules, our own compiled classes, one external Java checkout. Section 5.1 corrects what that means for each tier; the table already reflects the correction.
+**Two rules govern this table.** The analysis target is somebody else's codebase, not ours — every spike measured a producer against source the engine happens to share a JVM with, so section 5.1 states what that does and does not prove. And after the trim rule in section 2, every row must work from a checkout at rest: no customer build integration, no requirement that their build has run, no expectation that our toolchains exist in their environment.
 
 | Tier | Producer | Runs where | Confidence | Requires from the target | Languages |
 |---|---|---|---|---|---|
-| A | Eclipse JDT Core | worker process | `resolved` | a classpath, assembled from dependency declarations without invoking the target's build (rung 1 of section 5.3) | Java |
-| A | Kotlin Analysis API standalone | worker process, **one per target language version** | `resolved` | a classpath, and a compiler frontend matching the target's Kotlin version | Kotlin |
-| A | scip-go, scip-typescript, scip-python | separate tool process | `resolved` | a resolvable dependency tree per language | Go, TypeScript, JavaScript, Python |
-| A | scip-java | the target's own build | `resolved` | **a successful build, executing the target's build logic** | Java, opportunistic only |
-| B | SootUp | worker process | `resolved` at bytecode granularity | **class files** — published artifacts read at rung 1, or an opt-in build at rung 3 | any JVM language, opportunistic |
-| C | tree-sitter via `jtreesitter` | in-process | `name-only` | nothing but source text | everything else |
+| A | Eclipse JDT Core | worker process | `resolved` | dependency declarations plus the archives they name, resolved from a local artifact cache or a declared repository — never a build | Java |
+| A | Kotlin Analysis API standalone | worker process, **one per target language version** | `resolved` | the same classpath, plus a compiler frontend matching the target's Kotlin version | Kotlin |
+| C | tree-sitter via `jtreesitter` | in-process | `name-only` | nothing but source text | everything else, including Go, TypeScript, JavaScript, and Python until a bundled frontend lands |
+| Import | any SCIP or SARIF artifact the customer already produces | in-process reader | as the producer earned it, recorded per producer | nothing — the artifact either exists or it does not | whatever the producer covered |
 
-Tier C is the only tier that belongs in the service process: it needs nothing but bytes, cannot execute anything, and is bounded by parse cost. It is also the floor every other tier degrades to.
+Tier C is the only tier inside the service process: it needs nothing but bytes, cannot execute anything, and is bounded by parse cost. It is also the floor every other tier degrades to.
+
+Three rows that were here before the trim are gone, and what each cost us is worth stating rather than hiding:
+
+- **The bytecode tier (SootUp, WALA, OPAL).** It needed compiled class files, which means the customer's build has run. Cut. The measured loss is real and specific: 961 resolved call edges into dependency and platform code, where the source tiers produce none, 86% of them mapped to an exact source file and line. That capability now has no home, and blast radius stops at the library boundary. The library survives in the dependency list for one narrow purpose that needs no build — reading dependency archives as classpath metadata for Tier A. Evidence retained in `docs/spikes/2026-08-29-bytecode-tier.md`.
+- **scip-java.** It drives the customer's Gradle, Maven, or Bazel build and executes their build logic. Cut outright; JDT covers Java from a classpath alone.
+- **scip-go, scip-typescript, scip-python as required producers.** Each needs the customer's language toolchain and a resolved dependency tree. They stay as import paths only. The consequence is blunt: **Go, TypeScript, JavaScript, and Python drop to the name-only tier today.** Section 14 records the alternative that keeps them semantic without touching the customer's environment — bundle the frontend, as a comparable product does with a native Go parser, a Node runtime, and shipped Python type stubs. That is now the highest-value open item in this document.
 
 ### 5.1 Self-analysis is not the product
 
@@ -90,9 +96,9 @@ The spikes answered "can this producer resolve references", and they answered it
 
 **The Kotlin recommendation loses one of its three pillars.** Its numbers stand: 2,839 references, zero unresolved, 1,119 into libraries, 17 jars, no second language runtime. But "the artifact version equals the Kotlin version we already pin" was only true because the target *was us*. A target on Kotlin 1.9 or 2.0 needs a frontend for its language version; one embedded compiler resolves one language level well and degrades on others. So the Analysis API stays the recommendation, with a different deployment: a **per-version worker**, with the required compiler frontend resolved and cached per target rather than pinned once at our build time. That also removes the in-process objection — a target's compiler frontend never enters the service's classloader.
 
-**The bytecode tier was measured on the one codebase whose classes were already sitting in a build directory.** Its 961 cross-boundary edges are real and its verdict holds, but its requirement is now stated honestly: compiled classes mean a successful build, which is the same barrier that made scip-java opportunistic. Both are opportunistic together. A checkout that does not build gets Tier A source resolution where a classpath can be assembled, and Tier C where it cannot.
+**The bytecode tier is cut, not deferred.** Its 961 cross-boundary edges were measured on the one codebase whose classes were already sitting in a build directory. Compiled classes mean the customer's build has run, which the trim rule excludes. The measurement stands as the argument for reviving it if the product ever gains a build-adjacent collector, and the spike document is kept for exactly that reason.
 
-**The Java measurement transfers furthest, and its framing needs one correction.** It ran against an external checkout, and it obtained the classpath in 2.8 seconds without compiling — but by invoking the target's build tool, which is rung 2 of the ladder in section 5.3 and does execute target-authored build logic. The shape Tier A should have is rung 1: parse the dependency declarations, resolve the artifacts ourselves, and treat build-tool invocation as an opt-in fallback for targets whose declarations we cannot resolve.
+**The Java measurement transfers furthest, and its framing needed one correction — which the trim rule then sharpened into a requirement.** It obtained the classpath in 2.8 seconds without compiling, but by invoking the target's build tool: rung 2 of section 5.3, which executes target-authored build logic. Tier A must instead work at rung 1 — parse the dependency declarations, resolve the named archives from a local artifact cache or a declared repository, and never invoke the build. Whether that reaches the 99.998% the spike measured with a build-tool-supplied classpath is now the single most important unmeasured number in this document, because it is the difference between Java being a resolved tier and Java being a name-only tier.
 
 ### 5.2 Why analysis runs in worker processes
 
@@ -101,9 +107,9 @@ The single-process decision in the scope decision cut a supervised topology whos
 - **Resource blowups are routine, not exceptional.** The bytecode spike reached 8.2 million edges, 503 seconds, and 11 GB on one configuration of a 750-line input. The Java spike peaked at 890 MB on 203k lines. In-process, those are the product dying rather than one analysis failing. A worker takes `-Xmx` and a deadline; the service survives the kill.
 - **Target input is hostile until proven otherwise.** Parsers, class readers, and archive readers over attacker-influenced input are a well-known failure surface — malformed archives, pathological nesting, adversarial identifiers. Per-file failure isolation, which the analyzer specifications already require, is only credible if a crash is contained.
 - **Version multiplicity is inherent.** Different targets need different compiler frontends, and a service that analyzes several targets cannot hold conflicting compiler versions in one classloader. Worker processes make version selection a launch argument instead of a classloading problem — which is why the classloader-isolation machinery cut from the plugin runtime does not need to come back.
-- **Nothing under analysis executes.** Reading a class file is not running it, so isolation is about containing crashes and resource blowups rather than sandboxing code. The one producer that does execute target-authored logic is scip-java, which drives the target's own build; section 5.3 puts that on rung 2 and above, opt-in per target and never a default.
+- **Nothing under analysis executes.** Reading a class file is not running it, so isolation is about containing crashes and resource blowups rather than sandboxing code. After the trim rule no in-scope producer executes target-authored logic at all — the one that did, scip-java, is cut.
 
-The service process keeps what it always kept: settings, logging, the store, the queries, and the name-only tier. Resolution runs beside it and reports facts over a pipe or a file. That is a smaller change than it sounds — the producers in the table are already separate processes in three of six rows, and the two in-process rows were the ones this correction moved.
+The service process keeps what it always kept: settings, logging, the store, the queries, and the name-only tier. Resolution runs beside it and reports facts over a pipe or a file.
 
 ### 5.3 Nothing under analysis ever runs
 
@@ -111,18 +117,18 @@ The target is a checkout at rest. We read source text, dependency metadata, and 
 
 **It settles what "untrusted input" means.** The risk is malformed and adversarial *data* fed to parsers, class readers, and archive readers — stack exhaustion, pathological nesting, decompression bombs, quadratic identifier handling — not target code executing in our process. Worker isolation is about containing a crash and a resource blowup, not about sandboxing execution, because there is no execution to sandbox.
 
-**It settles the escalation ladder**, which I have been conflating. Four rungs, and the product's default sits on the first:
+**It settles the escalation ladder.** Four rungs, and after the trim rule the product lives on the first one only:
 
 | Rung | What it touches | Executes target-authored code? | Policy |
 |---|---|---|---|
-| 1. Files at rest | source text, dependency declarations, lockfiles, published class files and archives | no | **always allowed, the default** |
-| 2. Build-tool query | invoking the target's build tool to print a resolved classpath | **yes — build scripts, plugins, and extensions run** | opt-in per target |
-| 3. Full build | compiling the target to produce class files and generated sources | yes | opt-in per target |
+| 1. Files at rest | source text, dependency declarations, lockfiles, archives named by those declarations, and any index or report the customer already produced | no | **the product's entire guarantee** |
+| 2. Build-tool query | invoking the target's build tool to print a resolved classpath | **yes — build scripts, plugins, and extensions run** | out of scope; revisit only as an explicitly requested convenience with the execution stated |
+| 3. Full build | compiling the target for class files and generated sources | yes | out of scope |
 | 4. Program or test execution | running the target or its suite | yes | **never us** |
 
-The Java spike reached rung 2 and reported it as build-free, which is true about compilation and misleading about execution: `dependency:build-classpath` completed in 2.8 seconds without compiling, but it ran the target's build tool, and a build file is a program. For rung 1 to carry Tier A, classpath assembly must come from parsing dependency declarations and resolving artifacts from a cache ourselves, with build-tool invocation as the opt-in fallback rather than the primary path. That is a correction to the spike's framing, not to its numbers.
+The Java spike sat on rung 2 and called itself build-free, which is true about compilation and false about execution: the classpath came from invoking the target's build tool in 2.8 seconds, and a build file is a program. Rung 1 must therefore carry Tier A on its own — parse the declarations, resolve the named archives from a local artifact cache or a declared repository. That is the load-bearing unmeasured question named in section 5.1.
 
-Rung 3 has a specific consequence on the JVM that no measurement here exercised: **generated sources do not exist in a checkout at rest.** Annotation processors and code generators — the JVM ecosystem is full of them — produce types that hand-written code references. Without a build those references have no declaration to bind to, so they land in the unresolved set for a reason that is neither a producer defect nor a hostile input. It is simply a target whose source is incomplete until something runs. The honest behaviour is to detect the generator's presence from the build declarations and say so on the answer, rather than reporting a confidently thin graph.
+Rung 3's exclusion has a specific consequence on the JVM that no measurement here exercised: **generated sources do not exist in a checkout at rest.** Annotation processors and code generators — the JVM ecosystem is full of them — produce types that hand-written code references. Without a build those references have no declaration to bind to, so they land in the unresolved set for a reason that is neither a producer defect nor hostile input; the target's source is simply incomplete until something runs. Detect the generator from the build declarations and say so on the answer rather than reporting a confidently thin graph. This is now a permanent characteristic of the product, not a temporary gap.
 
 Rung 4 stays outside the product permanently, which keeps two earlier decisions consistent: runtime profiles and hot paths were cut because no goal names performance, and test attribution is an *import* of a report someone else produced by running tests — the coverage tool runs, we never do. Fix verification, likewise, means re-running **analysis** over a named scope, never running the program to see whether it still works.
 
@@ -195,17 +201,19 @@ The production precedent settles it: every batch indexer surveyed calls the comp
 5. **Persistence and query** — the embedded relational store, recursive reachability, bounded traversal with a truncation marker.
 6. **Orchestration** of producers whose runtimes differ, with graceful degradation to Tier C when a producer is absent, unbuildable, or stale.
 7. **Recovery of the unresolved set per producer** — re-lexing and position-diffing where the producer records nothing, per section 7.
-8. **Target inspection and producer selection** — read the target's build declarations, resolve a classpath without executing its build, detect each language's version, choose and cache the matching producer, and record producer identity, version, and configuration with every fact.
+8. **Target inspection, classpath resolution, and producer selection** — parse the target's dependency declarations, resolve the archives they name from a local artifact cache or a declared repository **without invoking the build**, detect each language's version, choose and cache the matching frontend, and record producer identity, version, and configuration with every fact. This is the item the trim rule made load-bearing: it is now the only path to a resolved tier.
 9. **Worker supervision** — launch a producer with a heap cap and a deadline, contain its crash to one analysis, and degrade to the next tier down on failure rather than reporting a thin graph as complete.
 10. **Runtime-wiring site detection** — reflection, service loaders, injection annotations, proxy factories, and class names in configuration literals, counted within any affected set so an impact answer states how much of the program's real wiring a static graph cannot see.
 
 ## 10. Revised cost
 
-Section 7 of the scope decision costed this part **Large**, driven by per-language emitters. Every one of those emitters now has an existing producer: Java through JDT in a worker, Kotlin through the Analysis API in a per-version worker, Go and TypeScript and Python out-of-process behind one format, breadth through an embeddable parser in the service process, and an opportunistic bytecode tier where class files exist.
+Section 7 of the scope decision costed this part **Large**, driven by per-language emitters. Two of those emitters exist as libraries we drive from a checkout at rest — JDT for Java, the Analysis API for Kotlin — and the rest are covered at name-only fidelity by an embeddable parser, with any customer-produced index imported for free.
 
-**Revised: Medium. No compiler frontend of our own is in scope.** What remains is what nobody supplies and always was the real work: the store, the confidence model, the unresolved-set recovery, the edge-kind derivation, the delta protocol, the queries, and the orchestration across producers with graceful degradation.
+**Revised: Medium, and narrower than before the trim.** Removed from the estimate: a bytecode tier, orchestration of three external toolchain-dependent indexers, and everything that would have driven a customer build. Added: rung-1 classpath resolution, which is now the difference between Java and Kotlin being resolved tiers or name-only ones.
 
-Two costs the spikes did not price, both consequences of the target being somebody else's code: producer selection with classpath resolution per target, and worker supervision with heap caps, deadlines, and tier degradation on crash. Neither is large, and both were always implied by "analyze source code" meaning code we did not write. They are items 8 and 9 of section 9.
+What remains is what nobody supplies and always was the real work: the store, the confidence model, the unresolved-set recovery, the edge-kind derivation, the delta protocol, the queries, worker supervision, and honest degradation.
+
+The open item the trim creates is not a cost, it is a decision: **Go, TypeScript, JavaScript, and Python are name-only until we bundle a frontend for them.** Section 14 shows that bundling — a native parser binary, a runtime plus its type checker, shipped type stubs — is the shape a comparable product uses precisely because it demands nothing of the customer's environment. Pricing that is the next piece of work, and it is the only remaining route to semantic coverage for those languages under the trim rule.
 
 ## 11. Spike results
 
@@ -216,38 +224,36 @@ All four ran on 2026-08-29. Full measurements, commands, and failures are in `do
 | **JDT for Java** | 203,436 lines of external Java: **99.998%** of 251,399 reference names resolved, **100%** of 78,474 call sites, 51.5% of calls into the JDK or a dependency, 0 semantic errors, ~20 ms/kLOC, 890 MB peak. Without a classpath: 57.7% trustworthy, 42.7% of calls, and zero library edges. Embeddable floor measured at **10 jars, 10.6 MB**. Overload keys are stable and distinct across runs. | `2026-08-29-jdt-java-resolution.md` |
 | **Kotlin, three routes** | Analysis API standalone at Kotlin **2.4.0 — our own pinned version** — resolved all 2,839 references with **0 unresolved**, 1,119 into libraries, 17 artifacts, 79.7 MiB, no Scala runtime. `kotlin2cpg` works as an out-of-process fallback at 155.7 MiB with a Scala 3 runtime and a 2.3.21 compiler. scip-java's Kotlin plugin **cannot load into any Kotlin ≥ 2.3**. | `2026-08-29-kotlin-resolution.md` |
 | **SCIP round trip** | 44,401 lines indexed in 5.9 s, decoded in-process in **93 ms** via the Maven Central bindings. Every typed edge kind derivable. Both predicted derivation signals absent; a working call rule found and hand-checked at 95/95 with 94–98.5% recall. Unresolved set **not** synthesizable from occurrences. Moniker parse 265–560 ns per symbol. | `2026-08-29-scip-round-trip.md` |
-| **Bytecode tier** | **961 resolved call edges from our own bytecode into dependency and platform code** where the source-only baseline had zero, 86% mapped to an exact source file and line, 82 distinct dependency classes, plus 38 annotation references naming `Test` exactly. Rapid-type analysis only: class-hierarchy analysis with the JDK in scope produced 8.2 million edges in 503 s at 11 GB. | `2026-08-29-bytecode-tier.md` |
+| **Bytecode tier** | **961 resolved call edges from our own bytecode into dependency and platform code** where the source-only baseline had zero, 86% mapped to an exact source file and line, 82 distinct dependency classes, plus 38 annotation references naming `Test` exactly. Rapid-type analysis only: class-hierarchy analysis with the JDK in scope produced 8.2 million edges in 503 s at 11 GB. **Result retained, tier cut** — it needs the customer's build. | `2026-08-29-bytecode-tier.md` |
 
 Three results change the design rather than merely confirming it:
 
 1. **Kotlin needs no frontend of ours** — but it needs a frontend *per target language version*, resolved and cached at analysis time rather than pinned at our build time. The measurement proves the route; it does not license the deployment shape it was measured in. See section 5.1.
 2. **The unresolved set is ours to recover, not merely to record.** SCIP producers emit no trace of a failed reference, so the recovery pass — re-lex, diff positions, subtract language predeclared identifiers — is a required component of the ingest path, not an optional nicety. It also means confidence tagging cannot be inferred from the index alone.
-3. **The bytecode tier is confirmed, bounded, and opportunistic.** It buys exactly the edges the baseline could not see, and it must run with rapid-type analysis and the JDK excluded from scope — class-hierarchy analysis at JDK scope is not a tuning choice, it is unusable. Its requirement is a successful build of the target, which puts it in the same opportunistic bracket as scip-java rather than the always-available bracket its measurement on our own build directory suggested.
+3. **The bytecode tier measured well and is cut anyway.** It buys exactly the edges the baseline could not see, at rapid-type analysis with the JDK excluded from scope, and it needs compiled classes — which means the customer's build has run. The trim rule excludes it. The number is kept because it is the argument for reviving the tier if a build-adjacent collector is ever offered as an option, and it quantifies what blast radius loses at the library boundary in the meantime.
 
-Carried forward as unmeasured, and now the more important gap: every number above came from a target that was either our own source, our own compiled classes, or one well-behaved external checkout. Unmeasured are a target whose Kotlin version differs from any frontend we ship, a target whose dependency tree does not resolve, a target that does not build, a multi-language repository, a repository large enough for cold-start cost to matter, and delta re-analysis of a single changed file. Also unmeasured: WALA against SootUp.
+Carried forward as unmeasured, in priority order after the trim: whether a rung-1 classpath — declarations plus a local artifact cache, no build invocation — reaches anything like the 99.998% measured with a build-tool-supplied classpath; what a bundled frontend costs for Go, TypeScript, and Python; a target whose Kotlin version differs from any frontend we ship; a target whose dependency tree does not resolve; a multi-language repository; a repository large enough for cold-start cost to matter; and delta re-analysis of a single changed file.
 
 ## 12. Risk register
 
 | Risk | Mitigation |
 |---|---|
-| scip-typescript and scip-python have had no commits in roughly a year while looking current | their resolution engines are maintained upstream independently; treat the emission layer as code we may have to maintain, and degrade to Tier C if it breaks |
-| scip-java requires a successful build, and goal 1 implies analyzing checkouts that do not build | JDT in-process is the primary Java path precisely because it needs only a classpath; scip-java is the opportunistic higher-fidelity path when a build exists |
+| **Rung-1 classpath resolution may not match a build-tool-supplied one** — this replaced both risks about build-dependent producers when they were cut, and it is now the largest single risk in the document | measured contrast: with a classpath, Java resolves 99.998% of names and Kotlin has zero unresolved references; without one, Java drops to 57.7% trustworthy with zero library bindings and Kotlin to 975 unresolved. Everything therefore rests on resolving declared archives from a local artifact cache or a declared repository. Measure it before planning; if it falls short, Java and Kotlin are name-only tiers and the product's fidelity story changes |
 | Kotlin Analysis API offers no compatibility guarantee across Kotlin versions | pin our Kotlin version deliberately and treat an upgrade as a spike; the alternative routes stay documented |
 | `kotlin2cpg` pins its own embedded compiler version | if adopted, isolate it out of process rather than sharing a classloader with our toolchain |
-| EPL-2.0 (JDT, WALA) and LGPL-2.1 (SootUp) are weak copyleft | both permit use as unmodified linked dependencies; do not fork either into our tree without re-reading the terms |
+| EPL-2.0 (JDT) is weak copyleft | it permits use as an unmodified linked dependency; do not fork it into our tree without re-reading the terms |
 | Single-maintainer velocity across the SCIP family despite the independent organization | the format is stable and our reader is ours; a dead producer costs a tier, not the part |
 | The Kotlin Analysis API is not on Maven Central and is versioned against IDE bootstrap builds | the coordinate that works, `analysis-api-*-for-ide:2.4.0`, equals our pinned compiler version, so the repository declaration and the version bump are one decision; a Kotlin upgrade re-runs the Kotlin spike before it lands |
-| A classpath, not a build, is what buys library edges — and assembling one may itself need a build tool | measured: withholding the classpath costs Kotlin 975 unresolved references and Java all 35,287 dependency bindings. Where a classpath cannot be assembled, degrade to Tier C and tag the facts `name-only` rather than reporting a thin graph as complete |
-| Class-hierarchy analysis on the bytecode tier is unusable at JDK scope | measured at 8.2 million edges, 503 s, 11 GB. Rapid-type analysis with the JDK excluded is the only supported configuration; treat the algorithm and the scope as one setting, not two knobs |
+| The bytecode tier's cut leaves blast radius stopping at the library boundary | accepted, quantified at 961 edges on our own code, and recorded in the spike so the trade can be revisited if a build-adjacent collector is ever offered |
 | SCIP moniker keys shift with producer configuration, and multi-module repositories are silently truncated | record the producer, its version, and its configuration alongside the facts; verify module coverage independently of the producer's own missing-document check, which reported nothing while 18.6% of identifiers were absent |
-| `invokedynamic` targets are lost on the bytecode tier | measured at 23 of 621 main edges, 7 of them genuine Kotlin lambda edges; the source tier covers these, which is one more reason the bytecode tier is additive only |
+| Go, TypeScript, JavaScript, and Python are name-only after the trim | the only in-scope route back to semantics is a bundled frontend per section 14; until then, say so on every answer for those languages rather than letting a name-only graph read as resolved |
 | **Every spike measured a target the engine shares a JVM with; the product analyzes code it did not write** | producers run in worker processes with a heap cap and a deadline, selected per target language version. The measurements transfer as fidelity ceilings, not as deployment shapes — see section 5.1 |
-| Target source, archives, and class files are untrusted input to parsers and class readers | contain a crash to one worker and one analysis, never execute target code, and treat archive reading as a hostile-input surface. A producer that runs the target's own build (scip-java) is opt-in per project and never a default |
+| Target source, archives, and imported reports are untrusted input to parsers, archive readers, and decoders | contain a crash to one worker and one analysis; nothing in scope executes target-authored code, and no producer that would is in scope |
 | A target's language version may have no frontend we can obtain | degrade to the name-only tier and tag the facts, rather than reporting a resolved-looking graph built from a mismatched frontend |
 | Producer identity becomes part of the data's meaning | store producer, version, and configuration with every fact; the SCIP moniker drift already proves that two runs of one producer can disagree about a symbol's key |
 | **Runtime-wired edges are invisible, not unresolved** — dependency injection, service loaders, reflection, proxies, annotation-driven dispatch, configuration-named classes | detect the wiring *sites* statically and report their count within every affected set; a guess about the edge is a separate, `heuristic`-tagged product from the count, and the count ships whether the guess does or not |
 | Generated sources do not exist in a checkout at rest, and the JVM ecosystem generates heavily | detect generators from the build declarations and state their presence on the answer; their absent types land in the unresolved set for a reason that is neither a producer defect nor hostile input |
-| Rung 2 of the escalation ladder looks free and is not — invoking a build tool executes target-authored build logic | prefer parsing dependency declarations and resolving artifacts ourselves; make build-tool invocation opt-in per target and say so in the answer's provenance |
+| Rung 2 looks free and is not — invoking a build tool executes target-authored build logic | out of scope by the trim rule; if it ever returns as a convenience it must be explicitly requested per target and stated in the answer's provenance |
 
 ## 13. Traps recorded so they are not re-litigated
 

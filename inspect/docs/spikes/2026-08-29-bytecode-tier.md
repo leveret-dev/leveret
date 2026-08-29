@@ -1,5 +1,7 @@
 # Spike: Bytecode tier value (SootUp)
 
+> **Scope status, 2026-08-29:** the tier this spike validated was subsequently **cut** — it requires the customer's build to have produced class files, and the product's guarantee is a checkout at rest (`docs/specs/2026-08-29-code-graph-sourcing.md` §2 trim rule, §5). The measurements below are retained deliberately: they quantify what blast radius loses at the library boundary without this tier, and they are the argument for reviving it if a build-adjacent collector is ever offered as an option.
+
 **Date:** 2026-08-29
 **Question:** Build a call graph over our own compiled classes with SootUp and count edges that cross into dependency or platform code — edges no source tier can produce. Acceptance: a number that either justifies the tier or kills it.
 **Verdict:** The tier earns its place — **961 resolved call edges from our own bytecode into dependency and platform code** (482 from main source alone), 86% of them mapped to an exact source file and line, against zero such edges from the source-only baseline — but only with rapid-type analysis, because class-hierarchy analysis is unusable at any scope that includes the JDK.

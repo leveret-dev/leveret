@@ -1,5 +1,7 @@
 # Spike: the SCIP round trip
 
+> **Scope status, 2026-08-29:** SCIP survives as an **optional import format** — free fidelity when a customer already produces an index — but the producers that emit it are no longer required producers, because each needs the customer's language toolchain and a resolved dependency tree (`docs/specs/2026-08-29-code-graph-sourcing.md` §2 trim rule, §5). The reader mechanics, the call-derivation rule, and the operational traps below all still apply to any index we ingest.
+
 **Date:** 2026-08-29
 **Question:** "Produce an index with scip-go on a real Go repository, parse it in-process with the Maven Central bindings, and derive typed edges plus an unresolved set from occurrences."
 **Verdict:** The round trip works and is cheap — 44k lines indexed in 5.9s, decoded in-process in 93ms, every typed edge kind populated — but **both signals section 7 expected to derive edge kinds from are absent in practice**: `syntax_kind` is `UnspecifiedSyntaxKind` on 100% of occurrences and `enclosing_range` appears only on function/method *definitions*, never on references; and the unresolved set cannot be synthesized from occurrences at all, because a reference this producer fails to resolve is not a symbol-less occurrence — it is no occurrence.
