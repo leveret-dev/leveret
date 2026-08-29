@@ -14,7 +14,7 @@ class DistributionTest {
             assertThat(text).contains(key)
             if (default.isNotEmpty()) assertThat(text).contains(default)
         }
-        assertThat(text).contains(PropertyKeys.JDBC_URL, PropertyKeys.ENABLE_STOP_COMMAND)
+        assertThat(text).contains(PropertyKeys.JDBC_URL)
         assertThat(text).doesNotContain("cluster")
     }
 

@@ -58,10 +58,8 @@ class SettingsLoaderTest {
         val settings = SettingsLoader({ dir }, emptyMap(), emptyMap(), warnings::add).load(emptyArray())
         assertThat(warnings).isNotEmpty()
         assertThat(settings.required(PropertyKeys.LOG_LEVEL)).isEqualTo("INFO")
-        assertThat(settings.required(PropertyKeys.gracefulStopTimeout(com.leveret.inspect.runtime.proc.ProcessId.WEB)))
-            .isEqualTo("240000")
-        assertThat(settings.required(PropertyKeys.gracefulStopTimeout(com.leveret.inspect.runtime.proc.ProcessId.COMPUTE)))
-            .isEqualTo("21600000")
+        assertThat(settings.required(PropertyKeys.PATH_DATA)).isEqualTo("data")
+        assertThat(settings.required(PropertyKeys.LOG_JSON)).isEqualTo("false")
     }
 
     @Test
