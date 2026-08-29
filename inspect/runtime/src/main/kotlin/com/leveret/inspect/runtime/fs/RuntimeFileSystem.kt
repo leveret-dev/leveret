@@ -9,7 +9,7 @@ import java.nio.file.Path
 import java.nio.file.Paths
 
 /**
- * Runtime directories of a node.
+ * Runtime directories of an installation.
  *
  * A relative configured path resolves against installation home; every exposed path is absolute and
  * normalized. Only the temporary directory is cleaned; data and log directories are never cleared.
@@ -20,14 +20,13 @@ class RuntimeFileSystem(settings: Settings) {
     val dataDir: Path = resolve(settings, PropertyKeys.PATH_DATA, "data")
     val logsDir: Path = resolve(settings, PropertyKeys.PATH_LOGS, "logs")
     val tempDir: Path = resolve(settings, PropertyKeys.PATH_TEMP, "temp")
-    val webDir: Path = resolve(settings, PropertyKeys.PATH_WEB, "web")
 
     private fun resolve(settings: Settings, key: String, fallback: String): Path =
         home.resolve(settings.value(key, fallback)).toAbsolutePath().normalize()
 
     /** Verifies and creates every directory, then empties the temporary directory. */
     fun reset() {
-        listOf(dataDir, logsDir, tempDir, webDir).forEach(::prepare)
+        listOf(dataDir, logsDir, tempDir).forEach(::prepare)
         cleanTempDir(emptySet())
     }
 

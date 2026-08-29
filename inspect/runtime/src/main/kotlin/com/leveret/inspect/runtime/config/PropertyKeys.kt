@@ -11,7 +11,6 @@ object PropertyKeys {
     const val PATH_DATA = "leveret.path.data"
     const val PATH_LOGS = "leveret.path.logs"
     const val PATH_TEMP = "leveret.path.temp"
-    const val PATH_WEB = "leveret.path.web"
 
     const val JDBC_URL = "leveret.jdbc.url"
 
@@ -23,7 +22,6 @@ object PropertyKeys {
         PATH_DATA to "data",
         PATH_LOGS to "logs",
         PATH_TEMP to "temp",
-        PATH_WEB to "web",
         LOG_LEVEL to "INFO",
         LOG_CONSOLE to "false",
         LOG_JSON to "false",

@@ -15,7 +15,6 @@ class RuntimeFileSystemTest {
       "leveret.path.data" to "data",
       "leveret.path.logs" to "logs",
       "leveret.path.temp" to "temp",
-      "leveret.path.web" to "web",
     ) + extra,
   )
 
