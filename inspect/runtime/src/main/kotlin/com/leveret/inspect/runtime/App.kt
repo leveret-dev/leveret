@@ -3,7 +3,6 @@ package com.leveret.inspect.runtime
 import com.leveret.inspect.runtime.config.PropertyKeys
 import com.leveret.inspect.runtime.config.Settings
 import com.leveret.inspect.runtime.config.SettingsLoader
-import com.leveret.inspect.runtime.config.SettingsValidator
 import com.leveret.inspect.runtime.fs.InstallationHome
 import com.leveret.inspect.runtime.fs.RuntimeFileSystem
 import com.leveret.inspect.runtime.ipc.CommandFile
@@ -27,8 +26,8 @@ import org.slf4j.LoggerFactory
 /**
  * Monitor entry point.
  *
- * Startup has two phases. Settings loading, validation, and logging configuration run unguarded, so
- * an operator error terminates with a nonzero status before anything is launched. Everything from
+ * Startup has two phases. Settings loading and logging configuration run unguarded, so an operator
+ * error terminates with a nonzero status before anything is launched. Everything from
  * directory preparation onward runs guarded: a failure there is logged, children are stopped, and the
  * monitor exits normally, which is why readiness and logs, not exit status, tell an operator whether
  * startup succeeded.
@@ -49,7 +48,6 @@ class App(
             systemProperties = systemProperties(),
             warn = { message -> System.err.println(message) },
         ).load(args)
-        SettingsValidator.validate(settings)
 
         val fs = RuntimeFileSystem(settings)
         LogConfig.configure(settings, fs, ProcessId.APP)
