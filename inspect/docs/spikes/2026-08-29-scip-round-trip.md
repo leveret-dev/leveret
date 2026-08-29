@@ -1,6 +1,6 @@
 # Spike: the SCIP round trip
 
-> **Scope status, 2026-08-29:** SCIP survives as an **optional import format** — free fidelity when a customer already produces an index — but the producers that emit it are no longer required producers, because each needs the customer's language toolchain and a resolved dependency tree (`docs/specs/2026-08-29-code-graph-sourcing.md` §2 trim rule, §5). The reader mechanics, the call-derivation rule, and the operational traps below all still apply to any index we ingest.
+> **Scope status, 2026-08-29 (final):** SCIP is both an import format and an in-scope producer path — the toolchains these indexers need are provisioned in a sandbox we own at rung 2, not expected in the customer's environment (`docs/specs/2026-08-29-code-graph-sourcing.md` §2, §5.3). The reader mechanics, the call-derivation rule, and every operational trap below apply either way.
 
 **Date:** 2026-08-29
 **Question:** "Produce an index with scip-go on a real Go repository, parse it in-process with the Maven Central bindings, and derive typed edges plus an unresolved set from occurrences."
