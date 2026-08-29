@@ -55,6 +55,8 @@ Three structural findings dominate the detail:
 
 Goals 4 and 5 are join-and-reachability questions — "who calls this", "what transitively depends on this file", "which findings sit in the files this diff touches". Recursive queries over symbol and reference tables answer those in an embedded relational engine directly; a key-value or flat-file store would mean hand-rolling both the join and the traversal. That is why the store survives while almost everything around it does not.
 
+**What "one process" does and does not decide, clarified 2026-08-29.** It cuts the supervised service topology: no web tier separate from a worker tier, no search process, no IPC command file, no readiness gating, no restart escalation. It does **not** decide that compiler frontends run inside the process that serves queries. The analysis target is a codebase we did not write, so a producer reading it is handling untrusted input at unbounded cost — measured at 11 GB and 503 seconds on one configuration during the spikes. `docs/specs/2026-08-29-code-graph-sourcing.md` section 5.2 therefore places resolution in short-lived worker processes with a heap cap and a deadline, reporting facts over a pipe or a file. That is a launch-and-wait, not a supervised node: `ProcessBuilder` with limits and a timeout, not the launcher, lifecycle, and command-file machinery section 8 deleted. The service process keeps settings, logging, the store, the queries, and the name-only tier.
+
 ## 4. Keep
 
 | Capability | Why | Source |

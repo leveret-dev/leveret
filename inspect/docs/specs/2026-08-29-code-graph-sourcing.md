@@ -71,30 +71,55 @@ That single fact reframes `platform/code-graph`: it is not a part that writes se
 
 ### The tier model, per language
 
-| Tier | Producer | Confidence | Requires | Languages |
-|---|---|---|---|---|
-| A, in-process | Eclipse JDT Core | `resolved` | a classpath, optional | Java |
-| A, in-process | Kotlin — unresolved, see section 6 | `resolved` | to be determined | Kotlin |
-| A, out-of-process | scip-go, scip-typescript, scip-python | `resolved` | a resolvable dependency tree per language | Go, TypeScript, JavaScript, Python |
-| A, out-of-process | scip-java | `resolved` | **a successful build** | Java, when the project builds |
-| B, in-process | SootUp or WALA | `resolved` at bytecode granularity | compiled classes | any JVM language |
-| C, in-process | tree-sitter via `jtreesitter` plus our own scope rules | `name-only` | nothing but source text | everything else |
+**Read the "runs where" column carefully: the analysis target is somebody else's codebase, not ours.** Every spike measured a producer against source the engine happens to share a JVM with — our own Kotlin modules, our own compiled classes, one external Java checkout. Section 5.1 corrects what that means for each tier; the table already reflects the correction.
 
-Tier C is the floor and is what both local tools already are — the difference is that owning it in-process removes a Node dependency and lets one confidence model span all tiers. Tier B is additive, never a substitute: it resolves calls into dependency and platform code that no source frontend sees, which is exactly where blast radius currently stops at a library boundary. It costs source-level detail (parameter names without debug info, exact ranges) and applies only to JVM targets.
+| Tier | Producer | Runs where | Confidence | Requires from the target | Languages |
+|---|---|---|---|---|---|
+| A | Eclipse JDT Core | worker process | `resolved` | a classpath; a build tool able to resolve one | Java |
+| A | Kotlin Analysis API standalone | worker process, **one per target language version** | `resolved` | a classpath, and a compiler frontend matching the target's Kotlin version | Kotlin |
+| A | scip-go, scip-typescript, scip-python | separate tool process | `resolved` | a resolvable dependency tree per language | Go, TypeScript, JavaScript, Python |
+| A | scip-java | the target's own build | `resolved` | **a successful build, executing the target's build logic** | Java, opportunistic only |
+| B | SootUp | worker process | `resolved` at bytecode granularity | **compiled classes, so a successful build** | any JVM language, opportunistic only |
+| C | tree-sitter via `jtreesitter` | in-process | `name-only` | nothing but source text | everything else |
+
+Tier C is the only tier that belongs in the service process: it needs nothing but bytes, cannot execute anything, and is bounded by parse cost. It is also the floor every other tier degrades to.
+
+### 5.1 Self-analysis is not the product
+
+The spikes answered "can this producer resolve references", and they answered it well. They did not answer "can this producer resolve references *in an arbitrary target*", and three of their conclusions need correcting on that axis.
+
+**The Kotlin recommendation loses one of its three pillars.** Its numbers stand: 2,839 references, zero unresolved, 1,119 into libraries, 17 jars, no second language runtime. But "the artifact version equals the Kotlin version we already pin" was only true because the target *was us*. A target on Kotlin 1.9 or 2.0 needs a frontend for its language version; one embedded compiler resolves one language level well and degrades on others. So the Analysis API stays the recommendation, with a different deployment: a **per-version worker**, with the required compiler frontend resolved and cached per target rather than pinned once at our build time. That also removes the in-process objection — a target's compiler frontend never enters the service's classloader.
+
+**The bytecode tier was measured on the one codebase whose classes were already sitting in a build directory.** Its 961 cross-boundary edges are real and its verdict holds, but its requirement is now stated honestly: compiled classes mean a successful build, which is the same barrier that made scip-java opportunistic. Both are opportunistic together. A checkout that does not build gets Tier A source resolution where a classpath can be assembled, and Tier C where it cannot.
+
+**The Java measurement is the one that transfers**, because it ran against an external checkout with a classpath obtained from the target's own build metadata in 2.8 seconds without compiling. That is the shape all Tier A producers should have: read the target's dependency declarations, resolve a classpath, never execute the target's build.
+
+### 5.2 Why analysis runs in worker processes
+
+The single-process decision in the scope decision cut a supervised topology whose purpose was scaling a web tier apart from a worker tier. It did not license running compiler frontends over untrusted input inside the process that serves queries. Four reasons, three of them already measured:
+
+- **Resource blowups are routine, not exceptional.** The bytecode spike reached 8.2 million edges, 503 seconds, and 11 GB on one configuration of a 750-line input. The Java spike peaked at 890 MB on 203k lines. In-process, those are the product dying rather than one analysis failing. A worker takes `-Xmx` and a deadline; the service survives the kill.
+- **Target input is hostile until proven otherwise.** Parsers, class readers, and archive readers over attacker-influenced input are a well-known failure surface — malformed archives, pathological nesting, adversarial identifiers. Per-file failure isolation, which the analyzer specifications already require, is only credible if a crash is contained.
+- **Version multiplicity is inherent.** Different targets need different compiler frontends, and a service that analyzes several targets cannot hold conflicting compiler versions in one classloader. Worker processes make version selection a launch argument instead of a classloading problem — which is why the classloader-isolation machinery cut from the plugin runtime does not need to come back.
+- **We never execute target code.** Reading a class file is not running it. This rules Tier A and B in and marks scip-java's compiler-plugin route, which runs the target's own build logic, as the highest-trust-cost producer we have — usable when a user asks for it on a project they trust, never as a default.
+
+The service process keeps what it always kept: settings, logging, the store, the queries, and the name-only tier. Resolution runs beside it and reports facts over a pipe or a file. That is a smaller change than it sounds — the producers in the table are already separate processes in three of six rows, and the two in-process rows were the ones this correction moved.
 
 ## 6. Kotlin: resolved by measurement, not by frontend
 
-This section asked whether Kotlin forces a frontend of our own. **It does not.** All three routes were run against `runtime/` and `persistence/` — 28 files, 2,839 references — and the result is unambiguous:
+This section asked whether Kotlin forces a frontend of our own. **It does not.** All three routes were run against `runtime/` and `persistence/` — 28 files, 2,839 references — and the result is unambiguous. Note what the subject was: our own source, resolved with our own classpath. Section 5.1 states what that does and does not prove about arbitrary targets.
 
 | Route | Refs resolved | Into libraries | Unresolved | Weight | Kotlin version | Verdict |
 |---|---:|---:|---:|---|---|---|
-| **Kotlin Analysis API standalone (K2)** | 2,839 | **1,119** | **0** | 17 artifacts, 79.7 MiB, no Scala | **2.4.0 — the version we already pin** | **adopt** |
+| **Kotlin Analysis API standalone (K2)** | 2,839 | **1,119** | **0** | 17 artifacts, 79.7 MiB, no Scala | 2.4.0, which is also our own pin | **adopt, per-version worker** |
 | Joern `kotlin2cpg` | 868 non-operator calls | 621 | 0 with classpath | 108 artifacts, 155.7 MiB, Scala 3.8.3 runtime | 2.3.21 embedded | out-of-process fallback |
 | scip-java Kotlin plugin | — | — | — | — | 2.2.0 embedded | **disqualified** |
 
 scip-java's Kotlin plugin cannot load into our compiler at all: `AnalyzerRegistrar is incompatible with the current version of the compiler`, caused by `AbstractMethodError: Missing implementation of resolved method 'abstract java.lang.String getPluginId()'`. It is unusable on any Kotlin at or above 2.3.
 
-The Analysis API route is the recommendation on three grounds beyond its numbers: its artifact version *equals* the Kotlin version the product already pins, so there is no version-skew to manage; it brings no second language runtime, with the IntelliJ platform classes it needs arriving inside the compiler jar rather than as separate artifacts; and with the dependency classpath withheld it degrades exactly as a tier should — 975 unresolved references whose top names are `assertThat` ×72, `Test` ×50, `use` ×31, reproducing the baseline's failure mode and confirming that the classpath is what buys the 1,119 library edges.
+The Analysis API route is the recommendation on two grounds beyond its numbers, one having survived the correction in section 5.1 and one having been strengthened by it. It brings no second language runtime: the IntelliJ platform classes it needs arrive inside the compiler jar rather than as separate artifacts, so a worker is one directory of jars and a `java` invocation. And with the dependency classpath withheld it degrades exactly as a tier should — 975 unresolved references led by `assertThat` ×72, `Test` ×50, `use` ×31, reproducing the baseline's failure mode and confirming that the classpath, not the compiler, buys the 1,119 library edges. What does **not** survive is version-pin convenience: for an arbitrary target the frontend version must follow the target's Kotlin version, resolved and cached per target, which is why this producer is a per-version worker rather than a library we link once.
+
+One consequence worth stating before it is discovered later: a target whose Kotlin version has no available frontend, or whose classpath cannot be assembled, does not fail the analysis. It falls to Tier C and its facts are tagged `name-only`. The confidence field is what makes that degradation honest instead of silent.
 
 `kotlin2cpg` stays documented as a fallback with two operational quirks worth remembering: it silently excludes any path containing a `test` segment with no override, and its `--classpath` flag rejects file paths, accepting only a directory of jars.
 
@@ -145,12 +170,16 @@ The production precedent settles it: every batch indexer surveyed calls the comp
 5. **Persistence and query** — the embedded relational store, recursive reachability, bounded traversal with a truncation marker.
 6. **Orchestration** of producers whose runtimes differ, with graceful degradation to Tier C when a producer is absent, unbuildable, or stale.
 7. **Recovery of the unresolved set per producer** — re-lexing and position-diffing where the producer records nothing, per section 7.
+8. **Target inspection and producer selection** — read the target's build declarations, resolve a classpath without executing its build, detect each language's version, choose and cache the matching producer, and record producer identity, version, and configuration with every fact.
+9. **Worker supervision** — launch a producer with a heap cap and a deadline, contain its crash to one analysis, and degrade to the next tier down on failure rather than reporting a thin graph as complete.
 
 ## 10. Revised cost
 
 Section 7 of the scope decision costed this part **Large**, driven by per-language emitters. Every one of those emitters now has an existing producer: Java in-process through JDT, Kotlin in-process through the Analysis API at the version we already pin, Go and TypeScript and Python out-of-process behind one format, breadth through an embeddable parser, and an additive bytecode tier.
 
 **Revised: Medium. No compiler frontend of our own is in scope.** What remains is what nobody supplies and always was the real work: the store, the confidence model, the unresolved-set recovery, the edge-kind derivation, the delta protocol, the queries, and the orchestration across producers with graceful degradation.
+
+Two costs the spikes did not price, both consequences of the target being somebody else's code: producer selection with classpath resolution per target, and worker supervision with heap caps, deadlines, and tier degradation on crash. Neither is large, and both were always implied by "analyze source code" meaning code we did not write. They are items 8 and 9 of section 9.
 
 ## 11. Spike results
 
@@ -165,11 +194,11 @@ All four ran on 2026-08-29. Full measurements, commands, and failures are in `do
 
 Three results change the design rather than merely confirming it:
 
-1. **Kotlin needs no frontend of ours.** The one line item that could have kept a compiler frontend in scope is closed by an artifact that already matches our pinned compiler version.
+1. **Kotlin needs no frontend of ours** — but it needs a frontend *per target language version*, resolved and cached at analysis time rather than pinned at our build time. The measurement proves the route; it does not license the deployment shape it was measured in. See section 5.1.
 2. **The unresolved set is ours to recover, not merely to record.** SCIP producers emit no trace of a failed reference, so the recovery pass — re-lex, diff positions, subtract language predeclared identifiers — is a required component of the ingest path, not an optional nicety. It also means confidence tagging cannot be inferred from the index alone.
-3. **The bytecode tier is confirmed and bounded.** It buys exactly the edges the baseline could not see, and it must run with rapid-type analysis and the JDK excluded from scope. Class-hierarchy analysis at JDK scope is not a tuning choice, it is unusable.
+3. **The bytecode tier is confirmed, bounded, and opportunistic.** It buys exactly the edges the baseline could not see, and it must run with rapid-type analysis and the JDK excluded from scope — class-hierarchy analysis at JDK scope is not a tuning choice, it is unusable. Its requirement is a successful build of the target, which puts it in the same opportunistic bracket as scip-java rather than the always-available bracket its measurement on our own build directory suggested.
 
-Carried forward as unmeasured: WALA against SootUp, delta re-analysis of a single changed class, and every measurement above at a corpus larger than 750 lines of our own Kotlin.
+Carried forward as unmeasured, and now the more important gap: every number above came from a target that was either our own source, our own compiled classes, or one well-behaved external checkout. Unmeasured are a target whose Kotlin version differs from any frontend we ship, a target whose dependency tree does not resolve, a target that does not build, a multi-language repository, a repository large enough for cold-start cost to matter, and delta re-analysis of a single changed file. Also unmeasured: WALA against SootUp.
 
 ## 12. Risk register
 
@@ -186,6 +215,10 @@ Carried forward as unmeasured: WALA against SootUp, delta re-analysis of a singl
 | Class-hierarchy analysis on the bytecode tier is unusable at JDK scope | measured at 8.2 million edges, 503 s, 11 GB. Rapid-type analysis with the JDK excluded is the only supported configuration; treat the algorithm and the scope as one setting, not two knobs |
 | SCIP moniker keys shift with producer configuration, and multi-module repositories are silently truncated | record the producer, its version, and its configuration alongside the facts; verify module coverage independently of the producer's own missing-document check, which reported nothing while 18.6% of identifiers were absent |
 | `invokedynamic` targets are lost on the bytecode tier | measured at 23 of 621 main edges, 7 of them genuine Kotlin lambda edges; the source tier covers these, which is one more reason the bytecode tier is additive only |
+| **Every spike measured a target the engine shares a JVM with; the product analyzes code it did not write** | producers run in worker processes with a heap cap and a deadline, selected per target language version. The measurements transfer as fidelity ceilings, not as deployment shapes — see section 5.1 |
+| Target source, archives, and class files are untrusted input to parsers and class readers | contain a crash to one worker and one analysis, never execute target code, and treat archive reading as a hostile-input surface. A producer that runs the target's own build (scip-java) is opt-in per project and never a default |
+| A target's language version may have no frontend we can obtain | degrade to the name-only tier and tag the facts, rather than reporting a resolved-looking graph built from a mismatched frontend |
+| Producer identity becomes part of the data's meaning | store producer, version, and configuration with every fact; the SCIP moniker drift already proves that two runs of one producer can disagree about a symbol's key |
 
 ## 13. Traps recorded so they are not re-litigated
 
