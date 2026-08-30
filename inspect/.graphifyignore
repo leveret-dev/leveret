@@ -1,5 +1,5 @@
-# Only docs/, specs/ and runtime/ are part of the corpus. Everything else —
-# build output, Gradle wrapper, tool state, dotfiles — is excluded.
+# Only docs/, specs/ and the Kotlin modules are part of the corpus. Everything
+# else - build output, Gradle wrapper, tool state, dotfiles - is excluded.
 *
 !docs/
 !docs/**
@@ -7,7 +7,11 @@
 !specs/**
 !runtime/
 !runtime/**
+!persistence/
+!persistence/**
 
 # Build output inside an allowed folder.
 runtime/build/
 runtime/build/**
+persistence/build/
+persistence/build/**
