@@ -142,6 +142,10 @@ The evidence for the inversion is already in §5 and §6, read the other way rou
 
 The differentiator is therefore narrow and real: the vendor-hosted reviewers in CodeRabbit's class have **no route to a private artifact at all**, and that is structural for them. The tools that do have a route already require what we would require. So this is not a novel capability — it is a capability we were about to design around instead of using.
 
+**And the runner is a component we build, not an environment we survey.** Owner correction, same day: successive drafts wrote "cold ephemeral runner", "cache may be absent", "toolchain may be missing", and "cold start is prohibitive" as facts about the world. They are properties of something we ship. A dependency cache keyed by lockfile identity, a persistent fact store, warm sibling-repository indexes, provisioned toolchains, and a resident process that pays compiler cold start once are all work items, not constraints. Mechanism 4 changes shape accordingly: the public-artifact index is best shipped as a verifiable data bundle the runner pulls and extends locally, not as a service of ours in the request path.
+
+Only two things genuinely cannot be placed on the runner: a credential the operator declines to provide, and the first-ever analysis of a repository, which has nothing cached by definition. Every other absence is a feature request against ourselves.
+
 Full analysis, including what it costs (fork-authored build logic on a credentialed runner is the sharp edge) and what it promotes (the warm-cache rung-1 Java configuration, never measured by anyone), is in `docs/specs/2026-08-29-code-graph-sourcing.md` §5.5.
 
 ## 11. Licensing a facts-only index: decided
