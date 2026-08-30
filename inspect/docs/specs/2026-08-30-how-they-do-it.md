@@ -8,6 +8,8 @@
 
 They are not solving the problem we thought was unsolvable. They **decompose it into four cheaper problems**, three of which need no build at all, and they decline the fourth — including the vendors who have the inputs for it sitting in hand.
 
+**Superseded in part, 2026-08-30 (later same day):** the scope rule settled on **no build of any kind, ever**, and exactly two dependency-resolution routes — public-and-pinned, or private-with-readable-source-repository. Mechanisms 1, 2, 3 and 5 below stand and are now load-bearing rather than optional. Mechanism 4 survives as a cold-start optimisation. Every statement below about sandboxed dependency installation or compilation describes what the *vendors* do, not what we do. See `docs/specs/2026-08-29-code-graph-sourcing.md` §2.
+
 **Read §10 first if reading this once.** All four mechanisms are workarounds for being vendor-hosted, and we are not: the customer installs and operates the engine, so their runner already holds the credentials, caches, and toolchain these mechanisms exist to avoid needing. Sections 2–8 remain correct about what the vendors do and why; §10 corrects which of it we actually need.
 
 The four mechanisms, each verified against a primary source:
