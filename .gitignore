@@ -1,3 +1,14 @@
 node_modules/
 dist/
 .DS_Store
+
+# ── Knowledge graphs ─────────────────────────────────────────────────────────
+# Graphify rules ported from pfBlockerNG alongside scripts/agent/. The graph
+# itself is committed so a fresh clone can query it without a rebuild;
+# everything else in graphify-out/ is regenerated locally.
+*.graphify-bak
+graphify-out/*
+!graphify-out/graph.json
+!graphify-out/memory/
+
+# CodeGraph's index is per-machine; .codegraph/ carries its own ignore file.
