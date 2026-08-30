@@ -52,8 +52,8 @@ if [ -n "$_GFY_COMMONDIR" ] && [ "$_GFY_GITDIR" != "$_GFY_COMMONDIR" ]; then
     exit 0
 fi
 # Detect the correct Python interpreter (handles uv tool, pipx, venv, system installs).
-# _PINNED was recorded at hook-install time; tried first so the hook works even
-# when the graphify launcher is not on PATH (common in GUI clients and CI).
+# The committed hook leaves _PINNED empty so it stays portable; runtime probes
+# below locate each machine's Graphify environment.
 #
 # Probes check availability with importlib.util.find_spec instead of importing
 # the package: a probe that imports graphify wholesale executes the full package
@@ -64,7 +64,7 @@ fi
 # fails loudly in the log if the package is broken under that interpreter.
 _GFY_PROBE="import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('graphify') else 1)"
 GRAPHIFY_PYTHON=""
-_PINNED='/Users/andre/.local/share/uv/tools/graphifyy/bin/python3'
+_PINNED=''
 if [ -n "$_PINNED" ] && [ -x "$_PINNED" ] && "$_PINNED" -c "$_GFY_PROBE" 2>/dev/null; then
     GRAPHIFY_PYTHON="$_PINNED"
 fi
