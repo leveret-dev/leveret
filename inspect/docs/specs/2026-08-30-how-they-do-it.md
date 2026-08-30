@@ -8,6 +8,8 @@
 
 They are not solving the problem we thought was unsolvable. They **decompose it into four cheaper problems**, three of which need no build at all, and they decline the fourth — including the vendors who have the inputs for it sitting in hand.
 
+**Read §10 first if reading this once.** All four mechanisms are workarounds for being vendor-hosted, and we are not: the customer installs and operates the engine, so their runner already holds the credentials, caches, and toolchain these mechanisms exist to avoid needing. Sections 2–8 remain correct about what the vendors do and why; §10 corrects which of it we actually need.
+
 The four mechanisms, each verified against a primary source:
 
 | # | Mechanism | Who ships it | What it replaces |
@@ -112,7 +114,24 @@ CodeRabbit is the proof from the vendor side: it reaches L8's *inputs* (it insta
 5. **Rung numbering is now ambiguous** between the execution ladder (rungs 1–3, §5.3) and the question-cost levels (L1–L9). The execution ladder keeps "rung"; question cost uses "level".
 6. **The rung-1 Java number stays the most valuable unmeasured quantity**, and §2 explains why nobody else has published it: on Maven, everyone either builds or shells out to Maven, so the declarations-plus-cache path is genuinely unexplored territory rather than a known-bad option.
 
-## 10. Licensing a facts-only index: decided
+## 10. The mechanism we already had and did not price: the runner is theirs
+
+Owner observation, 2026-08-30, and it reorders this whole document: **all four mechanisms above are workarounds for a constraint we do not have.** Every vendor in §1 is vendor-hosted for its primary path, so each had to invent a way to avoid needing the customer's environment. We ship an engine the customer installs and operates. Their runner already contains what those mechanisms substitute for.
+
+| Mechanism above | What it substitutes for | Still needed on a customer-operated runner? |
+|---|---|---|
+| 1. Trust the lockfile as the closure | resolving against a registry we cannot reach | **partly** — the lockfile is still the cheapest and most reliable read, and it works cold |
+| 2. Curated library API models | a type checker over dependency code | **yes, independently** — it is cheaper than resolution even when resolution is available, and it is how rules stay silent honestly |
+| 3. Syntactic cross-file resolution | a compiler frontend | **yes** — it is the floor, and the floor must always work |
+| 4. Central public-artifact index | fetching and indexing dependencies per analysis | **demoted** — a cold-start optimisation, no longer the answer to private dependencies |
+
+The evidence for the inversion is already in §5 and §6, read the other way round. Endor Labs' Java scan requires a populated `.m2` and a built artifact *because it runs where the build ran*. CodeQL's `build-mode: none` shells out to Maven to resolve and documents needing private-registry credentials for accuracy — **GitHub's default Java mode works because it executes inside the customer's own Actions runner.** Snyk's CLI reachability can demand compiled bytecode for the same reason, while its SaaS path, the one that never sees the customer's environment, is the one that cannot. Their requirements are not admissions of weakness; they are the shape of a tool that runs on your machine, which is our shape.
+
+The differentiator is therefore narrow and real: the vendor-hosted reviewers in CodeRabbit's class have **no route to a private artifact at all**, and that is structural for them. The tools that do have a route already require what we would require. So this is not a novel capability — it is a capability we were about to design around instead of using.
+
+Full analysis, including what it costs (fork-authored build logic on a credentialed runner is the sharp edge) and what it promotes (the warm-cache rung-1 Java configuration, never measured by anyone), is in `docs/specs/2026-08-29-code-graph-sourcing.md` §5.5.
+
+## 11. Licensing a facts-only index: decided
 
 **Owner decision, 2026-08-30: a derived index of declarations and edges over public artifacts is licence-safe, and the risk row is narrowed to a schema constraint rather than an open legal question.** The reasoning, recorded so it is not re-litigated:
 
@@ -127,7 +146,7 @@ CodeRabbit is the proof from the vendor side: it reaches L8's *inputs* (it insta
 
 **The live constraints are operational rather than legal.** Registry terms of service govern bulk fetching — rate limits, mirroring guidance, and polite-crawler expectations at Maven Central and the npm registry are contract and etiquette, not copyright, and they bound how fast the index can be populated. Storage scale, refresh policy on new versions, and whether coverage is exhaustive or popularity-ranked remain open and are engineering decisions.
 
-## 11. Contested and unverified
+## 12. Contested and unverified
 
 - **Snyk Java reachability has two delivery paths and our slices disagreed about which is authoritative.** The SCM/SaaS import path is GA and Snyk's own reachability page states it analyses "without requiring the application to be built prior to the scan". A separate Snyk support article, reachable only via a search-engine cache (`support.snyk.io` returned HTTP 401 live and archived), states the CLI path (Early Access) requires "the app already built (compiled), and the bytecode of the app should be available". Most probable reconciliation: two paths with different requirements, the SaaS one build-free. `[UNVERIFIED — the CLI quote could not be fetched directly]`
 - Aikido's container-scanner identity (Trivy, per third-party blogs) is not confirmed in Aikido's current primary docs. `[UNVERIFIED]`
