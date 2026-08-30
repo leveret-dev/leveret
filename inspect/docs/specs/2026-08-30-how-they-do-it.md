@@ -18,6 +18,7 @@ The four mechanisms, each verified against a primary source:
 | 2 | **Curated library API models matched by signature, not resolved type** | Snyk Code, Semgrep, Aikido, CodeQL | a type checker, for the sources-and-sinks question |
 | 3 | **Syntactic cross-file name resolution** — import graph plus heuristic type inference, no compiler | Semgrep Pro / Opengrep, Snyk Code | a compiler frontend, for cross-file dataflow |
 | 4 | **Central precomputation of public artifacts once, stitched per customer** | Endor Labs, Socket, deps.dev | per-analysis fetching and indexing of dependency code |
+| 5 | **Agentic research across named sibling repositories** | CodeRabbit | cross-repository symbol resolution |
 
 Mechanism 4 is the one we had not considered at all, and it is the direct answer to the private-dependency problem's public half.
 
@@ -113,6 +114,18 @@ CodeRabbit is the proof from the vendor side: it reaches L8's *inputs* (it insta
 4. **"Resolve, don't compile" replaces the rung 1/2/3 ladder's centre of gravity** (§6). Dependency resolution without compilation is where the industry's default sits.
 5. **Rung numbering is now ambiguous** between the execution ladder (rungs 1–3, §5.3) and the question-cost levels (L1–L9). The execution ladder keeps "rung"; question cost uses "level".
 6. **The rung-1 Java number stays the most valuable unmeasured quantity**, and §2 explains why nobody else has published it: on Maven, everyone either builds or shells out to Maven, so the declarations-plus-cache path is genuinely unexplored territory rather than a known-bad option.
+
+## 9a. Mechanism 5: agentic cross-repo research, and why resolution beats it
+
+CodeRabbit's multi-repo analysis (`docs.coderabbit.ai/knowledge-base/multi-repo-analysis`, read 2026-08-30) is the fifth mechanism, and it is the clearest case in this whole survey of a vendor substituting inference for a fact they cannot obtain.
+
+**What it does.** The customer names related repositories as `org/repo`, optionally with free-text `instructions` — capped at 2,000 characters — telling the agent what the repository contains and where to focus. During a review, a research agent inspects the change, decides whether it may affect a linked repository, searches that repository, and reports cross-repository impact if it finds any. On higher plans, automatic linking "infers relationships by examining import statements, dependency manifests, API consumption, and broader architectural patterns", accumulating links "progressively... over time as it reviews more pull requests". The number of linked repositories is capped by plan.
+
+**What that tells us.** A plan-capped *count* of repositories, and discovery that accrues per review rather than existing upfront, both say the same thing: this is per-review research cost, not an index. And the auto-linking signals — imports and dependency manifests — are precisely the declarations any dependency parse already reads. They are inferring, from data that states the answer outright, a relationship they then hand to an agent to go search.
+
+**Why we do not need it.** A coordinate in the lockfile matching a coordinate an organisation repository publishes **is** the link — deterministic, available on the first review, no accumulation, no cap, no free-text hint about where to look. And the output is different in kind: resolved symbols and edges rather than an agent's reading of a sibling tree. `docs/specs/2026-08-29-code-graph-sourcing.md` work item 18 records this, along with the part their design has to confront too and ours must state explicitly — **which ref**, since a sibling repository's default branch is not the version the lockfile pins. Notably their docs handle the same problem the same way: default branch by default, with an option to point at a specific branch or pull request when the change you depend on has not merged.
+
+**Where it is genuinely better.** Nothing about resolution answers "does this change break a *contract* that is not a symbol" — a REST route, a database schema, a serialisation shape, a queue message. Their four named use cases are mostly this, and an agent reading two repositories is a reasonable answer to it where a symbol graph is not. That is orientation work (§8, consumer two), and it needs the graph to point the model at the right files rather than to replace it.
 
 ## 10. The mechanism we already had and did not price: the runner is theirs
 
