@@ -1,7 +1,7 @@
 # How Shipping Products Get Their Results Without a Build
 
 **Date:** 2026-08-30
-**Status:** Approved. Synthesis of four investigations; amends `docs/specs/2026-08-29-code-graph-sourcing.md` §5.7, §9, §10, §12.
+**Status:** Approved. Synthesis of four investigations; amends `docs/specs/2026-08-29-code-graph-sourcing.md` §5.8, §9, §10, §12.
 **Inputs:** `2026-08-30-snyk-without-build.md`, `2026-08-30-aikido-without-build.md`, `2026-08-30-reachability-without-build.md`, `2026-08-30-question-cost.md`, `2026-08-29-coderabbit-approach.md`
 
 ## 1. The answer in one line
@@ -24,7 +24,7 @@ Mechanism 4 is the one we had not considered at all, and it is the direct answer
 
 ## 2. Mechanism 1: the lockfile *is* the answer
 
-Our §5.7 treated "resolve the dependency graph" as work the product performs. Two vendors show it is work the **customer's package manager already performed and committed**.
+Our §5.8 treated "resolve the dependency graph" as work the product performs. Two vendors show it is work the **customer's package manager already performed and committed**.
 
 - Aikido parses lockfiles across ~15 ecosystems and **never re-resolves a dependency graph itself**; manifest-only inputs (no lockfile) are documented as lower-accuracy.
 - Snyk's per-ecosystem split is sharp and worth copying verbatim as a design table:
@@ -72,7 +72,7 @@ Verified as a real shipping pattern at three vendors, at three granularities:
 
 The counter-example matters equally: Sourcegraph SCIP indexing is **per-tenant**, and its own documentation says cost "scales with the depth of your dependency graph" — no cross-customer sharing. So the pattern is real but not universal, and the ones who do it built the index themselves.
 
-**Why this is the answer to §5.7's bucket three.** A public artifact is identical for every customer. Indexing `com.fasterxml.jackson.core:jackson-databind:2.17.0` once yields declarations and call edges reusable across every analysis forever. Nothing is fetched per review; nothing is compiled; the customer's private code is resolved *against* that index locally. Private artifacts stay unresolved — but the index removes the entire public half of the problem from the per-analysis critical path, and the public half is the larger half.
+**Why this is the answer to §5.8's bucket three.** A public artifact is identical for every customer. Indexing `com.fasterxml.jackson.core:jackson-databind:2.17.0` once yields declarations and call edges reusable across every analysis forever. Nothing is fetched per review; nothing is compiled; the customer's private code is resolved *against* that index locally. Private artifacts stay unresolved — but the index removes the entire public half of the problem from the per-analysis critical path, and the public half is the larger half.
 
 **What it does not solve, stated honestly.** Endor's own Java docs still require the customer to have run a successful local build (`.m2` cache populated, target artifact on disk) for full function-level reachability; the precomputation removes re-analysis of the *dependency* side, never the first-party root. When the build fails, Endor drops to dependency-level only — no call graph, no function granularity. So central precomputation is a dependency-side optimisation, not a first-party resolver.
 
@@ -144,7 +144,7 @@ The differentiator is therefore narrow and real: the vendor-hosted reviewers in 
 
 **And the runner is a component we build, not an environment we survey.** Owner correction, same day: successive drafts wrote "cold ephemeral runner", "cache may be absent", "toolchain may be missing", and "cold start is prohibitive" as facts about the world. They are properties of something we ship. A dependency cache keyed by lockfile identity, a persistent fact store, warm sibling-repository indexes, provisioned toolchains, and a resident process that pays compiler cold start once are all work items, not constraints. Mechanism 4 changes shape accordingly: the public-artifact index is best shipped as a verifiable data bundle the runner pulls and extends locally, not as a service of ours in the request path.
 
-Only two things genuinely cannot be placed on the runner: a credential the operator declines to provide, and the first-ever analysis of a repository, which has nothing cached by definition. Every other absence is a feature request against ourselves.
+Almost nothing survives that question. A cold runner is warmed as the first step of the first analysis, so it costs one-time latency and never fidelity. The single thing we cannot provision is **authority we were not granted** — an unconfigured registry, an unshared repository — and that is a reporting obligation, not a design constraint: resolve as far as authority allows, then name the host, the coordinates, the affected-reference count, and the grant that would close the gap.
 
 Full analysis, including what it costs (fork-authored build logic on a credentialed runner is the sharp edge) and what it promotes (the warm-cache rung-1 Java configuration, never measured by anyone), is in `docs/specs/2026-08-29-code-graph-sourcing.md` §5.5.
 
