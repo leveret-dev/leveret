@@ -1,0 +1,16 @@
+# Design records and agent prompts dominate many commits (most of the changed
+# lines). linguist-documentation keeps them out of the language stats while
+# leaving their diffs reviewable on GitHub (unlike linguist-generated, which
+# suppresses diffs).
+docs/** linguist-documentation
+agents/** linguist-documentation
+# Lockfiles are generated output, not authored source.
+package-lock.json linguist-generated=true
+# The tracked root graph is generated output: `graphify update` rewrites it whole, so
+# suppressing its diff is the point — linguist-generated collapses it in pull-request
+# diffs and drops it from the language stats, while merge=graphify keeps resolving
+# parallel updates through the union driver.
+graphify-out/graph.json merge=graphify linguist-generated=true
+# Records are prose reviewed in diffs, so they stay out of the language stats without
+# linguist-generated, which would suppress the diffs they exist to be read in.
+graphify-out/memory/** linguist-documentation
