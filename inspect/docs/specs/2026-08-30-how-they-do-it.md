@@ -112,10 +112,24 @@ CodeRabbit is the proof from the vendor side: it reaches L8's *inputs* (it insta
 5. **Rung numbering is now ambiguous** between the execution ladder (rungs 1–3, §5.3) and the question-cost levels (L1–L9). The execution ladder keeps "rung"; question cost uses "level".
 6. **The rung-1 Java number stays the most valuable unmeasured quantity**, and §2 explains why nobody else has published it: on Maven, everyone either builds or shells out to Maven, so the declarations-plus-cache path is genuinely unexplored territory rather than a known-bad option.
 
-## 10. Contested and unverified
+## 10. Licensing a facts-only index: decided
+
+**Owner decision, 2026-08-30: a derived index of declarations and edges over public artifacts is licence-safe, and the risk row is narrowed to a schema constraint rather than an open legal question.** The reasoning, recorded so it is not re-litigated:
+
+- **Signatures and declarations are functional facts about a published interface, not expression.** A row saying that `com.example.Client` declares `send(Request): Response` describes the work; it does not reproduce it. That distinction is the whole basis of the fact/expression line in copyright.
+- **The closest authority is directly on point and favourable.** *Google LLC v. Oracle America* (US Supreme Court, 2021) held that copying the Java SE API's declaring code was fair use, on a transformative-purpose analysis. Our use is narrower than the one upheld there: we do not reimplement the interface, we describe it, and we describe it in order to answer questions about the customer's own code.
+- **The interoperability line runs the same way.** *Sega v. Accolade* and *Sony v. Connectix* permit intermediate copying to obtain interface facts; in the EU, Software Directive 2009/24/EC excludes ideas and principles from protection and permits observation and study directed at interoperability. Reading a published artifact to learn what it declares sits inside that.
+- **Copyleft does not propagate to a fact table.** Reading a GPL or AGPL artifact to record its declared signatures neither links against it nor produces a derivative work of it in any ordinary reading. Nothing of the licensed work ships in our index.
+- **The EU database right runs in our favour, not against us.** The sui generis right protects the maker's substantial investment in a database — which describes ours.
+- **The practice is broad, old, and unlitigated.** Registry indexes, `deps.dev`, dependency graphs at the major forges, every IDE's local symbol cache, and at least two commercial reachability products (§5) all store derived facts about third-party artifacts.
+
+**What the decision does not cover, and therefore what the schema must forbid.** Doc comments are authored prose and are unambiguously expressive; method bodies and cached source or bytecode fragments are the work itself. An index holding those is a text cache with an index attached, and every argument above stops applying to it. So the constraint is structural: **the shared index has no column for a doc comment, a body, or a source fragment.** Where a reviewer needs a doc comment, read it at answer time from the artifact the analysis already holds, per-customer, and do not persist it centrally.
+
+**The live constraints are operational rather than legal.** Registry terms of service govern bulk fetching — rate limits, mirroring guidance, and polite-crawler expectations at Maven Central and the npm registry are contract and etiquette, not copyright, and they bound how fast the index can be populated. Storage scale, refresh policy on new versions, and whether coverage is exhaustive or popularity-ranked remain open and are engineering decisions.
+
+## 11. Contested and unverified
 
 - **Snyk Java reachability has two delivery paths and our slices disagreed about which is authoritative.** The SCM/SaaS import path is GA and Snyk's own reachability page states it analyses "without requiring the application to be built prior to the scan". A separate Snyk support article, reachable only via a search-engine cache (`support.snyk.io` returned HTTP 401 live and archived), states the CLI path (Early Access) requires "the app already built (compiled), and the bytecode of the app should be available". Most probable reconciliation: two paths with different requirements, the SaaS one build-free. `[UNVERIFIED — the CLI quote could not be fetched directly]`
 - Aikido's container-scanner identity (Trivy, per third-party blogs) is not confirmed in Aikido's current primary docs. `[UNVERIFIED]`
 - Endor's central call-graph index granularity and retention are described in an engineering blog, not a spec; whether it covers all package versions or a popularity-ranked subset is unstated. `[UNVERIFIED]`
 - No vendor publishes reachability-specific precision or recall. The only independent numbers found are general SAST detection figures from an academic benchmark. `[UNVERIFIED for reachability]`
-- Whether a central public-artifact index is legally and operationally viable at our scale — storage, licence terms on redistributing derived indexes, refresh policy — is unexamined.
