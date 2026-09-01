@@ -20,6 +20,7 @@ const FIXTURES: SerenaFixture[] = [
   { language: "bash", files: [{ path: "main.sh", content: "#!/bin/sh\nvalue=1\n" }] },
   { language: "yaml", files: [{ path: "config.yml", content: "value: 1\n" }] },
   { language: "json", files: [{ path: "config.json", content: '{"value":1}\n' }] },
+  { language: "html", files: [{ path: "index.html", content: "<main>fixture</main>\n" }] },
 ];
 
 const PACKAGED_SERVERS: Record<string, { directory: string; executable: string }> = {
@@ -28,6 +29,7 @@ const PACKAGED_SERVERS: Record<string, { directory: string; executable: string }
   bash: { directory: "BashLanguageServer", executable: "bash-language-server" },
   yaml: { directory: "YamlLanguageServer", executable: "yaml-language-server" },
   json: { directory: "JsonLanguageServer", executable: "vscode-json-languageserver" },
+  html: { directory: "VsCodeHtmlLanguageServer", executable: "vscode-html-language-server" },
 };
 
 export async function packagedLanguageServer(home: string, language: string): Promise<string | null> {
@@ -116,17 +118,18 @@ export function serenaBundleProblem(repo: string, env: NodeJS.ProcessEnv = proce
   return null;
 }
 
-const LANGUAGE_EXTENSIONS: Record<string, Set<string>> = {
-  typescript: new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]),
-  python: new Set([".py", ".pyi"]),
-  php: new Set([".php", ".phtml"]),
-  bash: new Set([".sh", ".bash"]),
-  yaml: new Set([".yaml", ".yml"]),
-  json: new Set([".json", ".jsonc"]),
-  cpp: new Set([".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".m", ".mm"]),
-  go: new Set([".go"]),
-  rust: new Set([".rs"]),
-  java: new Set([".java"]),
+const LANGUAGE_EXTENSIONS: Record<string, readonly string[]> = {
+  typescript: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"],
+  python: [".py", ".pyi"],
+  php: [".php", ".phtml"],
+  bash: [".sh", ".bash"],
+  yaml: [".yaml", ".yml"],
+  json: [".json", ".jsonc"],
+  html: [".html", ".htm"],
+  cpp: [".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".m", ".mm"],
+  go: [".go"],
+  rust: [".rs"],
+  java: [".java"],
 };
 
 const SKIP_DIRS = new Set([".git", ".serena", "node_modules", "vendor", "dist", "build", "target", ".venv"]);
@@ -153,7 +156,7 @@ async function detectedLanguages(repo: string, staged: Set<string>): Promise<str
   const extensions = await sourceExtensions(repo);
   const found = new Set<string>();
   for (const language of staged) {
-    if ([...LANGUAGE_EXTENSIONS[language] ?? []].some((extension) => extensions.has(extension))) found.add(language);
+    if ((LANGUAGE_EXTENSIONS[language] ?? []).some((extension) => extensions.has(extension))) found.add(language);
   }
   if (staged.has("php") && existsSync(join(repo, "composer.json")) && extensions.has(".inc")) {
     // .inc is generic; only a PHP project opts it into Intelephense.
@@ -179,7 +182,7 @@ async function representativeSourceFiles(repo: string, languages: string[]): Pro
       if (!entry.isFile()) continue;
       const extension = extname(entry.name).toLowerCase();
       for (const language of wanted) {
-        if (seeds[language] || !LANGUAGE_EXTENSIONS[language]?.has(extension)) continue;
+        if (seeds[language] || !LANGUAGE_EXTENSIONS[language]?.includes(extension)) continue;
         seeds[language] = relative(repo, join(dir, entry.name));
       }
     }

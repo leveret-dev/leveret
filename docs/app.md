@@ -48,10 +48,12 @@ node dist/runner/prefetch-serena.js --bundle /opt/leveret/serena-bundle
 ```
 
 The initial self-contained bundle covers TypeScript/JavaScript, PHP (including
-project-scoped `.inc`), Bash, YAML, and JSON. The manifest pins each absolute
-server executable under `LEVERET_SERENA_BUNDLE`; prefetch fails instead of
-advertising a language backed only by a host toolchain or uvx cache. Python,
-C/C++, Go, Rust, and Java remain explicitly unavailable until packaged.
+project-scoped `.inc`), Bash, YAML, JSON, and HTML. HTML is pre-staged from
+`vscode-langservers-extracted`, not installed as a Leveret runtime dependency.
+The manifest pins each absolute server executable under `LEVERET_SERENA_BUNDLE`;
+prefetch fails instead of advertising a language backed only by a host toolchain
+or uvx cache. Python, C/C++, Go, Rust, and Java remain explicitly unavailable
+until packaged.
 
 Install `codegraph` and `graphify` on the App host too. By default autonomous
 reviews set `LEVERET_REQUIRE_INDEXES=1` and fail before model work unless:

@@ -294,9 +294,11 @@ and anonymous usage reporting are disabled. The Pi adapter records durable index
 identity, warmup seeds, and tool metrics.
 
 The initial fixed-path bundle is intentionally limited to
-TypeScript/JavaScript, PHP, Bash, YAML, and JSON; its manifest records absolute
-packaged executables. Languages that still depend on uvx or a host toolchain are
-reported unavailable rather than falsely labeled staged.
+TypeScript/JavaScript, PHP, Bash, YAML, JSON, and HTML; its manifest records
+absolute packaged executables. HTML is pre-staged from
+`vscode-langservers-extracted`, not installed as a Leveret runtime dependency.
+Languages that still depend on uvx or a host toolchain are reported unavailable
+rather than falsely labeled staged.
 
 The autonomous Pi surface can read trusted rulings but cannot promote its own
 verdicts into memory. Its verdicts remain in the durable run artifact; versioned
