@@ -1,5 +1,5 @@
 import { createAgentSession, ModelRuntime, SessionManager, SettingsManager, type ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -836,6 +836,7 @@ describe("Serena headless and offline staging", () => {
       "bash",
       "yaml",
       "json",
+      "html",
     ]);
     for (const fixture of fixtures) {
       expect(fixture.files.length).toBeGreaterThan(0);
@@ -919,6 +920,26 @@ describe("Serena headless and offline staging", () => {
     }
   });
 
+  it("activates staged HTML navigation when the checkout contains HTML", async () => {
+    const root = mkdtempSync(join(tmpdir(), "leveret-serena-html-"));
+    const repo = join(root, "repo");
+    const home = join(root, "home");
+    const htmlLsp = join(home, "vscode-html-language-server");
+    mkdirSync(repo);
+    mkdirSync(home);
+    writeFileSync(htmlLsp, "fixture\n");
+    writeFileSync(join(home, "leveret-lsp-manifest.json"), `${JSON.stringify({ languages: ["html"], ls_paths: { html: htmlLsp } })}\n`);
+    writeFileSync(join(repo, "index.html"), "<main>fixture</main>\n");
+    try {
+      const shadow = await createSerenaShadowProject(repo);
+      expect(await prepareSerenaProject(repo, shadow, home)).toEqual(["html"]);
+      expect(readFileSync(join(shadow, ".serena", "project.yml"), "utf8")).toContain(`ls_path: ${htmlLsp}`);
+      rmSync(shadow, { recursive: true, force: true });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("stages fixtures into a fixed Serena bundle without retaining project registrations", async () => {
     const { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
@@ -936,6 +957,22 @@ describe("Serena headless and offline staging", () => {
       const config = readFileSync(join(bundle, "serena_config.yml"), "utf8");
       expect(config).toContain("web_dashboard: false");
       expect(config).toMatch(/projects:\s*\[\]/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("records the pre-staged vscode-langservers-extracted HTML executable", async () => {
+    const root = mkdtempSync(join(tmpdir(), "leveret-prefetch-html-"));
+    const bundle = join(root, "serena-bundle");
+    const fake = join(root, "serena-fake");
+    writeFileSync(fake, '#!/bin/sh\nmkdir -p "$SERENA_HOME/language_servers/static/VsCodeHtmlLanguageServer/vscode-langservers-html-4.10.0/node_modules/.bin"\n: > "$SERENA_HOME/language_servers/static/VsCodeHtmlLanguageServer/vscode-langservers-html-4.10.0/node_modules/.bin/vscode-html-language-server"\n');
+    chmodSync(fake, 0o755);
+    try {
+      await prefetchSerena({ bundle, languages: ["html"], serenaBin: fake });
+      const manifest = JSON.parse(readFileSync(join(bundle, "leveret-lsp-manifest.json"), "utf8"));
+      expect(manifest.languages).toEqual(["html"]);
+      expect(manifest.ls_paths.html).toContain("vscode-html-language-server");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
