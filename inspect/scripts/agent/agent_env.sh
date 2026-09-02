@@ -1,13 +1,31 @@
 #!/bin/sh
-# agent_env.sh -- shared environment helpers for the agent-ops scripts in this directory.
+# agent_env.sh -- shared environment probe for the agent-ops scripts in this directory.
 #
-# AGENT-MAINTAINED: these scripts encode environment mechanics that drift (tool
-# installs, managed sessions, worktree layouts). When an environment change breaks
-# one, fix the script in the same session and land it through the normal flow --
-# never work around it silently in a transcript.
+# AGENT-MAINTAINED: these scripts encode environment mechanics that drift (managed cloud
+# sessions, proxies, tool availability). When an environment change breaks one, the agent
+# fixes the script in the same session and lands it via the normal flow -- never works
+# around it silently in a transcript.
 #
-# Exit codes reserved across scripts/agent/: 0 success, 1 check failed,
-# 2 usage/precondition, 4 required tool missing.
+# Portability contract:
+#   - All GitHub/network access goes through the `gh` and `git` CLIs, never raw endpoints:
+#     managed environments route git/ssh/https through a localhost proxy that only those
+#     CLIs inherit.
+#   - `gh` absent (some managed environments): exit 3 with a GH-UNAVAILABLE message; the
+#     caller falls back to the session's mcp__github__* tools with wakeup-paced checks
+#     (CLAUDE.md "No orphaned waits" section 4). MCP tools are harness tools, unreachable
+#     from inside a shell, so the fallback CANNOT live in these scripts.
+#   - Any other required tool missing: exit 4 with TOOL-MISSING.
+#
+# Exit codes reserved across scripts/agent/: 0 verdict/success, 1 check failed,
+# 2 usage/precondition, 3 gh unavailable (use MCP fallback), 4 tool missing.
+
+require_gh() {
+	if ! command -v gh >/dev/null 2>&1; then
+		echo "GH-UNAVAILABLE: gh CLI not found (managed environment?)." >&2
+		echo "Fall back to mcp__github__* tools with wakeup-paced checks (CLAUDE.md 'No orphaned waits' #4)." >&2
+		exit 3
+	fi
+}
 
 require_tool() {
 	if ! command -v "$1" >/dev/null 2>&1; then
@@ -16,20 +34,52 @@ require_tool() {
 	fi
 }
 
-# An optional tool: absent is fine and reported, but present-and-broken is not.
-# Returns 0 when the caller should run it, 1 when it is not installed.
+# Run one gh request within both its per-call cap and the wait's remaining deadline.
+gh_bounded() {
+	gh_now=$(date +%s)
+	gh_remaining=$((deadline - gh_now))
+	[ "$gh_remaining" -gt 0 ] || return 124
+	[ "$gh_remaining" -le 30 ] || gh_remaining=30
+	gh_stderr=$(mktemp "${TMPDIR:-/tmp}/agent-gh-stderr.XXXXXX") || return 1
+	if [ "$gh_remaining" -gt 1 ]; then
+		gh_soft=$((gh_remaining - 1))
+		{ timeout -k 1 "$gh_soft" gh "$@"; } 2>"$gh_stderr"
+		gh_status=$?
+	else
+		{ timeout -s KILL "$gh_remaining" gh "$@"; } 2>"$gh_stderr"
+		gh_status=$?
+	fi
+	if [ "$gh_status" -ne 0 ]; then
+		cat "$gh_stderr"
+	fi
+	rm -f "$gh_stderr"
+	return "$gh_status"
+}
+
+# Pause no longer than the wait's remaining wall-clock budget.
+sleep_bounded() {
+	sleep_now=$(date +%s)
+	sleep_remaining=$((deadline - sleep_now))
+	[ "$sleep_remaining" -gt 0 ] || return 1
+	sleep_delay=$1
+	[ "$sleep_delay" -le "$sleep_remaining" ] || sleep_delay=$sleep_remaining
+	[ "$sleep_delay" -gt 0 ] || return 0
+	sleep "$sleep_delay"
+}
+
+# ADR-47: under a git hook, exported GIT_DIR/GIT_INDEX_FILE would aim every git op
+# at the hook's repo instead of the --worktree the caller named. Git-touching scripts
+# call this first. $1 = the calling script's $0 (to locate the shared lib).
+scrub_git_env() {
+	# shellcheck source=scripts/lib/git-env-scrub.sh
+	. "$(dirname "$1")/../lib/git-env-scrub.sh"
+	pfb_scrub_git_env
+}
+
 have_tool() {
 	command -v "$1" >/dev/null 2>&1
 }
 
-# Resolve one worktree argument to an absolute, symlink-free repository root.
-#
-# Never trust the process's working directory for this. A tool that infers its
-# root from cwd fails outright when the cwd is a worktree that has since been
-# removed -- the observed failure mode being Graphify's "current working directory
-# no longer exists". CDPATH is cleared because a stray CDPATH entry can silently
-# redirect `cd`, and `pwd -P` resolves symlinks so two spellings of one root do
-# not produce two indexes.
 resolve_root() {
 	if ! _root=$(git -C "${1:-.}" rev-parse --show-toplevel 2>/dev/null); then
 		echo "resolve_root: '${1:-.}' is not a git worktree" >&2
@@ -40,19 +90,4 @@ resolve_root() {
 		return 2
 	fi
 	printf '%s\n' "$_root"
-}
-
-# Drop inherited git environment before touching git.
-#
-# Why a FUNCTION and not a bare top-level unset: a subprocess cannot unset vars in
-# the PARENT shell. Sourcing a file that calls `unset` at top level does work for a
-# sourced file, but collecting it into a function the caller invokes means the unset
-# runs in the caller's own shell context -- the only place it can affect the
-# caller's git operations.
-#
-# Under a git hook these vars point at the live repo's objects and index, so any git
-# command in a child process operates on the REAL repo instead of the worktree the
-# caller named. One call per entry point eliminates the class.
-scrub_git_env() {
-	unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 }

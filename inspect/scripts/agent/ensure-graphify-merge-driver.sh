@@ -1,15 +1,5 @@
 #!/bin/sh
 # Install Graphify and register its merge driver in the requested checkout.
-#
-# For CI. Any job that may merge, rebase, cherry-pick or otherwise combine commits
-# has to run this BEFORE the operation: .gitattributes marks
-# graphify-out/graph.json merge=graphify, and a runner without that driver
-# registered falls back to a line-based text merge on generated JSON, which
-# produces a conflicted or structurally invalid graph instead of a union.
-#
-# Call it as the step right after checkout and uv setup:
-#     - name: Install the Graphify merge driver
-#       run: sh scripts/agent/ensure-graphify-merge-driver.sh .
 
 usage() {
 	echo "usage: ensure-graphify-merge-driver.sh [REPOSITORY]" >&2
@@ -19,23 +9,26 @@ usage() {
 main() {
 	# shellcheck source=scripts/agent/agent_env.sh
 	. "$(dirname "$0")/agent_env.sh"
-	scrub_git_env
+	scrub_git_env "$0"
 	[ "$#" -le 1 ] || usage
 	require_tool git
-	require_tool uv
 
-	root=$(resolve_root "${1:-.}") || exit $?
-
-	uv tool install --upgrade 'graphifyy>=0.9.51' || {
-		echo "ensure-graphify-merge-driver.sh: Graphify installation failed" >&2
-		exit 1
+	target=${1:-.}
+	root=$(git -C "$target" rev-parse --show-toplevel 2>/dev/null) || {
+		echo "ensure-graphify-merge-driver.sh: '$target' is not a git worktree" >&2
+		exit 2
+	}
+	root=$(cd "$root" && pwd -P) || {
+		echo "ensure-graphify-merge-driver.sh: cannot resolve Git root '$root'" >&2
+		exit 2
 	}
 
-	# `graphify hook install` registers the merge driver and writes its own hooks
-	# into .git/hooks/. Those are inert in a clone that has opted into the tracked
-	# hooks via scripts/setup-hooks.sh, because core.hooksPath overrides
-	# .git/hooks entirely; the driver registration is what this script is for.
-	(cd "$root" && graphify hook install) || {
+	# The hook rebuilds the graph, so the shared installer applies the override first.
+	graphify_bin=$(sh "$(dirname "$0")/ensure-graphify.sh" "$root") || {
+		echo "ensure-graphify-merge-driver.sh: Graphify setup failed for '$root'" >&2
+		exit 1
+	}
+	(cd "$root" && "$graphify_bin" hook install) || {
 		echo "ensure-graphify-merge-driver.sh: Graphify hook installation failed in '$root'" >&2
 		exit 1
 	}
