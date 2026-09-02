@@ -20,6 +20,7 @@ data class ClasspathAnalysis(
     val mainClasspath: List<String>,
     val testClasspath: List<String>,
     val testSourceRoots: List<String>,
+    val missClasses: List<String> = emptyList(),
 ) {
     fun write(): String = buildString {
         appendLine("tuple.modelBuilder=${tuple.modelBuilder}")
@@ -36,6 +37,8 @@ data class ClasspathAnalysis(
         testClasspath.forEach { appendLine(it) }
         appendLine("testRoots:")
         testSourceRoots.forEach { appendLine(it) }
+        appendLine("miss:")
+        missClasses.forEach { appendLine(it) }
     }
 
     companion object {
@@ -51,6 +54,7 @@ data class ClasspathAnalysis(
             val main = mutableListOf<String>()
             val test = mutableListOf<String>()
             val roots = mutableListOf<String>()
+            val misses = mutableListOf<String>()
             var section = ""
             for (raw in text.split('\n')) {
                 val line = raw.trimEnd()
@@ -58,9 +62,11 @@ data class ClasspathAnalysis(
                     line == "main:" -> section = "main"
                     line == "test:" -> section = "test"
                     line == "testRoots:" -> section = "roots"
+                    line == "miss:" -> section = "miss"
                     section == "main" && line.isNotEmpty() -> main += line
                     section == "test" && line.isNotEmpty() -> test += line
                     section == "roots" && line.isNotEmpty() -> roots += line
+                    section == "miss" && line.isNotEmpty() -> misses += line
                     line.startsWith("tuple.modelBuilder=") -> modelBuilder = line.substringAfter("=")
                     line.startsWith("tuple.resolver=") -> resolver = line.substringAfter("=")
                     line.startsWith("profiles=") ->
@@ -87,9 +93,12 @@ data class ClasspathAnalysis(
                 mainClasspath = main,
                 testClasspath = test,
                 testSourceRoots = roots,
+                missClasses = misses,
             )
         }
     }
 }
 
 class UnboundedVersionRangeException(message: String) : RuntimeException(message)
+
+class MissingLockedArtifactException(message: String) : RuntimeException(message)

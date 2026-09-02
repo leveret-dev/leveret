@@ -240,21 +240,25 @@ object WorkerMain {
     @JvmStatic
     fun main(args: Array<String>) {
         var pom: Path? = null
+        var project: Path? = null
         var localRepo: Path? = null
         var output: Path? = null
         var index = 0
         while (index < args.size) {
             when (args[index]) {
                 "--pom" -> pom = Path.of(args[++index])
+                "--project" -> project = Path.of(args[++index])
                 "--local-repo" -> localRepo = Path.of(args[++index])
                 "--output" -> output = Path.of(args[++index])
             }
             index++
         }
-        val analysis = CacheOnlyClasspathWorker.analyze(
-            requireNotNull(pom) { "--pom is required" },
-            requireNotNull(localRepo) { "--local-repo is required" },
-        )
+        val repo = requireNotNull(localRepo) { "--local-repo is required" }
+        val analysis = when {
+            pom != null -> CacheOnlyClasspathWorker.analyze(pom, repo)
+            project != null -> GradleLockfileClasspathWorker.analyze(project, repo)
+            else -> error("--pom or --project is required")
+        }
         Files.writeString(requireNotNull(output) { "--output is required" }, analysis.write())
     }
 }
