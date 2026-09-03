@@ -39,7 +39,13 @@ main() {
 	patch_graphify=$root/scripts/agent/patch-graphify.sh
 	[ -f "$patch_graphify" ] || patch_graphify=$(dirname "$0")/patch-graphify.sh
 
-	uv tool install --upgrade 'graphifyy>=0.9.51' 1>&2 ||
+	# graspologic_native supplies the Leiden binding cluster.py calls first. The
+	# `leiden` extra installs graspologic, whose metadata stops below Python 3.13, so
+	# from 3.13 the extra installs nothing and clustering silently degrades to
+	# NetworkX Louvain. Naming the native abi3 wheel keeps Leiden on every
+	# interpreter. Drop this once Graphify-Labs/graphify#3310 ships and use
+	# `graphifyy[leiden]`.
+	uv tool install --upgrade --with 'graspologic-native>=1.2.1,<2.0.0' 'graphifyy>=0.9.51' 1>&2 ||
 		fail 'Graphify installation failed'
 	graphify_bin=$(resolve_graphify_launcher) ||
 		fail 'cannot resolve the installed Graphify launcher'
