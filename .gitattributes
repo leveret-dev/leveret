@@ -4,6 +4,10 @@
 # suppresses diffs).
 docs/** linguist-documentation
 agents/** linguist-documentation
+# Inspect's specifications and design records: same reasoning, and the patterns above are
+# anchored at the repository root, so the nested paths need their own.
+inspect/docs/** linguist-documentation
+inspect/specs/** linguist-documentation
 # Lockfiles are generated output, not authored source.
 package-lock.json linguist-generated=true
 # The tracked root graph is generated output: `graphify update` rewrites it whole, so

@@ -28,6 +28,12 @@ leveret replicates each pillar with local, inspectable pieces:
 | Verification filter | three-layer filter pipeline (below) ending in a verification agent |
 | Memory | in-repo, versioned finding-verdict store + `remember` tool |
 
+## Repository and component boundary
+
+`leveret-dev/leveret` is the canonical monorepo. This document describes the TypeScript
+review engine; the Kotlin/JVM component lives under `inspect/`. Its scope and the
+repository boundary are recorded in [docs/monorepo.md](docs/monorepo.md).
+
 ## Evidence so far (2026-08-20, v0.1 probe)
 
 Scanning a real 15-commit range of pfBlockerNG produced 27 findings, all shellcheck,

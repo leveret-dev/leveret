@@ -1,3 +1,0 @@
-pre-start = "sh scripts/agent/init-worktree-tools.sh ."
-post-merge = "git worktree prune"
-post-remove = "git worktree prune"

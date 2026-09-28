@@ -1,0 +1,3 @@
+# The JVM tree is not part of the npm package. A nested .npmignore applies to this
+# subtree only, so the root's .gitignore-driven packing rules stay unchanged.
+*

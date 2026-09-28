@@ -6,18 +6,6 @@
 build/
 *.class
 
-# ── Knowledge graphs ─────────────────────────────────────────────────────────
-# Graphify rules copied from pfBlockerNG. The graph itself is committed so a
-# fresh clone can query it without a rebuild; everything else in graphify-out/
-# is regenerated locally.
-*.graphify-bak
-graphify-out/*
-!graphify-out/graph.json
-# Records accumulate across tickets, so they outlive the worktree that wrote them. The
-# re-include names the DIRECTORY on purpose — contract pinned by test_cross_agent_tooling.
-!graphify-out/memory/
-
-# CodeGraph's index is per-machine; .codegraph/ carries its own ignore file.
-
-# ── OS noise ─────────────────────────────────────────────────────────────────
-.DS_Store
+# The repository-root indexes are canonical; nested indexes are local scratch.
+/graphify-out/
+/.codegraph/
