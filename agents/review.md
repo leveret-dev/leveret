@@ -26,6 +26,13 @@ be verified and will be dropped.
    `leveret.ast_search` and `git grep`. Cross-file breakage in files the diff never
    touches is the class a diff-only review structurally misses; state explicitly
    which changed symbols you traced and what you found.
+   For a supported Java method, use `leveret_java_references` with a position
+   inside the exact declaration name token and the appropriate base/head side
+   before inferring callers structurally. Follow continuation cursors and cite
+   the returned evidence ID. Distinguish checked calls from method-reference
+   expressions; unresolved sites and skipped roots limit coverage, and an empty
+   checked list is never proof of safety. When the capability is unavailable
+   or fails, say so rather than labeling a text or AST match checked.
 5. The work item's stated intent (issue, spec, PR description) when provided.
 
 ## Repo rulings (accumulated case law — apply them)

@@ -11,6 +11,7 @@ import { memoryList } from "../memory.js";
 import { scan } from "../scan.js";
 import { ENGINES } from "../engines/registry.js";
 import type { SerenaBridge } from "./serena.js";
+import { InspectJavaError, type InspectJavaBridge } from "../inspect-java.js";
 import { z } from "zod";
 import { pathIsInside } from "../path.js";
 
@@ -144,6 +145,7 @@ export interface PiToolsOptions {
   graphify?: { bin: string; graphPath: string; indexedNodes?: number; indexedEdges?: number };
   sandboxed: boolean;
   serena?: SerenaBridge;
+  inspectJava?: InspectJavaBridge;
   hostSkills?: Array<{ name: string; filePath: string; baseDir: string }>;
   profilePath: string;
   rulesRoot: string;
@@ -162,6 +164,16 @@ export interface PiToolsBundle {
     lsp: boolean;
     probe: boolean;
     graphify: boolean;
+    java_references:
+      | { availability: "unavailable"; reason: string }
+      | {
+          availability: "available";
+          base: { analysis_id: string; revision: string; coverage: InspectJavaBridge["summaries"]["base"]["coverage"] };
+          head: { analysis_id: string; revision: string; coverage: InspectJavaBridge["summaries"]["head"]["coverage"] };
+          configuration_sha256: string;
+          distribution_sha256: string;
+          jdk_sha256: string;
+        };
     serena_indexed_languages?: string[];
     serena_seed_files?: Record<string, string>;
     graphify_indexed_nodes?: number;
@@ -361,6 +373,44 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
     }),
   ];
 
+  if (options.inspectJava) {
+    const bridge = options.inspectJava;
+    tools.push(defineTool({
+      name: "leveret_java_references",
+      label: "Checked Java method references",
+      description: "Query checked references to one exact Java method outside the pinned diff. Returns independent unresolved coverage and bounded continuation; a method-reference expression is not a call.",
+      parameters: Type.Object({
+        side: Type.Union([Type.Literal("base"), Type.Literal("head")]),
+        target: Type.Object({
+          path: Type.String(),
+          position: Type.Object({
+            line: Type.Integer({ minimum: 1 }),
+            column: Type.Integer({ minimum: 0 }),
+          }),
+        }),
+        byteBudget: Type.Optional(Type.Integer({ minimum: 1, maximum: 262144 })),
+        cursor: Type.Optional(Type.String()),
+      }),
+      async execute(_id, params) {
+        const summary = bridge.summaries[params.side];
+        try {
+          const result = await bridge.references({
+            analysisId: summary.analysisId, configurationSha256: summary.configurationSha256,
+            manifest: options.evidence.manifest, side: params.side, target: params.target,
+            ...(params.byteBudget !== undefined ? { byteBudget: params.byteBudget } : {}),
+            ...(params.cursor !== undefined ? { cursor: params.cursor } : {}),
+          });
+          return json({ ok: true, result });
+        } catch (error) {
+          const failure = error instanceof InspectJavaError
+            ? { code: error.code, message: error.message, ...(error.requiredBytes !== undefined ? { requiredBytes: error.requiredBytes } : {}) }
+            : { code: "worker-failed", message: "Java reference query failed" };
+          return json({ ok: false, error: failure }, { nonzeroExit: true });
+        }
+      },
+    }));
+  }
+
   if (options.graphLive) {
     tools.push(
       defineTool({
@@ -485,7 +535,12 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
 
   const annotatedTools = tools.map((tool) => annotateEvidence(tool, options.onToolOutcome));
   const toolSchemaSha256 = createHash("sha256").update(JSON.stringify(annotatedTools.map((tool) => ({ name: tool.name, description: tool.description, parameters: tool.parameters })))).digest("hex");
-  const toolSourceSha256 = createHash("sha256").update(await readFile(new URL(import.meta.url))).digest("hex");
+  const sourceHash = createHash("sha256");
+  const extension = import.meta.url.endsWith(".ts") ? ".ts" : ".js";
+  for (const source of [new URL(import.meta.url), new URL(`../inspect-java${extension}`, import.meta.url), new URL(`../inspect-java-contract${extension}`, import.meta.url)]) {
+    sourceHash.update(await readFile(source));
+  }
+  const toolSourceSha256 = sourceHash.digest("hex");
   return {
     tools: annotatedTools,
     capabilities: {
@@ -493,6 +548,16 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
       lsp: Boolean(options.serena?.tools.length),
       graphify: Boolean(options.graphify),
       probe: options.sandboxed,
+      java_references: options.inspectJava
+        ? {
+            availability: "available",
+            base: { analysis_id: options.inspectJava.summaries.base.analysisId, revision: options.inspectJava.summaries.base.revision, coverage: options.inspectJava.summaries.base.coverage },
+            head: { analysis_id: options.inspectJava.summaries.head.analysisId, revision: options.inspectJava.summaries.head.revision, coverage: options.inspectJava.summaries.head.coverage },
+            configuration_sha256: options.inspectJava.identity.configSha256,
+            distribution_sha256: options.inspectJava.identity.distributionSha256,
+            jdk_sha256: options.inspectJava.identity.jdkSha256,
+          } as const
+        : { availability: "unavailable", reason: "trusted Java configuration not supplied" } as const,
       ...(options.serena?.version ? { serena_version: options.serena.version } : {}),
       ...(options.serena?.indexing ? {
         serena_indexed_languages: options.serena.indexing.languages,
@@ -506,7 +571,8 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
       tool_inventory: annotatedTools.map((tool) => tool.name).sort(),
     },
     close: async () => {
-      await options.serena?.close();
+      try { await options.serena?.close(); }
+      finally { await options.inspectJava?.close(); }
     },
   };
 }

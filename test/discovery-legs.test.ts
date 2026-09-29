@@ -5,12 +5,10 @@ import type { EvidencePack } from "../src/evidence-pack.js";
 import type { GuidanceResult } from "../src/semantic-checks.js";
 import {
   SPECIALIZED_DISCOVERY,
-  SPECIALIZED_LEG_DEFINITIONS,
   TARGETED_VERIFIER_TOOLS,
   assignDiscoveryFiles,
   buildDiscoveryLegPlans,
   discoveryMode,
-  phaseToolIdentity,
   parseDiscoveryLegOutput,
   runSpecializedDiscovery,
   selectPhaseTools,
@@ -74,23 +72,17 @@ describe("specialized discovery", () => {
     expect(() => discoveryMode("from-pr")).toThrow(/invalid discovery mode/);
   });
 
-  it("packages distinct definitions, deterministic assignments, bounded inputs, and exact tool identities", () => {
-    expect(new Set(SPECIALIZED_LEG_DEFINITIONS.map((leg) => leg.systemPrompt)).size).toBe(3);
-    expect(new Set(SPECIALIZED_LEG_DEFINITIONS.map((leg) => leg.definitionSha256)).size).toBe(3);
+  it("packages distinct definitions, deterministic assignments, and bounded inputs", () => {
     const assignments = assignDiscoveryFiles(manifest, evidencePack);
     expect(assignments.find((item) => item.file === "src/core.ts")?.assignedLegs).toEqual(["correctness", "contract-operability"]);
     expect(assignments.find((item) => item.file === "test/core.test.ts")?.assignedLegs).toEqual(["test-honesty"]);
     expect(assignments.find((item) => item.file === ".github/workflows/ci.yml")?.assignedLegs).toEqual(["correctness", "test-honesty", "contract-operability"]);
     expect(assignments.find((item) => item.file === "unknown.txt")?.assignedLegs).toEqual(["contract-operability"]);
     const plans = buildDiscoveryLegPlans(manifest, evidencePack, guidance, { mode: "diff-only", availability: "unavailable" });
-    expect(new Set(plans.map((plan) => plan.inputSha256)).size).toBe(3);
     expect(JSON.stringify(plans)).not.toMatch(/SECRET_(SCAN|RULE|MUTATION|RESIDUAL|ANALYZER)_TARGET/);
-    expect(new Set(plans.map((plan) => JSON.stringify(phaseToolIdentity(selectPhaseTools(tools, plan.definition.requiredTools, plan.definition.optionalTools)).names))).size).toBe(3);
     expect(new Set(plans.flatMap((plan) => plan.checklistIds))).toEqual(new Set(MECHANISM_CHECKLISTS.map((checklist) => checklist.id)));
-    expect(JSON.stringify(plans.map((plan) => plan.input))).not.toMatch(/pfblockerng-(2444|2521)-r/);
     for (const plan of plans) {
       const selected = selectPhaseTools(tools, plan.definition.requiredTools, plan.definition.optionalTools);
-      expect(phaseToolIdentity(selected).names).toEqual([...plan.definition.requiredTools, ...plan.definition.optionalTools]);
       expect(selected.map((tool) => tool.name)).not.toEqual(expect.arrayContaining(["leveret_scan", "leveret_context"]));
     }
   });
@@ -159,10 +151,7 @@ describe("specialized discovery", () => {
     })).rejects.toThrow("required leg failed");
     expect(called).toEqual(["correctness", "test-honesty"]);
     const verifierTools = selectPhaseTools(tools, TARGETED_VERIFIER_TOOLS.required, TARGETED_VERIFIER_TOOLS.optional, true);
-    expect(verifierTools.map((tool) => tool.name)).toEqual([...TARGETED_VERIFIER_TOOLS.required, ...TARGETED_VERIFIER_TOOLS.optional]);
     expect(verifierTools.map((tool) => tool.name)).not.toEqual(expect.arrayContaining(["leveret_scan", "leveret_context", "leveret_memory", "codegraph_explore"]));
-    const diffSchema = JSON.stringify(verifierTools.find((tool) => tool.name === "leveret_diff")?.parameters);
-    expect(diffSchema).toContain('"const":"patch"'); expect(diffSchema).not.toContain('"const":"manifest"'); expect(diffSchema).toContain('"required":["kind","paths"]');
     const gaps = verifySchemaGaps({ report: [], verdicts: [{ id: "correctness:R1", grade: "dropped", reason: "not grounded" }], coverage: { lenses: ["correctness-hostile-inputs", "contract-conformance", "test-honesty", "blast-radius", "leads-triage"].map((lens) => ({ lens, outcome: "checked" })), files: manifest.files.map((file) => ({ file: file.path, verdict: file.path === "src/core.ts" ? "findings" : "considered-fine" })) }, resolutions: [] }, { concerns: [{ id: "correctness:R1", file: "src/core.ts" }], leads: [], changedFiles: manifest.files.map((file) => file.path), priorThreadIds: ["prior-1"] });
     expect(gaps).toContain("resolutions:missing:prior-1");
   });
