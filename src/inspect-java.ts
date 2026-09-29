@@ -218,8 +218,7 @@ async function snapshot(repo: string, revision: string, destination: string, con
         throw new InspectJavaError("snapshot-mismatch", `Dirty analyzed input: ${entry.path}`);
       }
     }
-    const relativePath = modulePath(entry.path, config.module)!;
-    const target = join(destination, relativePath);
+    const target = join(destination, entry.path);
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, data, { mode: 0o600 });
   }
@@ -229,13 +228,14 @@ async function snapshot(repo: string, revision: string, destination: string, con
       "ls-files", "--others", "-z", "--", `:(glob)${prefix}**/*.java`, `:(glob)${prefix}*.java`,
     ]);
     for (const path of others.toString("binary").split("\0")) {
-      if (path && decoder.decode(Buffer.from(path, "binary")).endsWith(".java")) {
+      if (path && selected(decoder.decode(Buffer.from(path, "binary")), config)) {
         throw new InspectJavaError("snapshot-mismatch", "Untracked Java source in configured module");
       }
     }
   }
+  const moduleRoot = config.module === "." ? destination : join(destination, config.module);
   for (const path of [...config.mainRoots, ...config.testRoots]) {
-    await mkdir(join(destination, path), { recursive: true });
+    await mkdir(join(moduleRoot, path), { recursive: true });
   }
   return skipped.map(({ path }) => ({
     path, sourceSet: path.split("/").includes("test") ? "test" as const : "main" as const,
@@ -329,7 +329,8 @@ export async function openInspectJava(repo: string, manifest: ChangeManifest, co
         continue;
       }
       const result = await sandbox(config, folder, storeDir, join(scratch, `work-${side}`), {
-        schema: 1, kind: "analyze", store: "/store/refs", snapshot: "/source",
+        schema: 1, kind: "analyze", store: "/store/refs",
+        snapshot: config.module === "." ? "/source" : `/source/${config.module}`, pathRoot: "/source",
         repositoryId: config.repositoryId, revision: manifest[side], javaLevel: config.javaLevel,
         build: config.build, mainRoots: config.mainRoots, testRoots: config.testRoots,
         cache: "/cache", artifacts: "/work/artifacts", skippedFiles,

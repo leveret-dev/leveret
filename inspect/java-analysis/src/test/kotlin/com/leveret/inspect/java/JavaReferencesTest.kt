@@ -19,6 +19,7 @@ class JavaReferencesTest {
         assertThat(JavaReferences.outsideDiff(site("New.java", 8, 9), manifest, "head")).isFalse()
         assertThat(JavaReferences.outsideDiff(site("New.java", 4, 4), manifest, "head")).isTrue()
         assertThat(JavaReferences.outsideDiff(site("New.java", 7, 8, 0), manifest, "head")).isTrue()
+        assertThat(JavaReferences.outsideDiff(site("New.java", 10, 10), manifest, "head")).isTrue()
         assertThatThrownBy { JavaReferences.outsideDiff(site("New.java", 1, 2), manifest.copy(truncated = true), "head") }
             .isInstanceOf(InspectException::class.java)
     }
@@ -43,12 +44,31 @@ class JavaReferencesTest {
             cursor = page.delivery.nextCursor
             pages++
             assertThat(page.summary.coverage.complete).isFalse()
+            assertThat(com.google.gson.GsonBuilder().serializeNulls().create().toJson(page).toByteArray(Charsets.UTF_8).size)
+                .isLessThanOrEqualTo(1500)
             if (cursor != null) {
-                assertThatThrownBy { JavaReferences.page(records.iterator(), context.copy(manifestDigest = "manifest-b"), 1500, cursor) }
-                    .isInstanceOf(InspectException::class.java)
+                for (foreign in listOf(
+                    context.copy(manifestDigest = "manifest-b"),
+                    context.copy(summary = summary.copy(analysisId = "b")),
+                    context.copy(target = target.copy(id = "method-b")),
+                    context.copy(side = "base"),
+                )) {
+                    val error = org.junit.jupiter.api.assertThrows<InspectException> {
+                        JavaReferences.page(records.iterator(), foreign, 1500, cursor)
+                    }
+                    assertThat(error.code).isEqualTo("invalid-cursor")
+                }
             }
         } while (cursor != null)
         assertThat(pages).isGreaterThan(1)
         assertThat(delivered).containsExactlyElementsOf(expected)
+        val malformedCursor = org.junit.jupiter.api.assertThrows<InspectException> {
+            JavaReferences.page(records.iterator(), context, 1500, "not-a-cursor")
+        }
+        assertThat(malformedCursor.code).isEqualTo("invalid-cursor")
+        val invalidBudget = org.junit.jupiter.api.assertThrows<InspectException> {
+            JavaReferences.page(records.iterator(), context, 0, null)
+        }
+        assertThat(invalidBudget.code).isEqualTo("invalid-input")
     }
 }

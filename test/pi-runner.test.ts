@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Type } from "typebox";
+import { Value } from "typebox/value";
 import { auditConfig, createAuditRun, withAuditTrace } from "../src/audit.js";
 import type { ChangeEvidence, ChangeManifest } from "../src/change-evidence.js";
 import { run, runStreaming } from "../src/exec.js";
@@ -148,6 +149,14 @@ describe("Pi runtime isolation", () => {
     expect(names).not.toContain("leveret_probe");
     expect(names).not.toContain("leveret_remember");
     expect(names).not.toContain("leveret_learn");
+    expect(names).toEqual(expect.arrayContaining(["leveret_scan", "leveret_diff", "leveret_ast_search", "leveret_read"]));
+    const diff = tools.tools.find((tool) => tool.name === "leveret_diff")!;
+    expect(Value.Check(diff.parameters, { kind: "manifest" })).toBe(true);
+    expect(Value.Check(diff.parameters, { kind: "patch", paths: ["src/core.ts"] })).toBe(true);
+    expect(Value.Check(diff.parameters, {})).toBe(false);
+    expect(tools.capabilities.tool_schema_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(tools.capabilities.tool_source_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(tools.capabilities.tool_inventory).toEqual([...names].sort());
     await tools.close();
   });
 

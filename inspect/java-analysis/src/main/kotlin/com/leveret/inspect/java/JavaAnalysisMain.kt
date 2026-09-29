@@ -57,8 +57,10 @@ object JavaAnalysisMain {
     }
 
     private fun analyze(command: JsonObject): FrozenAnalysis {
-        command.fields("schema", "kind", "store", "snapshot", "repositoryId", "revision", "javaLevel", "build", "mainRoots", "testRoots", "cache", "artifacts", "skippedFiles")
+        command.fields("schema", "kind", "store", "snapshot", "pathRoot", "repositoryId", "revision", "javaLevel", "build", "mainRoots", "testRoots", "cache", "artifacts", "skippedFiles")
         val root = absolute(command.string("snapshot"))
+        val pathRoot = absolute(command.string("pathRoot"))
+        require(root.startsWith(pathRoot) && Files.isDirectory(pathRoot)) { "Invalid repository snapshot root" }
         val cache = absolute(command.string("cache"))
         val artifacts = absolute(command.string("artifacts"))
         val classpath = when (command.string("build")) {
@@ -99,7 +101,7 @@ object JavaAnalysisMain {
             }
         }.sortedBy { it.toString() }
         val data = JavaExtractor.extract(JavaAnalysisInput(
-            command.string("repositoryId"), command.string("revision"), root,
+            command.string("repositoryId"), command.string("revision"), pathRoot,
             sources(mainRoots), sources(testRoots), mainRoots, testRoots,
             command.string("javaLevel"), classpath, artifacts,
             command.array("skippedFiles").map { entry ->
@@ -137,8 +139,8 @@ object JavaAnalysisMain {
                 manifest.boolean("truncated"), manifest.array("errors").map { it.asString }),
             source.string("side"), TargetSelector(target.string("path"), Position(position.integer("line"), position.integer("column"))),
             source.integer("byteBudget"), source.get("cursor")?.takeIf { !it.isJsonNull }?.asString)
-        return store(command).use { (database, sessions) ->
-            try { JavaFactStore(sessions).query(request) } finally { database.close() }
+        return store(command).use { (_, sessions) ->
+            JavaFactStore(sessions).query(request)
         }
     }
 
@@ -161,7 +163,12 @@ object JavaAnalysisMain {
         return root.resolve(path).normalize().also { require(it.startsWith(root)) }
     }
     private fun JsonObject.fields(vararg expected: String) {
-        require(keySet() == expected.toSet()) { "Invalid Java command fields" }
+        val required = expected.toSet()
+        val missing = required - keySet()
+        val unexpected = keySet() - required
+        require(missing.isEmpty() && unexpected.isEmpty()) {
+            "Invalid Java command fields: missing ${missing.take(3)}, unexpected ${unexpected.take(3)}"
+        }
     }
     private fun JsonObject.obj(name: String): JsonObject =
         get(name)?.takeIf { it.isJsonObject }?.asJsonObject ?: throw IllegalArgumentException("Missing or invalid $name")

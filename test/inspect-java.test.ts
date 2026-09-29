@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -133,6 +133,19 @@ describe("Inspect Java boundary", () => {
         }, undefined, undefined, {} as never);
         expect(source.content[0]?.text).toBe(`evidence_id: source-${index}`);
         expect(source.content.some((item) => item.text?.includes("Pricing.price(3)"))).toBe(true);
+        if (index === 0) {
+          const invalid = await tool!.execute("foreign-field", {
+            side: "head", target: {
+              path: "src/main/java/example/Pricing.java",
+              position: { line: 3, column: 14, offset: 40 },
+            },
+          } as never, undefined, undefined, {} as never);
+          const body = invalid.content.find((item) => item.type === "text" && item.text?.startsWith("{"))?.text;
+          const failed = referenceReplySchema.parse(JSON.parse(body ?? "null"));
+          expect(failed).toMatchObject({ ok: false, error: { code: "invalid-input" } });
+          if (failed.ok) throw new Error("unexpected successful query with a foreign selector field");
+          expect(failed.error.message).toContain("offset");
+        }
       }
     } finally {
       await bundle.close();
@@ -201,6 +214,46 @@ describe("Inspect Java boundary", () => {
     } finally { git(["reset", "--hard", manifest.head]); }
   }, 240_000);
 
+  it("uses repository-relative selectors and diff hunks for a nested module", async () => {
+    const nestedRepo = join(home, "nested-repo");
+    const nestedMain = "sub/src/main/java/example/Pricing.java";
+    const nestedTest = "sub/src/test/java/example/PricingTest.java";
+    mkdirSync(dirname(join(nestedRepo, nestedMain)), { recursive: true });
+    mkdirSync(dirname(join(nestedRepo, nestedTest)), { recursive: true });
+    const nestedGit = (args: string[]) => execFileSync("git", args, { cwd: nestedRepo, env, encoding: "utf8" }).trim();
+    nestedGit(["init", "-b", "main"]);
+    writeFileSync(join(nestedRepo, "sub/gradle.lockfile"), "empty=compileClasspath,testCompileClasspath\n");
+    writeFileSync(join(nestedRepo, nestedMain),
+      "package example;\nclass Pricing {\n static int price(int n) { return n * 10; }\n static int price(String s) { return s.length(); }\n}\n");
+    writeFileSync(join(nestedRepo, nestedTest),
+      "package example;\nclass PricingTest {\n int numeric() { return Pricing.price(3); }\n int changed() { return Pricing.price(5); }\n}\n");
+    nestedGit(["add", "."]);
+    nestedGit(["-c", "commit.gpgsign=false", "commit", "-m", "base"]);
+    const base = nestedGit(["rev-parse", "HEAD"]);
+    writeFileSync(join(nestedRepo, nestedMain), readFileSync(join(nestedRepo, nestedMain), "utf8").replace("n * 10", "n * 12"));
+    writeFileSync(join(nestedRepo, nestedTest), readFileSync(join(nestedRepo, nestedTest), "utf8").replace("price(5)", "price(4)"));
+    nestedGit(["add", "."]);
+    nestedGit(["-c", "commit.gpgsign=false", "commit", "-m", "head"]);
+    const change = await buildChangeManifest(nestedRepo, base);
+    const configFile = join(home, "nested-module-config.json");
+    writeFileSync(configFile, JSON.stringify({
+      ...JSON.parse(readFileSync(configPath, "utf8")), repositoryId: "fixture/nested", module: "sub",
+    }));
+    const config = await loadInspectJavaConfig(nestedRepo, configFile,
+      createHash("sha256").update(readFileSync(configFile)).digest("hex"));
+    const bridge = await openInspectJava(nestedRepo, change, config, join(home, "nested-module-runs"));
+    try {
+      const page = await bridge.references({
+        analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
+        manifest: change, side: "head", target: { path: nestedMain, position: { line: 3, column: 14 } },
+      });
+      const checked = page.items.filter((item) => item.kind === "reference").map((item) => item.reference!);
+      expect(checked.map((item) => [item.location.path, item.location.range.start.line]))
+        .toEqual([[nestedTest, 3]]);
+      expect(readFileSync(join(nestedRepo, checked[0]!.location.path), "utf8")).toContain("Pricing.price(3)");
+    } finally { await bridge.close(); }
+  }, 240_000);
+
   it("rejects dirty Java outside the diff before publishing an analysis", async () => {
     writeFileSync(test, readFileSync(test, "utf8").replace("Pricing.price(3)", "Pricing.price(4)"));
     try {
@@ -234,6 +287,25 @@ describe("Inspect Java boundary", () => {
       rmSync(ignored);
       rmSync(join(repo, ".gitignore"));
     }
+  }, 240_000);
+
+  it("ignores untracked Java outside configured roots at the pinned revision", async () => {
+    const generated = join(repo, "build/generated/Build.java");
+    mkdirSync(dirname(generated), { recursive: true });
+    writeFileSync(generated, "class Build { }\n");
+    try {
+      const config = await loadInspectJavaConfig(repo, configPath, digest);
+      const bridge = await openInspectJava(repo, manifest, config, join(home, "out-of-scope-runs"));
+      try {
+        const page = await bridge.references({
+          analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
+          manifest, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 } },
+        });
+        expect(page.items.filter((item) => item.kind === "reference").map((item) => item.reference?.location.path))
+          .toEqual(["src/test/java/example/PricingTest.java"]);
+        expect(page.summary.coverage.complete).toBe(true);
+      } finally { await bridge.close(); }
+    } finally { rmSync(join(repo, "build"), { recursive: true, force: true }); }
   }, 240_000);
 
   it("rejects a source-root symlink escaping the checkout even when bytes match", async () => {
@@ -390,6 +462,27 @@ describe("Inspect Java boundary", () => {
     expect(readdirSync(join(runDir, "java-facts"))).toEqual([]);
   }, 240_000);
 
+  it("caps worker stdout before a partial analysis can be published", async () => {
+    const dist = join(home, "chatty-distribution");
+    mkdirSync(join(dist, "bin"), { recursive: true });
+    mkdirSync(join(dist, "lib"), { recursive: true });
+    const script = join(dist, "bin/leveret-inspect");
+    writeFileSync(script, "#!/bin/sh\nn=0\nwhile [ \"$n\" -lt 5000 ]; do printf 'xxxxxxxxxxxxxxxx'; n=$((n + 1)); done\n", { mode: 0o755 });
+    const configPathChatty = join(home, "chatty-config.json");
+    const original = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
+    writeFileSync(configPathChatty, JSON.stringify({
+      ...original, distribution: dist,
+      distributionFiles: { "bin/leveret-inspect": createHash("sha256").update(readFileSync(script)).digest("hex") },
+      limits: { ...(original.limits as object), maxOutputBytes: 4096 },
+    }));
+    const config = await loadInspectJavaConfig(repo, configPathChatty,
+      createHash("sha256").update(readFileSync(configPathChatty)).digest("hex"));
+    const state = join(home, "chatty-runs");
+    await expect(openInspectJava(repo, manifest, config, state))
+      .rejects.toMatchObject({ code: "resource-exhausted" });
+    expect(readdirSync(join(state, "java-facts"))).toEqual([]);
+  }, 240_000);
+
   it("never executes a Gradle script from the reviewed repository", async () => {
     const script = join(repo, "build.gradle.kts");
     writeFileSync(script, "java.nio.file.Files.writeString(java.nio.file.Path.of(\"/store/poisoned\"), \"executed\")\n");
@@ -405,6 +498,113 @@ describe("Inspect Java boundary", () => {
         expect(readdirSync(join(state, "java-facts")).some((name) => name === "poisoned")).toBe(false);
       } finally { await bridge.close(); }
     } finally {
+      git(["reset", "--hard", manifest.head]);
+    }
+  }, 240_000);
+
+  it("does not execute a poisoned Maven POM extension or lifecycle", async () => {
+    const mavenRepo = join(home, "maven-poison-repo");
+    const mavenMain = "src/main/java/example/Pricing.java";
+    const mavenTest = "src/test/java/example/PricingTest.java";
+    mkdirSync(dirname(join(mavenRepo, mavenMain)), { recursive: true });
+    mkdirSync(dirname(join(mavenRepo, mavenTest)), { recursive: true });
+    const mavenGit = (args: string[]) => execFileSync("git", args, { cwd: mavenRepo, env, encoding: "utf8" }).trim();
+    mavenGit(["init", "-b", "main"]);
+    writeFileSync(join(mavenRepo, "pom.xml"), `
+      <project>
+        <modelVersion>4.0.0</modelVersion>
+        <groupId>example</groupId><artifactId>pricing</artifactId><version>1</version>
+        <build>
+          <extensions><extension><groupId>org.apache.maven.plugins</groupId><artifactId>maven-antrun-plugin</artifactId><version>3.1.0</version></extension></extensions>
+          <plugins><plugin>
+            <groupId>org.apache.maven.plugins</groupId><artifactId>maven-antrun-plugin</artifactId><version>3.1.0</version>
+            <executions><execution><phase>validate</phase><goals><goal>run</goal></goals>
+              <configuration><target><echo file="/store/poisoned">target build ran</echo></target></configuration>
+            </execution></executions>
+          </plugin></plugins>
+        </build>
+      </project>
+    `);
+    writeFileSync(join(mavenRepo, mavenMain),
+      "package example;\nclass Pricing {\n static int price(int n) { return n * 10; }\n}\n");
+    writeFileSync(join(mavenRepo, mavenTest),
+      "package example;\nclass PricingTest {\n int numeric() { return Pricing.price(3); }\n}\n");
+    mavenGit(["add", "."]);
+    mavenGit(["-c", "commit.gpgsign=false", "commit", "-m", "base"]);
+    const base = mavenGit(["rev-parse", "HEAD"]);
+    writeFileSync(join(mavenRepo, mavenMain), readFileSync(join(mavenRepo, mavenMain), "utf8").replace("n * 10", "n * 12"));
+    mavenGit(["add", "."]);
+    mavenGit(["-c", "commit.gpgsign=false", "commit", "-m", "head"]);
+    const change = await buildChangeManifest(mavenRepo, base);
+    const cache = join(home, "maven-poison-cache");
+    mkdirSync(cache);
+    const path = join(home, "maven-poison-config.json");
+    writeFileSync(path, JSON.stringify({
+      ...JSON.parse(readFileSync(configPath, "utf8")),
+      repositoryId: "fixture/maven-poison", cache, build: "maven",
+    }));
+    const config = await loadInspectJavaConfig(mavenRepo, path, createHash("sha256").update(readFileSync(path)).digest("hex"));
+    const state = join(home, "maven-poison-runs");
+    const bridge = await openInspectJava(mavenRepo, change, config, state);
+    try {
+      const page = await bridge.references({
+        analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
+        manifest: change, side: "head", target: { path: mavenMain, position: { line: 3, column: 14 } },
+      });
+      expect(page.items.filter((item) => item.kind === "reference").map((item) => item.reference?.location.path))
+        .toEqual([mavenTest]);
+      expect(existsSync(join(state, "java-facts/poisoned"))).toBe(false);
+    } finally { await bridge.close(); }
+  }, 240_000);
+
+  it("does not execute annotation processors from the analyzed classpath", async () => {
+    const sourceDir = join(home, "processor-source/example");
+    const classes = join(home, "processor-classes");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(classes);
+    const annotation = join(sourceDir, "Poison.java");
+    const processor = join(sourceDir, "PoisonProcessor.java");
+    writeFileSync(annotation, "package example; public @interface Poison {}\n");
+    writeFileSync(processor, `
+      package example;
+      import java.nio.file.*;
+      import java.util.Set;
+      import javax.annotation.processing.*;
+      import javax.lang.model.SourceVersion;
+      import javax.lang.model.element.TypeElement;
+      @SupportedAnnotationTypes("example.Poison")
+      @SupportedSourceVersion(SourceVersion.RELEASE_21)
+      public class PoisonProcessor extends AbstractProcessor {
+        static {
+          try { Files.writeString(Path.of("/store/poisoned"), "processor ran"); }
+          catch (Exception failure) { throw new RuntimeException(failure); }
+        }
+        public boolean process(Set<? extends TypeElement> types, RoundEnvironment round) { return false; }
+      }
+    `);
+    execFileSync("javac", ["-d", classes, annotation, processor]);
+    const service = join(classes, "META-INF/services/javax.annotation.processing.Processor");
+    mkdirSync(dirname(service), { recursive: true });
+    writeFileSync(service, "example.PoisonProcessor\n");
+    const poisonedJar = join(home, "poison-processor.jar");
+    execFileSync("jar", ["--create", "--file", poisonedJar, "-C", classes, "."]);
+    const original = readFileSync(cachedArtifact);
+    const annotationPath = "src/main/java/example/Annotated.java";
+    writeFileSync(join(repo, annotationPath), "package example; @Poison class Annotated {}\n");
+    git(["add", annotationPath]);
+    git(["-c", "commit.gpgsign=false", "commit", "-m", "annotated fixture"]);
+    const annotated = await buildChangeManifest(repo, manifest.head);
+    writeFileSync(cachedArtifact, readFileSync(poisonedJar));
+    try {
+      const config = await loadInspectJavaConfig(repo, configPath, digest);
+      const state = join(home, "processor-runs");
+      const bridge = await openInspectJava(repo, annotated, config, state);
+      try {
+        expect(bridge.summaries.head.coverage.complete).toBe(true);
+        expect(existsSync(join(state, "java-facts/poisoned"))).toBe(false);
+      } finally { await bridge.close(); }
+    } finally {
+      writeFileSync(cachedArtifact, original);
       git(["reset", "--hard", manifest.head]);
     }
   }, 240_000);

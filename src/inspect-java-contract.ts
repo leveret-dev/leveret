@@ -9,7 +9,10 @@ const reference = z.object({
   id: z.string().min(1), targetId: z.string().min(1), location, enclosing: method.nullable(),
   sourceSet: z.enum(["main", "test"]), kind: z.enum(["call", "method-reference"]), basis: z.literal("checked"),
 }).strict();
-const unresolved = z.object({ id: z.string().min(1), location, sourceSet: z.enum(["main", "test"]), reason: z.string().min(1) }).strict();
+const unresolved = z.object({
+  id: z.string().min(1), location, sourceSet: z.enum(["main", "test"]), reason: z.string().min(1),
+  candidates: z.array(z.object({ targetId: z.string().min(1), basis: z.string().min(1) }).strict()).nullable(),
+}).strict();
 const file = z.object({ path: z.string(), sourceSet: z.enum(["main", "test"]), examined: z.boolean(), reason: z.string().nullable() }).strict();
 const coverage = z.object({
   complete: z.boolean(), mainExamined: z.number().int().nonnegative(), testExamined: z.number().int().nonnegative(),

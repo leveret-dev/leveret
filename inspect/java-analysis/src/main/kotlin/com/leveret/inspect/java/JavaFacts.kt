@@ -22,7 +22,14 @@ data class JavaReference(
     val kind: String,
     val basis: String = "checked",
 )
-data class UnresolvedSite(val id: String, val location: Location, val sourceSet: String, val reason: String)
+data class UnresolvedCandidate(val targetId: String, val basis: String)
+data class UnresolvedSite(
+    val id: String,
+    val location: Location,
+    val sourceSet: String,
+    val reason: String,
+    val candidates: List<UnresolvedCandidate>? = null,
+)
 data class SourceFile(val path: String, val sourceSet: String, val examined: Boolean, val reason: String? = null)
 data class AnalysisCoverage(
     val complete: Boolean,

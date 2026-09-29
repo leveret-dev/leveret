@@ -104,6 +104,25 @@ class JavaFactStoreTest {
     }
 
     @Test
+    fun `first bounded page includes the target caller before bulk file coverage`(@TempDir home: Path) {
+        val original = fixture("head", "many-files", "price(int)")
+        val files = original.files + (1..400).map { SourceFile("src/main/java/Filler$it.java", "main", true) }
+        val data = original.copy(
+            summary = original.summary.copy(coverage = original.summary.coverage.copy(mainExamined = 401)),
+            files = files,
+        )
+        opened(home) { sessions ->
+            val store = JavaFactStore(sessions)
+            store.publish(data)
+            val page = store.query(ReferenceRequest("many-files", "config", ChangeManifest("head", "head", emptyList()),
+                "head", TargetSelector("src/main/java/Pricing.java", Position(3, 17)), 65536))
+            assertThat(page.items.mapNotNull { it.reference?.id }).containsExactly("ref-many-files")
+            assertThat(page.delivery.truncated).isTrue()
+            assertThat(page.summary.coverage.mainExamined).isEqualTo(401)
+        }
+    }
+
+    @Test
     fun `real extraction survives reopen and resolves unchanged test caller`(@TempDir home: Path) {
         val root = home.resolve("source")
         val main = root.resolve("src/main/java/example/Pricing.java")
@@ -149,6 +168,77 @@ class JavaFactStoreTest {
             assertThat(page.items.mapNotNull { it.reference?.location?.range })
                 .containsExactly(Range(Position(3, 27), Position(3, 43)))
             assertThat(page.summary.coverage.complete).isTrue()
+        }
+    }
+
+    @Test
+    fun `long legal method signatures survive publication and exact query`(@TempDir home: Path) {
+        val root = home.resolve("source")
+        val main = root.resolve("src/main/java/example/Pricing.java")
+        Files.createDirectories(main.parent)
+        val parameters = (1..60).joinToString(", ") { "java.util.Map<String,java.util.List<Integer>> p$it" }
+        val arguments = (1..60).joinToString(", ") { "null" }
+        Files.writeString(main, """
+            package example;
+            class Pricing {
+                static int price($parameters) { return 12; }
+                int caller() { return price($arguments); }
+            }
+        """.trimIndent())
+        val input = JavaAnalysisInput(
+            "fixture", "head", root, listOf(main), emptyList(),
+            listOf(root.resolve("src/main/java")), listOf(root.resolve("src/test/java")), "21",
+            com.leveret.inspect.classpath.ClasspathAnalysis(
+                com.leveret.inspect.classpath.MavenTuple("fixture", "fixture"), emptyList(),
+                com.leveret.inspect.classpath.RepositoryPolicy(true, true, true, "central", "https://repo.maven.apache.org/maven2"),
+                emptyList(), emptyList(), listOf("src/test/java"),
+            ), root.resolve("cache"),
+        )
+        val data = JavaExtractor.extract(input)
+        val declaration = data.methods.single { it.signature.contains(".price(") }
+        opened(home) { JavaFactStore(it).publish(data) }
+        opened(home) { sessions ->
+            val page = JavaFactStore(sessions).query(ReferenceRequest(
+                data.summary.analysisId, data.summary.configurationSha256,
+                ChangeManifest("head", "head", emptyList()), "head",
+                TargetSelector(declaration.location.path, declaration.nameRange.start.copy(column = declaration.nameRange.start.column + 1)),
+            ))
+            assertThat(page.items.mapNotNull { it.reference?.targetId }).containsExactly(declaration.id)
+            assertThat(page.items.mapNotNull { it.reference?.basis }).containsExactly("checked")
+        }
+    }
+
+    @Test
+    fun `duplicate declaration selector is indeterminate after publication`(@TempDir home: Path) {
+        val root = home.resolve("source")
+        val main = root.resolve("src/main/java/example/Pricing.java")
+        val test = root.resolve("src/test/java/example/Pricing.java")
+        Files.createDirectories(main.parent)
+        Files.createDirectories(test.parent)
+        Files.writeString(main, "package example; class Pricing { static int price(int n) { return n; } }")
+        Files.writeString(test, "package example; class Pricing { static int price(int n) { return n + 1; } }")
+        val input = JavaAnalysisInput(
+            "fixture", "head", root, listOf(main), listOf(test),
+            listOf(root.resolve("src/main/java")), listOf(root.resolve("src/test/java")), "21",
+            com.leveret.inspect.classpath.ClasspathAnalysis(
+                com.leveret.inspect.classpath.MavenTuple("fixture", "fixture"), emptyList(),
+                com.leveret.inspect.classpath.RepositoryPolicy(true, true, true, "central", "https://repo.maven.apache.org/maven2"),
+                emptyList(), emptyList(), listOf("src/test/java"),
+            ), root.resolve("cache"),
+        )
+        val data = JavaExtractor.extract(input)
+        val declaration = data.methods.single { it.signature.contains(".price(") }
+        opened(home) { JavaFactStore(it).publish(data) }
+        opened(home) { sessions ->
+            val error = org.junit.jupiter.api.assertThrows<InspectException> {
+                JavaFactStore(sessions).query(ReferenceRequest(
+                    data.summary.analysisId, data.summary.configurationSha256,
+                    ChangeManifest("head", "head", emptyList()), "head",
+                    TargetSelector(declaration.location.path,
+                        declaration.nameRange.start.copy(column = declaration.nameRange.start.column + 1)),
+                ))
+            }
+            assertThat(error.code).isEqualTo("target-indeterminate")
         }
     }
 
