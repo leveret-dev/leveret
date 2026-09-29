@@ -122,6 +122,43 @@ class JavaExtractorTest {
     }
 
     @Test
+    fun `nested invocations sharing a start offset have distinct reference identities`(@TempDir dir: Path) {
+        val main = dir.resolve("src/main/java/example/Pricing.java")
+        Files.createDirectories(main.parent)
+        Files.writeString(main, """
+            package example;
+            class Pricing {
+                Pricing chain() { return this; }
+                int price(int n) { return n; }
+                int caller() { return chain().price(3); }
+            }
+        """.trimIndent())
+        val data = JavaExtractor.extract(input(dir, listOf(main), emptyList()))
+        val chain = data.methods.single { it.signature.contains(".chain()") }
+        val price = data.methods.single { it.signature.contains(".price(int)") }
+        val references = data.references.filter { it.targetId == chain.id || it.targetId == price.id }
+        assertThat(references.map { it.targetId }).containsExactlyInAnyOrder(chain.id, price.id)
+        assertThat(references.map { it.id }).doesNotHaveDuplicates()
+    }
+
+    @Test
+    fun `anonymous declaration signature retains its enclosing type`(@TempDir dir: Path) {
+        val main = dir.resolve("src/main/java/example/Pricing.java")
+        Files.createDirectories(main.parent)
+        Files.writeString(main, """
+            package example;
+            class Pricing {
+                Runnable worker = new Runnable() {
+                    public void run() {}
+                };
+            }
+        """.trimIndent())
+        val data = JavaExtractor.extract(input(dir, listOf(main), emptyList()))
+        val method = data.methods.single { it.signature.endsWith(".run()") }
+        assertThat(method.signature).startsWith("example.Pricing").endsWith(".run()")
+    }
+
+    @Test
     fun `super calls and generic varargs bind their declarations`(@TempDir dir: Path) {
         val main = dir.resolve("src/main/java/example/Pricing.java")
         Files.createDirectories(main.parent)

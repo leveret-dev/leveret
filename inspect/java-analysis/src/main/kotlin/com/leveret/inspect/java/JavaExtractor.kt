@@ -95,18 +95,19 @@ object JavaExtractor {
                         }
                         private fun record(node: ASTNode, binding: IMethodBinding?, kind: String, expressions: List<Expression>) {
                             val site = location(ast, relative, node)
+                            val siteId = "$relative:${node.startPosition}:${node.length}:$kind"
                             val errors = problems.filter { it.sourceStart < node.startPosition + node.length && it.sourceEnd >= node.startPosition }
                             val suspect = binding == null || binding.isRecovered || recoveredSignature(binding) ||
                                 expressions.any { expression -> recoveredType(expression.resolveTypeBinding()) } || errors.isNotEmpty()
                             if (suspect) {
-                                unresolved += UnresolvedSite("$relative:${node.startPosition}:$kind", site, scope,
+                                unresolved += UnresolvedSite(siteId, site, scope,
                                     if (errors.isNotEmpty()) "compiler: ${errors.first().message}" else "binding-unresolved")
                             } else {
                                 val enclosing = generateSequence(node.parent) { it.parent }.takeWhile { it !is org.eclipse.jdt.core.dom.LambdaExpression }
                                     .firstOrNull { it is MethodDeclaration || it is org.eclipse.jdt.core.dom.Initializer || it is org.eclipse.jdt.core.dom.AbstractTypeDeclaration }
                                     as? MethodDeclaration
                                 pending += PendingReference(
-                                    "$relative:${node.startPosition}:$kind", binding!!.methodDeclaration.key, site,
+                                    siteId, binding!!.methodDeclaration.key, site,
                                     enclosing?.resolveBinding()?.methodDeclaration?.key, scope, kind, binding.declaringClass.isFromSource,
                                 )
                             }
@@ -176,7 +177,10 @@ object JavaExtractor {
 
     private fun signature(binding: IMethodBinding): String {
         val method = binding.methodDeclaration
-        return "${method.declaringClass.qualifiedName}.${method.name}(${method.parameterTypes.joinToString(",") { it.qualifiedName }})"
+        val owner = method.declaringClass.qualifiedName.takeIf { it.isNotEmpty() }
+            ?: method.declaringClass.binaryName?.takeIf { it.isNotEmpty() }
+            ?: method.declaringClass.key
+        return "$owner.${method.name}(${method.parameterTypes.joinToString(",") { it.qualifiedName }})"
     }
 
     private fun location(unit: CompilationUnit, path: String, node: ASTNode) = Location(path, range(unit, node.startPosition, node.length))
