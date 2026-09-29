@@ -2,9 +2,9 @@
 
 Date: 2026-09-29
 
-Status: The conversational contract is approved. This written specification awaits
-maintainer review; implementation planning and implementation are not authorized
-by that approval alone.
+Status: Approved by the maintainer on 2026-09-29. Implementation planning is
+authorized. Implementation awaits review of the written plan and selection of
+an execution method.
 
 ## Purpose and scope
 
