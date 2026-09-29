@@ -17,8 +17,12 @@
     "bench:report": "tsx bench/report.mts",
     "bench:parity": "tsx bench/parity.mts",
     "build": "tsc",
+    "build:inspect": "./inspect/gradlew -p inspect build",
+    "build:all": "npm run build && npm run build:inspect",
     "dev": "tsx src/server.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:inspect": "./inspect/gradlew -p inspect test",
+    "test:all": "npm test && npm run test:inspect"
   },
   "license": "AGPL-3.0-or-later",
   "dependencies": {
