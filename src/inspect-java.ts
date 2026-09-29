@@ -16,7 +16,7 @@ const configSchema = z.object({
   distributionFiles: z.record(z.string(), hex), jdkHome: z.string().min(1),
   jdkFiles: z.record(z.string(), hex),
   cache: z.string().min(1), module: z.string(), build: z.enum(["maven", "gradle"]),
-  mainRoots: z.array(z.string()).length(1), testRoots: z.array(z.string()).length(1), javaLevel: z.string().regex(/^\d+$/),
+  mainRoots: z.array(z.string()).length(1), testRoots: z.array(z.string()).length(1), javaLevel: z.string().regex(/^(?:1\.[1-9]|[1-9]\d*)$/),
   limits: z.object({ heapBytes: positive, addressSpaceBytes: positive, deadlineMs: positive, maxOutputBytes: positive }).strict(),
 }).strict();
 const preparedSchema = z.object({ summary: analysisSummarySchema, artifacts: z.record(z.string(), hex) }).strict();
@@ -277,7 +277,11 @@ async function sandbox(config: InspectJavaConfig, snapshotDir: string, storeDir:
   catch { throw new InspectJavaError("worker-failed", `Invalid Java worker response (${result.code}): ${result.stderr.slice(0, 200)}`); }
   const page = referenceReplySchema.safeParse(raw);
   if (page.success) {
-    if (!page.data.ok) throw new InspectJavaError(page.data.error.code, page.data.error.message, page.data.error.requiredBytes);
+    if (!page.data.ok) {
+      const diagnostic = page.data.error.code === "worker-failed" && result.stderr.trim()
+        ? `: ${result.stderr.trim().slice(0, 500)}` : "";
+      throw new InspectJavaError(page.data.error.code, `${page.data.error.message}${diagnostic}`, page.data.error.requiredBytes);
+    }
     if (result.code !== 0) throw new InspectJavaError("worker-failed", "Worker reported success but exited unsuccessfully");
     return page.data.result;
   }
@@ -319,6 +323,11 @@ export async function openInspectJava(repo: string, manifest: ChangeManifest, co
       const folder = join(scratch, side);
       await mkdir(folder);
       const skippedFiles = await snapshot(repo, manifest[side], folder, config, side === "head");
+      if (side === "head" && manifest.head === manifest.base) {
+        summaries.head = summaries.base;
+        artifacts.head = artifacts.base;
+        continue;
+      }
       const result = await sandbox(config, folder, storeDir, join(scratch, `work-${side}`), {
         schema: 1, kind: "analyze", store: "/store/refs", snapshot: "/source",
         repositoryId: config.repositoryId, revision: manifest[side], javaLevel: config.javaLevel,
