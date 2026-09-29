@@ -1,5 +1,7 @@
 package com.leveret.inspect.runtime
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.LoggerContext
 import com.leveret.inspect.runtime.config.PropertyKeys
 import com.leveret.inspect.runtime.config.SettingsLoader
 import com.leveret.inspect.runtime.fs.InstallationHome
@@ -49,6 +51,14 @@ class App(
 }
 
 fun main(args: Array<String>) {
+    if (args.firstOrNull() == "java") {
+        (LoggerFactory.getILoggerFactory() as? LoggerContext)
+            ?.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME)
+            ?.level = Level.ERROR
+        val command = Class.forName("com.leveret.inspect.java.JavaAnalysisMain")
+        val execute = command.getMethod("execute", Array<String>::class.java)
+        exitProcess(execute.invoke(null, args.drop(1).toTypedArray()) as Int)
+    }
     try {
         App(InstallationHome.derive(), args).run()
     } catch (failure: Exception) {

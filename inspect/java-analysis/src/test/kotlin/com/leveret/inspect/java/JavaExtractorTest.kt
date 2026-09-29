@@ -220,6 +220,19 @@ class JavaExtractorTest {
         assertThat(data.coverage.complete).isFalse()
     }
 
+    @Test
+    fun `unsupported Java roots remain visible in coverage`(@TempDir dir: Path) {
+        val main = dir.resolve("src/main/java/example/Pricing.java")
+        Files.createDirectories(main.parent)
+        Files.writeString(main, "package example; class Pricing { int price(int n) { return n; } }")
+        val data = JavaExtractor.extract(input(dir, listOf(main), emptyList()).copy(
+            skippedFiles = listOf(SourceFile("other/src/main/java/example/Other.java", "main", false, "unsupported module")),
+        ))
+        assertThat(data.coverage.mainSkipped).isEqualTo(1)
+        assertThat(data.coverage.complete).isFalse()
+        assertThat(data.files).contains(SourceFile("other/src/main/java/example/Other.java", "main", false, "unsupported module"))
+    }
+
     private fun input(root: Path, main: List<Path>, test: List<Path>) = JavaAnalysisInput(
         repositoryId = "fixture", revision = "0123456789abcdef", sourceRoot = root,
         mainFiles = main, testFiles = test, mainRoots = listOf(root.resolve("src/main/java")),

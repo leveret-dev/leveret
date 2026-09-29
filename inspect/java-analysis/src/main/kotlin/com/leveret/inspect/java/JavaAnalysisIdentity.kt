@@ -38,6 +38,10 @@ object JavaAnalysisIdentity {
                 settings += "$scope:source:${relative(root, file)}:${hash(file)}"
             }
         }
+        for (file in input.skippedFiles) {
+            require(!file.examined && file.reason != null)
+            settings += "skipped:${file.sourceSet}:${file.path}:${file.reason}"
+        }
         val config = sha(settings)
         val artifacts = mutableListOf<String>()
         for ((scope, paths) in listOf("main" to input.classpath.mainClasspath, "test" to input.classpath.testClasspath)) {
