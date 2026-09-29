@@ -117,3 +117,4 @@ HOME contents, network, target executables, or target build invocation.
 
 Project-owned code uses the repository's [AGPL-3.0-or-later license](../LICENSE).
 Third-party notices, including those in the Gradle wrapper, remain intact.
+The distribution also includes [JDT and Gson notices](runtime/src/main/assembly/THIRD-PARTY-NOTICES.txt).

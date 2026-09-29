@@ -18011,7 +18011,7 @@
       "node_kind": "heading",
       "norm_label": "authorization and remaining acceptance",
       "source_file": "docs/reports/2026-09-29-inspect-java-references.md",
-      "source_location": "L45"
+      "source_location": "L46"
     },
     {
       "id": "docs_reports_2026_09_29_inspect_java_references_fixed_two_file_change",
@@ -18023,7 +18023,7 @@
       "node_kind": "heading",
       "norm_label": "fixed two-file change",
       "source_file": "docs/reports/2026-09-29-inspect-java-references.md",
-      "source_location": "L14"
+      "source_location": "L15"
     },
     {
       "id": "docs_reports_2026_09_29_inspect_java_references_java_reference_evidence_deterministic_evaluation",
@@ -18047,7 +18047,7 @@
       "node_kind": "heading",
       "norm_label": "pinned real java repository",
       "source_file": "docs/reports/2026-09-29-inspect-java-references.md",
-      "source_location": "L26"
+      "source_location": "L27"
     },
     {
       "id": "docs_reports_2026_09_29_inspect_java_references_reproduction_and_provenance",
@@ -18059,7 +18059,7 @@
       "node_kind": "heading",
       "norm_label": "reproduction and provenance",
       "source_file": "docs/reports/2026-09-29-inspect-java-references.md",
-      "source_location": "L6"
+      "source_location": "L7"
     },
     {
       "id": "docs_reports_2026_09_29_inspect_java_references_verification",
@@ -18071,7 +18071,7 @@
       "node_kind": "heading",
       "norm_label": "verification",
       "source_file": "docs/reports/2026-09-29-inspect-java-references.md",
-      "source_location": "L37"
+      "source_location": "L38"
     },
     {
       "id": "docs_superpowers_plans_2026_09_29_inspect_java_references",
@@ -26028,6 +26028,18 @@
       "type": "external"
     },
     {
+      "id": "ref_node_perf_hooks",
+      "label": "ref_node_perf_hooks",
+      "_origin": "semantic",
+      "community": 71,
+      "community_name": "inspect-java.mts",
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "ref_node_perf_hooks",
+      "source_file": "",
+      "type": "external"
+    },
+    {
       "id": "ref_node_events",
       "label": "ref_node_events",
       "_origin": "semantic",
@@ -26120,17 +26132,6 @@
       "external": true,
       "file_type": "concept",
       "norm_label": "standardcharsets",
-      "source_file": "",
-      "type": "external"
-    },
-    {
-      "id": "ref_node_perf_hooks",
-      "label": "ref_node_perf_hooks",
-      "community": 71,
-      "community_name": "inspect-java.mts",
-      "external": true,
-      "file_type": "concept",
-      "norm_label": "ref_node_perf_hooks",
       "source_file": "",
       "type": "external"
     }
@@ -63225,7 +63226,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/reports/2026-09-29-inspect-java-references.md",
-      "source_location": "L14",
+      "source_location": "L15",
       "weight": 1.0
     },
     {
@@ -63236,7 +63237,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/reports/2026-09-29-inspect-java-references.md",
-      "source_location": "L26",
+      "source_location": "L27",
       "weight": 1.0
     },
     {
@@ -63247,7 +63248,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/reports/2026-09-29-inspect-java-references.md",
-      "source_location": "L37",
+      "source_location": "L38",
       "weight": 1.0
     },
     {
@@ -63258,7 +63259,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/reports/2026-09-29-inspect-java-references.md",
-      "source_location": "L45",
+      "source_location": "L46",
       "weight": 1.0
     },
     {
@@ -63269,7 +63270,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/reports/2026-09-29-inspect-java-references.md",
-      "source_location": "L6",
+      "source_location": "L7",
       "weight": 1.0
     },
     {
@@ -78133,7 +78134,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/reports/2026-09-29-inspect-java-references.md",
-      "source_location": "L8",
+      "source_location": "L9",
       "weight": 1.0
     },
     {
@@ -80219,7 +80220,7 @@
       "confidence_score": 0.95,
       "context": "checked",
       "source_file": "docs/reports/2026-09-29-inspect-java-references.md",
-      "source_location": "L18",
+      "source_location": "L19",
       "weight": 1.0
     },
     {
@@ -83740,5 +83741,5 @@
       "source_file": "docs/reports/2026-08-24-pi-quality-vs-omp-coderabbit.md"
     }
   ],
-  "built_at_commit": "97ffd4cc9a3f3a12a4e47dfefbdf5027cc20b814"
+  "built_at_commit": "0bfbcf92608265d7623e575d595a53ada024eba8"
 }
