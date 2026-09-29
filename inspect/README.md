@@ -11,6 +11,7 @@ New issues and pull requests belong in `leveret-dev/leveret`.
 | `runtime/` | Configuration loading, runtime directories, and logging; produces `bin/leveret-inspect` |
 | `persistence/` | Embedded H2 storage, connection pooling, schema initialization, and transactions |
 | `java-classpath/` | Cache-only Maven and Gradle-lockfile classpath resolution, without executing the target build or accessing the network |
+| `java-analysis/` | JDT extraction of checked Java method calls and method-reference expressions, with explicit unresolved coverage |
 
 Only current implementation files are included. Original repository history, research,
 specifications, and generated indexes are not part of this component.
@@ -31,6 +32,13 @@ Both commands run the JVM tests. The classpath oracle tests additionally require
 Bubblewrap (`bwrap`), Git, Maven, and JDK 21. Set `LEVERET_ORACLE_JAVA21` to the JDK 21
 installation. Cold oracle caches fetch pinned fixture repositories and dependencies.
 The test oracles execute fixture build tools; the classpath workers do not.
+`java-analysis` currently extracts a single module's configured main/test Java roots.
+It resolves source bindings against cache-only classpaths; unresolved sites and missing
+dependencies remain coverage gaps, not checked references. Extraction reads sources
+and JARs without running the target build or tests. Its Java source level is explicit
+and distinct from the worker JDK; broader module resolution is not supported.
+Eclipse JDT Core 3.46.0 is used under EPL-2.0; the installed distribution must
+retain its license notice.
 
 From `inspect/`:
 
