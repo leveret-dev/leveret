@@ -9,6 +9,9 @@ object GradleLockfileClasspathWorker {
         val lockfile = projectDir.resolve("gradle.lockfile")
         val hasLockfile = Files.isRegularFile(lockfile)
         val entries = if (hasLockfile) parseLockfile(lockfile) else emptyList()
+        val diagnostics = missClasses(projectDir, hasLockfile).map {
+            ClasspathDiagnostic(null, it, null, it)
+        }.toMutableList()
         return ClasspathAnalysis(
             tuple = MavenTuple(
                 if (hasLockfile) "gradle.lockfile" else "none",
@@ -22,29 +25,34 @@ object GradleLockfileClasspathWorker {
                 approvedRemoteId = CacheOnlyClasspathWorker.CENTRAL_ID,
                 approvedRemoteUrl = CacheOnlyClasspathWorker.CENTRAL_URL,
             ),
-            mainClasspath = classpath(entries, "compileClasspath", repo),
-            testClasspath = classpath(entries, "testCompileClasspath", repo),
+            mainClasspath = classpath(entries, "compileClasspath", "main", repo, diagnostics),
+            testClasspath = classpath(entries, "testCompileClasspath", "test", repo, diagnostics),
             testSourceRoots = testSourceRoots(projectDir),
-            missClasses = missClasses(projectDir, hasLockfile),
+            diagnostics = diagnostics,
         )
     }
 
-    private fun classpath(entries: List<LockedModule>, configuration: String, repo: Path): List<String> =
-        entries.mapNotNull { entry ->
-            if (configuration !in entry.configurations) return@mapNotNull null
-            val dir = repo.resolve(entry.group.replace('.', '/'))
-                .resolve(entry.name)
-                .resolve(entry.version)
-            val jar = dir.resolve("${entry.name}-${entry.version}.jar")
-            if (Files.isRegularFile(jar)) {
-                return@mapNotNull repo.relativize(jar).toString().replace('\\', '/')
-            }
-            val pom = dir.resolve("${entry.name}-${entry.version}.pom")
-            if (Files.isRegularFile(pom) && isPomPackaging(pom)) return@mapNotNull null
-            throw MissingLockedArtifactException(
-                "Locked artifact ${entry.group}:${entry.name}:${entry.version} is not in the cache",
-            )
+    private fun classpath(
+        entries: List<LockedModule>,
+        configuration: String,
+        sourceSet: String,
+        repo: Path,
+        diagnostics: MutableList<ClasspathDiagnostic>,
+    ): List<String> = entries.mapNotNull { entry ->
+        if (configuration !in entry.configurations) return@mapNotNull null
+        val dir = repo.resolve(entry.group.replace('.', '/'))
+            .resolve(entry.name)
+            .resolve(entry.version)
+        val jar = dir.resolve("${entry.name}-${entry.version}.jar")
+        if (Files.isRegularFile(jar)) {
+            return@mapNotNull repo.relativize(jar).toString().replace('\\', '/')
         }
+        val pom = dir.resolve("${entry.name}-${entry.version}.pom")
+        if (Files.isRegularFile(pom) && isPomPackaging(pom)) return@mapNotNull null
+        val coordinate = "${entry.group}:${entry.name}:${entry.version}"
+        diagnostics += ClasspathDiagnostic(sourceSet, "missing-artifact", coordinate, "Locked artifact $coordinate is not in the cache")
+        null
+    }
 
     private fun parseLockfile(lockfile: Path): List<LockedModule> =
         Files.readAllLines(lockfile).mapNotNull { raw ->

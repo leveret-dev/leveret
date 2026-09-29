@@ -1,5 +1,13 @@
 package com.leveret.inspect.classpath
 
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import com.google.gson.stream.JsonReader
+import com.google.gson.Strictness
+import java.io.StringReader
+
 data class MavenTuple(
     val modelBuilder: String,
     val resolver: String,
@@ -13,6 +21,13 @@ data class RepositoryPolicy(
     val approvedRemoteUrl: String,
 )
 
+data class ClasspathDiagnostic(
+    val sourceSet: String?,
+    val reason: String,
+    val coordinate: String?,
+    val message: String,
+)
+
 data class ClasspathAnalysis(
     val tuple: MavenTuple,
     val activeProfiles: List<String>,
@@ -20,85 +35,75 @@ data class ClasspathAnalysis(
     val mainClasspath: List<String>,
     val testClasspath: List<String>,
     val testSourceRoots: List<String>,
-    val missClasses: List<String> = emptyList(),
+    val diagnostics: List<ClasspathDiagnostic> = emptyList(),
 ) {
-    fun write(): String = buildString {
-        appendLine("tuple.modelBuilder=${tuple.modelBuilder}")
-        appendLine("tuple.resolver=${tuple.resolver}")
-        appendLine("profiles=${activeProfiles.joinToString(",")}")
-        appendLine("policy.offline=${repositoryPolicy.offline}")
-        appendLine("policy.descriptorRepositoriesIgnored=${repositoryPolicy.descriptorRepositoriesIgnored}")
-        appendLine("policy.targetRepositoriesDiscarded=${repositoryPolicy.targetRepositoriesDiscarded}")
-        appendLine("policy.approvedRemoteId=${repositoryPolicy.approvedRemoteId}")
-        appendLine("policy.approvedRemoteUrl=${repositoryPolicy.approvedRemoteUrl}")
-        appendLine("main:")
-        mainClasspath.forEach { appendLine(it) }
-        appendLine("test:")
-        testClasspath.forEach { appendLine(it) }
-        appendLine("testRoots:")
-        testSourceRoots.forEach { appendLine(it) }
-        appendLine("miss:")
-        missClasses.forEach { appendLine(it) }
-    }
+    val complete: Boolean get() = diagnostics.isEmpty()
+
+    fun write(): String = GsonBuilder().serializeNulls().create().toJson(
+        mapOf(
+            "version" to 1,
+            "tuple" to tuple,
+            "activeProfiles" to activeProfiles,
+            "repositoryPolicy" to repositoryPolicy,
+            "mainClasspath" to mainClasspath,
+            "testClasspath" to testClasspath,
+            "testSourceRoots" to testSourceRoots,
+            "diagnostics" to diagnostics,
+        ),
+    )
 
     companion object {
         fun read(text: String): ClasspathAnalysis {
-            var modelBuilder = ""
-            var resolver = ""
-            var profiles = emptyList<String>()
-            var offline = false
-            var descriptorIgnored = false
-            var targetDiscarded = false
-            var remoteId = ""
-            var remoteUrl = ""
-            val main = mutableListOf<String>()
-            val test = mutableListOf<String>()
-            val roots = mutableListOf<String>()
-            val misses = mutableListOf<String>()
-            var section = ""
-            for (raw in text.split('\n')) {
-                val line = raw.trimEnd()
-                when {
-                    line == "main:" -> section = "main"
-                    line == "test:" -> section = "test"
-                    line == "testRoots:" -> section = "roots"
-                    line == "miss:" -> section = "miss"
-                    section == "main" && line.isNotEmpty() -> main += line
-                    section == "test" && line.isNotEmpty() -> test += line
-                    section == "roots" && line.isNotEmpty() -> roots += line
-                    section == "miss" && line.isNotEmpty() -> misses += line
-                    line.startsWith("tuple.modelBuilder=") -> modelBuilder = line.substringAfter("=")
-                    line.startsWith("tuple.resolver=") -> resolver = line.substringAfter("=")
-                    line.startsWith("profiles=") ->
-                        profiles = line.substringAfter("=").split(',').filter { it.isNotEmpty() }
-                    line.startsWith("policy.offline=") -> offline = line.substringAfter("=").toBoolean()
-                    line.startsWith("policy.descriptorRepositoriesIgnored=") ->
-                        descriptorIgnored = line.substringAfter("=").toBoolean()
-                    line.startsWith("policy.targetRepositoriesDiscarded=") ->
-                        targetDiscarded = line.substringAfter("=").toBoolean()
-                    line.startsWith("policy.approvedRemoteId=") -> remoteId = line.substringAfter("=")
-                    line.startsWith("policy.approvedRemoteUrl=") -> remoteUrl = line.substringAfter("=")
-                }
+            val reader = JsonReader(StringReader(text))
+            reader.strictness = Strictness.STRICT
+            val root = JsonParser.parseReader(reader).asJsonObject
+            require(reader.peek() == com.google.gson.stream.JsonToken.END_DOCUMENT) { "Trailing JSON" }
+            root.fields("version", "tuple", "activeProfiles", "repositoryPolicy", "mainClasspath", "testClasspath", "testSourceRoots", "diagnostics")
+            require(root.number("version") == 1) { "Unsupported classpath format" }
+            val tuple = root.obj("tuple").also { it.fields("modelBuilder", "resolver") }
+            val policy = root.obj("repositoryPolicy").also {
+                it.fields("offline", "descriptorRepositoriesIgnored", "targetRepositoriesDiscarded", "approvedRemoteId", "approvedRemoteUrl")
             }
             return ClasspathAnalysis(
-                tuple = MavenTuple(modelBuilder, resolver),
-                activeProfiles = profiles,
+                tuple = MavenTuple(tuple.string("modelBuilder"), tuple.string("resolver")),
+                activeProfiles = root.strings("activeProfiles"),
                 repositoryPolicy = RepositoryPolicy(
-                    offline = offline,
-                    descriptorRepositoriesIgnored = descriptorIgnored,
-                    targetRepositoriesDiscarded = targetDiscarded,
-                    approvedRemoteId = remoteId,
-                    approvedRemoteUrl = remoteUrl,
+                    policy.boolean("offline"),
+                    policy.boolean("descriptorRepositoriesIgnored"),
+                    policy.boolean("targetRepositoriesDiscarded"),
+                    policy.string("approvedRemoteId"),
+                    policy.string("approvedRemoteUrl"),
                 ),
-                mainClasspath = main,
-                testClasspath = test,
-                testSourceRoots = roots,
-                missClasses = misses,
+                mainClasspath = root.strings("mainClasspath"),
+                testClasspath = root.strings("testClasspath"),
+                testSourceRoots = root.strings("testSourceRoots"),
+                diagnostics = root.array("diagnostics").map { item ->
+                    val value = item.asJsonObject.also { it.fields("sourceSet", "reason", "coordinate", "message") }
+                    ClasspathDiagnostic(
+                        value.optionalString("sourceSet"),
+                        value.string("reason"),
+                        value.optionalString("coordinate"),
+                        value.string("message"),
+                    )
+                },
             )
         }
     }
 }
 
-class UnboundedVersionRangeException(message: String) : RuntimeException(message)
+private fun JsonObject.fields(vararg names: String) {
+    require(keySet() == names.toSet()) { "Invalid classpath fields" }
+}
+private fun JsonObject.obj(name: String): JsonObject = get(name).asJsonObject
+private fun JsonObject.array(name: String): JsonArray = get(name).asJsonArray
+private fun JsonObject.string(name: String): String = get(name).asJsonPrimitive.also { require(it.isString) }.asString
+private fun JsonObject.optionalString(name: String): String? =
+    if (get(name).isJsonNull) null else string(name)
+private fun JsonObject.boolean(name: String): Boolean = get(name).asJsonPrimitive.also { require(it.isBoolean) }.asBoolean
+private fun JsonObject.number(name: String): Int = get(name).asJsonPrimitive.also { require(it.isNumber) }.asInt
+private fun JsonObject.strings(name: String): List<String> = array(name).map {
+    require(it.isJsonPrimitive && it.asJsonPrimitive.isString)
+    it.asString
+}
 
-class MissingLockedArtifactException(message: String) : RuntimeException(message)
+class UnboundedVersionRangeException(message: String) : RuntimeException(message)

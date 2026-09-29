@@ -20,6 +20,7 @@ import org.eclipse.aether.RepositorySystem
 import org.eclipse.aether.RepositorySystemSession
 import org.eclipse.aether.artifact.DefaultArtifact
 import org.eclipse.aether.collection.CollectRequest
+import org.eclipse.aether.collection.DependencyCollectionException
 import org.eclipse.aether.graph.DependencyFilter
 import org.eclipse.aether.repository.LocalRepository
 import org.eclipse.aether.repository.RemoteRepository
@@ -27,7 +28,9 @@ import org.eclipse.aether.repository.RepositoryPolicy
 import org.eclipse.aether.resolution.ArtifactDescriptorRequest
 import org.eclipse.aether.resolution.ArtifactDescriptorResult
 import org.eclipse.aether.resolution.ArtifactRequest
+import org.eclipse.aether.resolution.ArtifactResolutionException
 import org.eclipse.aether.resolution.DependencyRequest
+import org.eclipse.aether.resolution.DependencyResolutionException
 import org.eclipse.aether.resolution.VersionRangeRequest
 import org.eclipse.aether.supplier.RepositorySystemSupplier
 import org.eclipse.aether.transport.file.FileTransporterFactory
@@ -49,7 +52,21 @@ object CacheOnlyClasspathWorker {
         try {
             val session = newSession(system, localRepository)
             val central = centralRepository()
-            val modelResult = buildModel(system, session, pom, listOf(central))
+            val modelResult = try {
+                buildModel(system, session, pom, listOf(central))
+            } catch (e: ArtifactResolutionException) {
+                return ClasspathAnalysis(
+                    tuple = MavenTuple(MODEL_BUILDER_VERSION, RESOLVER_VERSION),
+                    activeProfiles = emptyList(),
+                    repositoryPolicy = cachePolicy(),
+                    mainClasspath = emptyList(),
+                    testClasspath = emptyList(),
+                    testSourceRoots = emptyList(),
+                    diagnostics = listOf(ClasspathDiagnostic(null, "model-unavailable", e.results.firstOrNull()?.request?.artifact?.let {
+                        "${it.groupId}:${it.artifactId}:${it.version}"
+                    }, e.message ?: "Model metadata unavailable")),
+                )
+            }
             val model = modelResult.effectiveModel
             val descriptor = ArtifactDescriptorResult(ArtifactDescriptorRequest())
             ArtifactDescriptorReaderDelegate().populateResult(session, descriptor, model)
@@ -65,28 +82,48 @@ object CacheOnlyClasspathWorker {
             collect.dependencies = descriptor.dependencies
             collect.managedDependencies = descriptor.managedDependencies
             collect.repositories = listOf(central)
-            val root = system.collectDependencies(session, collect).root
+            val collection = try {
+                system.collectDependencies(session, collect)
+            } catch (e: DependencyCollectionException) {
+                e.result
+            }
+            val root = collection.root
+            val diagnostics = collection.exceptions.map {
+                ClasspathDiagnostic(null, "dependency-collection", null, it.message ?: it.javaClass.name)
+            }.toMutableList()
+            val main = if (root == null) emptyList() else resolveClasspath(
+                system, session, root, JavaScopes.COMPILE, localRepository, "main", diagnostics,
+            )
+            val test = if (root == null) emptyList() else resolveClasspath(
+                system, session, root, JavaScopes.TEST, localRepository, "test", diagnostics,
+            )
+            if (root == null && diagnostics.isEmpty()) {
+                diagnostics += ClasspathDiagnostic(null, "dependency-collection", null, "Dependency tree unavailable")
+            }
             val basedir = pom.toAbsolutePath().normalize().parent
             return ClasspathAnalysis(
                 tuple = MavenTuple(MODEL_BUILDER_VERSION, RESOLVER_VERSION),
                 activeProfiles = modelResult.modelIds.flatMap { id ->
                     modelResult.getActivePomProfiles(id).map { it.id }
                 }.distinct(),
-                repositoryPolicy = com.leveret.inspect.classpath.RepositoryPolicy(
-                    offline = true,
-                    descriptorRepositoriesIgnored = true,
-                    targetRepositoriesDiscarded = true,
-                    approvedRemoteId = CENTRAL_ID,
-                    approvedRemoteUrl = CENTRAL_URL,
-                ),
-                mainClasspath = resolveClasspath(system, session, root, JavaScopes.COMPILE, localRepository),
-                testClasspath = resolveClasspath(system, session, root, JavaScopes.TEST, localRepository),
+                repositoryPolicy = cachePolicy(),
+                mainClasspath = main,
+                testClasspath = test,
                 testSourceRoots = testSourceRoots(model, basedir),
+                diagnostics = diagnostics.distinct(),
             )
         } finally {
             system.shutdown()
         }
     }
+
+    private fun cachePolicy() = com.leveret.inspect.classpath.RepositoryPolicy(
+        offline = true,
+        descriptorRepositoriesIgnored = true,
+        targetRepositoriesDiscarded = true,
+        approvedRemoteId = CENTRAL_ID,
+        approvedRemoteUrl = CENTRAL_URL,
+    )
 
     private fun newSession(system: RepositorySystem, localRepository: Path): org.eclipse.aether.DefaultRepositorySystemSession {
         val session = MavenRepositorySystemUtils.newSession()
@@ -121,17 +158,35 @@ object CacheOnlyClasspathWorker {
         root: org.eclipse.aether.graph.DependencyNode,
         scope: String,
         localRepository: Path,
+        sourceSet: String,
+        diagnostics: MutableList<ClasspathDiagnostic>,
     ): List<String> {
         val filter: DependencyFilter = DependencyFilterUtils.classpathFilter(scope)
-        val artifacts = system.resolveDependencies(session, DependencyRequest(root, filter)).artifactResults
-        val repo = localRepository.toAbsolutePath().normalize()
-        return artifacts.mapNotNull { result ->
-            val file = result.artifact?.file ?: return@mapNotNull null
-            if (!file.isFile) return@mapNotNull null
-            repo.relativize(file.toPath().toAbsolutePath().normalize()).toString()
+        val result = try {
+            system.resolveDependencies(session, DependencyRequest(root, filter))
+        } catch (e: DependencyResolutionException) {
+            e.result
         }
+        val repo = localRepository.toAbsolutePath().normalize()
+        val paths = mutableListOf<String>()
+        for (artifact in result.artifactResults) {
+            val file = artifact.artifact?.file
+            if (artifact.isResolved && file?.isFile == true) {
+                paths += repo.relativize(file.toPath().toAbsolutePath().normalize()).toString().replace('\\', '/')
+            } else {
+                val key = artifact.request?.artifact
+                diagnostics += ClasspathDiagnostic(
+                    sourceSet, "missing-artifact",
+                    key?.let { "${it.groupId}:${it.artifactId}:${it.version}" },
+                    artifact.exceptions.joinToString("; ") { it.message ?: it.javaClass.name }.ifEmpty { "Artifact unavailable" },
+                )
+            }
+        }
+        result.collectExceptions.forEach {
+            diagnostics += ClasspathDiagnostic(sourceSet, "dependency-collection", null, it.message ?: it.javaClass.name)
+        }
+        return paths
     }
-
     private fun testSourceRoots(model: Model, basedir: Path): List<String> {
         val roots = mutableListOf<String>()
         roots += relativize(basedir, model.build?.testSourceDirectory ?: "src/test/java")
