@@ -10,6 +10,7 @@ hikari = "6.3.0"
 h2 = "2.3.232"
 maven = "3.9.16"
 mavenResolver = "1.9.27"
+gson = "2.13.2"
 
 [libraries]
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
@@ -23,6 +24,7 @@ h2 = { module = "com.h2database:h2", version.ref = "h2" }
 maven-resolver-provider = { module = "org.apache.maven:maven-resolver-provider", version.ref = "maven" }
 maven-model-builder = { module = "org.apache.maven:maven-model-builder", version.ref = "maven" }
 maven-resolver-supplier = { module = "org.apache.maven.resolver:maven-resolver-supplier", version.ref = "mavenResolver" }
+gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

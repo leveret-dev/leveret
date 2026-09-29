@@ -3,7 +3,6 @@ package com.leveret.inspect.classpath
 import java.nio.file.Files
 import java.nio.file.Path
 import org.assertj.core.api.Assertions.assertThat
-import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
@@ -43,7 +42,7 @@ class GradleLockfileClasspathWorkerTest {
         assertThat(analysis.repositoryPolicy.approvedRemoteId).isEqualTo("central")
         assertThat(analysis.mainClasspath).isEmpty()
         assertThat(analysis.testClasspath).isEmpty()
-        assertThat(analysis.missClasses).isEmpty()
+        assertThat(analysis.diagnostics).isEmpty()
     }
 
     @Test
@@ -70,7 +69,7 @@ class GradleLockfileClasspathWorkerTest {
         assertThat(analysis.tuple).isEqualTo(MavenTuple("none", "none"))
         assertThat(analysis.mainClasspath).isEmpty()
         assertThat(analysis.testClasspath).isEmpty()
-        assertThat(analysis.missClasses).containsExactly("missing-lockfile")
+        assertThat(analysis.diagnostics.map { it.reason }).containsExactly("missing-lockfile")
     }
 
     @Test
@@ -89,7 +88,7 @@ class GradleLockfileClasspathWorkerTest {
         val analysis = GradleLockfileClasspathWorker.analyze(dir, dir.resolve("repo"))
         assertThat(analysis.tuple).isEqualTo(MavenTuple("none", "libs.versions.toml"))
         assertThat(analysis.mainClasspath).isEmpty()
-        assertThat(analysis.missClasses).contains("missing-lockfile")
+        assertThat(analysis.diagnostics.map { it.reason }).contains("missing-lockfile")
     }
 
     @Test
@@ -104,7 +103,7 @@ class GradleLockfileClasspathWorkerTest {
             """.trimIndent() + "\n",
         )
         val analysis = GradleLockfileClasspathWorker.analyze(dir, dir.resolve("repo"))
-        assertThat(analysis.missClasses).contains("missing-lockfile", "dynamic-versions")
+        assertThat(analysis.diagnostics.map { it.reason }).contains("missing-lockfile", "dynamic-versions")
     }
 
     @Test
@@ -121,7 +120,7 @@ class GradleLockfileClasspathWorkerTest {
             """.trimIndent() + "\n",
         )
         val analysis = GradleLockfileClasspathWorker.analyze(dir, dir.resolve("repo"))
-        assertThat(analysis.missClasses).contains("missing-lockfile", "dynamic-versions")
+        assertThat(analysis.diagnostics.map { it.reason }).contains("missing-lockfile", "dynamic-versions")
     }
 
 
@@ -142,7 +141,7 @@ class GradleLockfileClasspathWorkerTest {
             """.trimIndent() + "\n",
         )
         val analysis = GradleLockfileClasspathWorker.analyze(dir, dir.resolve("repo"))
-        assertThat(analysis.missClasses).contains("included-builds", "unpublished-catalogs")
+        assertThat(analysis.diagnostics.map { it.reason }).contains("included-builds", "unpublished-catalogs")
     }
 
     @Test
@@ -162,9 +161,31 @@ class GradleLockfileClasspathWorkerTest {
             """.trimIndent() + "\n",
         )
         val analysis = GradleLockfileClasspathWorker.analyze(dir, dir.resolve("repo"))
-        assertThat(analysis.missClasses).contains("included-builds", "unpublished-catalogs")
+        assertThat(analysis.diagnostics.map { it.reason }).contains("included-builds", "unpublished-catalogs")
     }
 
+
+    @Test
+    fun `missing artifact preserves other locked entries in their scopes`(@TempDir dir: Path) {
+        Files.writeString(
+            dir.resolve("gradle.lockfile"),
+            "t:present:1=compileClasspath,testCompileClasspath\n" +
+                "t:absent:1=compileClasspath,testCompileClasspath\n" +
+                "t:test-only:1=testCompileClasspath\n",
+        )
+        val repo = dir.resolve("repo")
+        installJar(repo, "t", "present", "1")
+        installJar(repo, "t", "test-only", "1")
+        val analysis = GradleLockfileClasspathWorker.analyze(dir, repo)
+        assertThat(analysis.mainClasspath).containsExactly("t/present/1/present-1.jar")
+        assertThat(analysis.testClasspath).containsExactly(
+            "t/present/1/present-1.jar",
+            "t/test-only/1/test-only-1.jar",
+        )
+        assertThat(analysis.diagnostics.map { it.coordinate }).contains("t:absent:1")
+        assertThat(analysis.complete).isFalse()
+        assertThat(ClasspathAnalysis.read(analysis.write())).isEqualTo(analysis)
+    }
 
     @Test
     fun `throws when a locked jar is absent from the cache`(@TempDir dir: Path) {
@@ -172,9 +193,9 @@ class GradleLockfileClasspathWorkerTest {
             dir.resolve("gradle.lockfile"),
             "org.slf4j:slf4j-api:2.0.17=compileClasspath\n",
         )
-        assertThatThrownBy { GradleLockfileClasspathWorker.analyze(dir, dir.resolve("repo")) }
-            .isInstanceOf(MissingLockedArtifactException::class.java)
-            .hasMessageContaining("org.slf4j:slf4j-api:2.0.17")
+        val analysis = GradleLockfileClasspathWorker.analyze(dir, dir.resolve("repo"))
+        assertThat(analysis.complete).isFalse()
+        assertThat(analysis.diagnostics.map { it.coordinate }).contains("org.slf4j:slf4j-api:2.0.17")
     }
 
     @Test
@@ -190,9 +211,9 @@ class GradleLockfileClasspathWorkerTest {
             "2.0.17",
             "<groupId>org.slf4j</groupId><artifactId>slf4j-api</artifactId><version>2.0.17</version>",
         )
-        assertThatThrownBy { GradleLockfileClasspathWorker.analyze(dir, dir.resolve("repo")) }
-            .isInstanceOf(MissingLockedArtifactException::class.java)
-            .hasMessageContaining("org.slf4j:slf4j-api:2.0.17")
+        val analysis = GradleLockfileClasspathWorker.analyze(dir, dir.resolve("repo"))
+        assertThat(analysis.complete).isFalse()
+        assertThat(analysis.diagnostics.map { it.coordinate }).contains("org.slf4j:slf4j-api:2.0.17")
     }
 
 
@@ -202,7 +223,7 @@ class GradleLockfileClasspathWorkerTest {
         val analysis = GradleOracleHarness.analyzeIsolated(subject.project, subject.localRepo)
         assertThat(analysis.tuple).isEqualTo(MavenTuple("gradle.lockfile", "none"))
         assertThat(analysis.repositoryPolicy.offline).isTrue()
-        assertThat(analysis.missClasses).isEmpty()
+        assertThat(analysis.diagnostics).isEmpty()
         assertThat(analysis.mainClasspath).hasSize(36).containsExactlyInAnyOrderElementsOf(subject.mainOracle)
     }
 

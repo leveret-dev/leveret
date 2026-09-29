@@ -83,6 +83,74 @@ class CacheOnlyClasspathWorkerTest {
     }
 
     @Test
+    fun `missing artifact preserves the other compile entry`(@TempDir dir: Path) {
+        val repo = dir.resolve("repo")
+        for (name in listOf("present", "absent")) {
+            installPom(repo, "t", name, "1", "<groupId>t</groupId><artifactId>$name</artifactId><version>1</version>")
+        }
+        val jar = repo.resolve("t/present/1/present-1.jar")
+        Files.write(jar, byteArrayOf(0x50, 0x4B, 0x03, 0x04))
+        Files.writeString(jar.parent.resolve("_remote.repositories"), "pom>central=\njar>central=\n")
+        val pom = writePom(
+            dir,
+            """
+            <project>
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>t</groupId><artifactId>root</artifactId><version>1</version>
+              <dependencies>
+                <dependency><groupId>t</groupId><artifactId>present</artifactId><version>1</version></dependency>
+                <dependency><groupId>t</groupId><artifactId>absent</artifactId><version>1</version></dependency>
+              </dependencies>
+            </project>
+            """.trimIndent(),
+        )
+        val analysis = CacheOnlyClasspathWorker.analyze(pom, repo)
+        assertThat(analysis.mainClasspath).containsExactly("t/present/1/present-1.jar")
+        assertThat(analysis.diagnostics.map { it.coordinate }).contains("t:absent:1")
+        assertThat(analysis.complete).isFalse()
+        assertThat(ClasspathAnalysis.read(analysis.write())).isEqualTo(analysis)
+    }
+
+    @Test
+    fun `missing parent metadata leaves the whole classpath unknown`(@TempDir dir: Path) {
+        val pom = writePom(
+            dir,
+            """
+            <project>
+              <modelVersion>4.0.0</modelVersion>
+              <parent><groupId>t</groupId><artifactId>missing</artifactId><version>1</version></parent>
+              <artifactId>child</artifactId>
+            </project>
+            """.trimIndent(),
+        )
+        val analysis = CacheOnlyClasspathWorker.analyze(pom, dir.resolve("repo"))
+        assertThat(analysis.mainClasspath).isEmpty()
+        assertThat(analysis.testClasspath).isEmpty()
+        assertThat(analysis.diagnostics.map { it.reason }).contains("model-unavailable")
+        assertThat(analysis.complete).isFalse()
+    }
+
+    @Test
+    fun `worker output preserves incomplete scope`(@TempDir dir: Path) {
+        val repo = dir.resolve("repo")
+        val pom = writePom(
+            dir,
+            """
+            <project>
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>t</groupId><artifactId>root</artifactId><version>1</version>
+              <dependencies><dependency><groupId>t</groupId><artifactId>absent</artifactId><version>1</version></dependency></dependencies>
+            </project>
+            """.trimIndent(),
+        )
+        val output = dir.resolve("output.json")
+        WorkerMain.main(arrayOf("--pom", pom.toString(), "--local-repo", repo.toString(), "--output", output.toString()))
+        val analysis = ClasspathAnalysis.read(Files.readString(output))
+        assertThat(analysis.complete).isFalse()
+        assertThat(analysis.diagnostics.map { it.coordinate }).contains("t:absent:1")
+    }
+
+    @Test
     fun `commons lang main classpath matches the isolated Maven oracle`() {
         val subject = OracleHarness.commonsLang
         val analysis = OracleHarness.analyzeIsolated(subject.pom, subject.localRepo)
