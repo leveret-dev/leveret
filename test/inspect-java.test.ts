@@ -6,8 +6,11 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildChangeManifest, type ChangeManifest } from "../src/change-evidence.js";
+import { buildChangeManifest, type ChangeEvidence, type ChangeManifest } from "../src/change-evidence.js";
 import { loadInspectJavaConfig, openInspectJava } from "../src/inspect-java.js";
+import { referenceReplySchema } from "../src/inspect-java-contract.js";
+import { SPECIALIZED_LEG_DEFINITIONS, TARGETED_VERIFIER_TOOLS, selectPhaseTools } from "../src/runner/discovery-legs.js";
+import { buildPiTools } from "../src/runner/pi-tools.js";
 
 const home = mkdtempSync(join(tmpdir(), "leveret-java-boundary-"));
 const repo = join(home, "repo");
@@ -75,6 +78,112 @@ describe("Inspect Java boundary", () => {
         .toEqual(["src/test/java/example/PricingTest.java"]);
       expect(page.summary.coverage.complete).toBe(true);
     } finally { await bridge.close(); }
+  }, 240_000);
+
+  it("registered reviewer phases retrieve checked test caller evidence", async () => {
+    const config = await loadInspectJavaConfig(repo, configPath, digest);
+    const bridge = await openInspectJava(repo, manifest, config, join(home, "tool-runs"));
+    const evidence: ChangeEvidence = {
+      manifest,
+      async retrieve() { throw new Error("diff retrieval is outside this Java reference query"); },
+      async auditPatch() { throw new Error("audit patch is outside this Java reference query"); },
+    };
+    const bundle = await buildPiTools({
+      repo, base: manifest.base, evidence, inspectJava: bridge,
+      graphLive: false, sandboxed: false, profilePath: join(home, "profile"),
+      rulesRoot: home, memoryRepo: home,
+    });
+    try {
+      const selected = [
+        bundle.tools.filter((tool) => tool.name !== "leveret_scan"),
+        ...SPECIALIZED_LEG_DEFINITIONS.map((leg) => selectPhaseTools(bundle.tools, leg.requiredTools, leg.optionalTools)),
+        selectPhaseTools(bundle.tools, TARGETED_VERIFIER_TOOLS.required, TARGETED_VERIFIER_TOOLS.optional, true),
+      ];
+      for (const [index, tools] of selected.entries()) {
+        const tool = tools.find((item) => item.name === "leveret_java_references");
+        expect(tool, `phase ${index} must expose the real Java reference query`).toBeDefined();
+        const result = await tool!.execute(`java-${index}`, {
+          side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 } },
+        }, undefined, undefined, {} as never);
+        expect(result.content[0]?.text).toBe(`evidence_id: java-${index}`);
+        const payload = result.content.find((item) => item.type === "text" && item.text?.startsWith("{"))?.text;
+        const reply = referenceReplySchema.parse(JSON.parse(payload ?? "null"));
+        if (!reply.ok) throw new Error(reply.error.message);
+        expect(reply.result.items.filter((item) => item.kind === "reference").map((item) => ({
+          path: item.reference?.location.path, kind: item.reference?.kind, basis: item.reference?.basis,
+        }))).toEqual([{ path: "src/test/java/example/PricingTest.java", kind: "call", basis: "checked" }]);
+        expect(reply.result.summary.coverage.complete).toBe(true);
+        const source = await tools.find((item) => item.name === "leveret_read")!.execute(`source-${index}`, {
+          path: "src/test/java/example/PricingTest.java", line_start: 3, line_end: 3,
+        }, undefined, undefined, {} as never);
+        expect(source.content[0]?.text).toBe(`evidence_id: source-${index}`);
+        expect(source.content.some((item) => item.text?.includes("Pricing.price(3)"))).toBe(true);
+      }
+    } finally {
+      await bundle.close();
+    }
+  }, 240_000);
+
+  it("registered tool keeps checked caller alongside missing-input coverage", async () => {
+    writeFileSync(test, readFileSync(test, "utf8").replace("\n}\n",
+      "\n int unknown() { return Pricing.price(MissingInputs.quantity()); }\n}\n"));
+    git(["add", "src/test/java/example/PricingTest.java"]);
+    git(["-c", "commit.gpgsign=false", "commit", "-m", "missing argument fixture"]);
+    const incomplete = await buildChangeManifest(repo, manifest.head);
+    try {
+      const config = await loadInspectJavaConfig(repo, configPath, digest);
+      const bridge = await openInspectJava(repo, incomplete, config, join(home, "unresolved-tool-runs"));
+      const bundle = await buildPiTools({
+        repo, base: incomplete.base, inspectJava: bridge,
+        evidence: { manifest: incomplete,
+          async retrieve() { throw new Error("diff retrieval not needed"); },
+          async auditPatch() { throw new Error("audit patch not needed"); } },
+        graphLive: false, sandboxed: false, profilePath: join(home, "profile"), rulesRoot: home, memoryRepo: home,
+      });
+      try {
+        const tool = bundle.tools.find((item) => item.name === "leveret_java_references")!;
+        const response = await tool.execute("unresolved-evidence", {
+          side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 } },
+        }, undefined, undefined, {} as never);
+        const payload = response.content.find((item) => item.type === "text" && item.text?.startsWith("{"))?.text;
+        const reply = referenceReplySchema.parse(JSON.parse(payload ?? "null"));
+        if (!reply.ok) throw new Error(reply.error.message);
+        expect(reply.result.items.filter((item) => item.kind === "reference").map((item) => item.reference?.location.range.start.line))
+          .toEqual([3]);
+        expect(reply.result.items.some((item) => item.kind === "unresolved" && item.unresolved?.sourceSet === "test")).toBe(true);
+        expect(reply.result.summary.coverage.complete).toBe(false);
+      } finally { await bundle.close(); }
+    } finally { git(["reset", "--hard", manifest.head]); }
+  }, 240_000);
+
+  it("registered tool selects deleted methods on base without falling back from head", async () => {
+    writeFileSync(main, readFileSync(main, "utf8").replace(" static int price(int n) { return n * 12; }\n", "\n"));
+    git(["add", "src/main/java/example/Pricing.java"]);
+    git(["-c", "commit.gpgsign=false", "commit", "-m", "deleted method fixture"]);
+    const deletion = await buildChangeManifest(repo, manifest.head);
+    try {
+      const config = await loadInspectJavaConfig(repo, configPath, digest);
+      const bridge = await openInspectJava(repo, deletion, config, join(home, "base-tool-runs"));
+      const bundle = await buildPiTools({
+        repo, base: deletion.base, inspectJava: bridge,
+        evidence: { manifest: deletion,
+          async retrieve() { throw new Error("diff retrieval not needed"); },
+          async auditPatch() { throw new Error("audit patch not needed"); } },
+        graphLive: false, sandboxed: false, profilePath: join(home, "profile"), rulesRoot: home, memoryRepo: home,
+      });
+      try {
+        const tool = bundle.tools.find((item) => item.name === "leveret_java_references")!;
+        const target = { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 } };
+        const baseResult = await tool.execute("base-ref", { side: "base", target }, undefined, undefined, {} as never);
+        const baseReply = referenceReplySchema.parse(JSON.parse(baseResult.content.find((item) => item.text?.startsWith("{"))?.text ?? "null"));
+        if (!baseReply.ok) throw new Error(baseReply.error.message);
+        expect(baseReply.result.items.filter((item) => item.kind === "reference").map((item) => item.reference?.location.path))
+          .toEqual(["src/test/java/example/PricingTest.java"]);
+        const headResult = await tool.execute("head-ref", { side: "head", target }, undefined, undefined, {} as never);
+        const headReply = referenceReplySchema.parse(JSON.parse(headResult.content.find((item) => item.text?.startsWith("{"))?.text ?? "null"));
+        expect(headReply).toMatchObject({ ok: false, error: { code: "target-missing" } });
+      } finally { await bundle.close(); }
+    } finally { git(["reset", "--hard", manifest.head]); }
   }, 240_000);
 
   it("rejects dirty Java outside the diff before publishing an analysis", async () => {

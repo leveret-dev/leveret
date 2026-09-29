@@ -1,7 +1,8 @@
 # Leveret Inspect
 
 The Kotlin/JVM component of the [Leveret monorepo](https://github.com/leveret-dev/leveret).
-It has an independent Gradle build; the TypeScript reviewer does not yet call these modules.
+It has an independent Gradle build; the TypeScript reviewer calls its Java
+analysis module only when a trusted host configuration is supplied.
 New issues and pull requests belong in `leveret-dev/leveret`.
 
 ## Modules
@@ -93,6 +94,16 @@ one `module`, `build` (`maven` or `gradle`), one `mainRoots` and one
 file chooses the executable, cache, mounts, or worker limits. Only classpath
 artifacts already in the cache are copied into private scratch; provisioning
 and target builds are not worker operations.
+
+The reviewer accepts only the paired `LEVERET_INSPECT_JAVA_CONFIG` (absolute
+path outside the checkout) and `LEVERET_INSPECT_JAVA_CONFIG_SHA256` (digest of
+that file). With neither supplied, Java references are explicitly unavailable.
+With both supplied, initialization failures stop the configured review rather
+than producing an empty checked-reference list. `leveret_java_references`
+selects a declaration by a position inside its name token on the requested
+base/head side, returns out-of-diff checked references with separate coverage,
+and pages details within its byte budget. Model-visible results carry the
+existing tool evidence ID; the model cannot select the worker or its mounts.
 
 The supported extraction host is Linux x86-64 with usable Bubblewrap user,
 network, PID, and mount namespaces and `prlimit`. Unavailable isolation fails

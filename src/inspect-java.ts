@@ -26,6 +26,7 @@ export class InspectJavaError extends Error {
 }
 export interface InspectJavaBridge {
   summaries: { base: AnalysisSummary; head: AnalysisSummary };
+  identity: { configSha256: string; distributionSha256: string; jdkSha256: string };
   references(request: ReferenceRequest): Promise<ReferencePage>;
   close(): Promise<void>;
 }
@@ -330,6 +331,11 @@ export async function openInspectJava(repo: string, manifest: ChangeManifest, co
     }
     return {
       summaries,
+      identity: {
+        configSha256: config.configSha256,
+        distributionSha256: createHash("sha256").update(JSON.stringify(Object.entries(config.distributionFiles).sort())).digest("hex"),
+        jdkSha256: createHash("sha256").update(JSON.stringify(Object.entries(config.jdkFiles).sort())).digest("hex"),
+      },
       references(request) {
         if (closed) return Promise.reject(new InspectJavaError("analysis-unavailable", "Java bridge is closed"));
         const side = request.side;
