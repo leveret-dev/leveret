@@ -4,6 +4,7 @@ import java.nio.file.Path
 import org.eclipse.jdt.core.JavaCore
 import org.eclipse.jdt.core.dom.AST
 import org.eclipse.jdt.core.dom.ASTNode
+import org.eclipse.jdt.core.dom.AnonymousClassDeclaration
 import org.eclipse.jdt.core.dom.ASTParser
 import org.eclipse.jdt.core.dom.ASTVisitor
 import org.eclipse.jdt.core.dom.CompilationUnit
@@ -24,6 +25,8 @@ object JavaExtractor {
         require(JavaCore.isSupportedJavaVersion(input.javaLevel)) { "Unsupported Java level ${input.javaLevel}" }
         val identity = JavaAnalysisIdentity.compute(input)
         val methods = linkedMapOf<String, JavaMethod>()
+        val constructors = linkedMapOf<String, JavaMethod>()
+        val duplicateIds = mutableSetOf<String>()
         val pending = mutableListOf<PendingReference>()
         val unresolved = mutableListOf<UnresolvedSite>()
         val files = mutableListOf<SourceFile>()
@@ -43,32 +46,44 @@ object JavaExtractor {
             val options = JavaCore.getOptions()
             JavaCore.setComplianceOptions(input.javaLevel, options)
             parser.setCompilerOptions(options)
+            val artifactRoot = if (paths.isEmpty()) artifact else artifact.toRealPath()
             parser.setEnvironment(
-                paths.map { JavaAnalysisIdentity.contained(artifact.toRealPath(), artifact.resolve(it)).toString() }.toTypedArray(),
+                paths.map { JavaAnalysisIdentity.contained(artifactRoot, artifact.resolve(it)).toString() }.toTypedArray(),
                 roots.filter { java.nio.file.Files.exists(it) }.map { JavaAnalysisIdentity.contained(root, it).toString() }.toTypedArray(),
                 null,
                 true,
             )
             val requested = sources.map { JavaAnalysisIdentity.contained(root, it).toString() }.toSet()
+            val examined = mutableSetOf<String>()
             parser.createASTs(requested.toTypedArray(), null, emptyArray<String>(), object : FileASTRequestor() {
                 override fun acceptAST(sourceFilePath: String, ast: CompilationUnit) {
                     if (sourceFilePath !in requested) return
                     val relative = JavaAnalysisIdentity.relative(root, Path.of(sourceFilePath))
+                    examined += relative
                     files += SourceFile(relative, scope, true)
                     val problems = ast.problems.filter { it.isError }
                     diagnostics += problems.map { "$scope:$relative:${it.sourceLineNumber}: ${it.message}" }
                     ast.accept(object : ASTVisitor() {
                         override fun visit(node: MethodDeclaration): Boolean {
-                            if (!node.isConstructor) {
-                                val binding = node.resolveBinding()?.methodDeclaration
-                                if (binding != null && !binding.isRecovered && !recoveredSignature(binding)) {
-                                    val method = JavaMethod(
-                                        binding.key, signature(binding), location(ast, relative, node),
-                                        range(ast, node.name.startPosition, node.name.length), scope,
-                                    )
-                                    require(methods.putIfAbsent(method.id, method) == null || methods[method.id] == method) {
-                                        "Conflicting declaration identity ${method.id}"
+                            val binding = node.resolveBinding()?.methodDeclaration
+                            if (binding != null && !binding.isRecovered && !recoveredSignature(binding)) {
+                                val method = JavaMethod(
+                                    binding.key, signature(binding), location(ast, relative, node),
+                                    range(ast, node.name.startPosition, node.name.length), scope,
+                                )
+                                val destination = if (node.isConstructor) constructors else methods
+                                val previous = destination.putIfAbsent(method.id, method)
+                                if (previous != null && previous != method) {
+                                    val declarations = if (duplicateIds.add(method.id)) listOf(previous, method) else listOf(method)
+                                    for (declaration in declarations) {
+                                        val start = declaration.nameRange.start
+                                        unresolved += UnresolvedSite(
+                                            "duplicate:${declaration.sourceSet}:${declaration.location.path}:${start.line}:${start.column}",
+                                            Location(declaration.location.path, declaration.nameRange),
+                                            declaration.sourceSet, "duplicate-declaration-identity",
+                                        )
                                     }
+                                    diagnostics += "$scope:$relative: duplicate declaration identity ${method.id}"
                                 }
                             }
                             return true
@@ -103,11 +118,13 @@ object JavaExtractor {
                                 unresolved += UnresolvedSite(siteId, site, scope,
                                     if (errors.isNotEmpty()) "compiler: ${errors.first().message}" else "binding-unresolved")
                             } else {
+                                if (implicitMember(binding)) return
                                 val enclosing = generateSequence(node.parent) { it.parent }.takeWhile { it !is org.eclipse.jdt.core.dom.LambdaExpression }
-                                    .firstOrNull { it is MethodDeclaration || it is org.eclipse.jdt.core.dom.Initializer || it is org.eclipse.jdt.core.dom.AbstractTypeDeclaration }
+                                    .firstOrNull { it is MethodDeclaration || it is org.eclipse.jdt.core.dom.Initializer ||
+                                        it is org.eclipse.jdt.core.dom.AbstractTypeDeclaration || it is AnonymousClassDeclaration }
                                     as? MethodDeclaration
                                 pending += PendingReference(
-                                    siteId, binding!!.methodDeclaration.key, site,
+                                    siteId, binding.methodDeclaration.key, site,
                                     enclosing?.resolveBinding()?.methodDeclaration?.key, scope, kind, binding.declaringClass.isFromSource,
                                 )
                             }
@@ -117,7 +134,7 @@ object JavaExtractor {
             }, NullProgressMonitor())
             for (file in sources) {
                 val path = JavaAnalysisIdentity.relative(root, file)
-                if (files.none { it.path == path && it.sourceSet == scope }) {
+                if (path !in examined) {
                     files += SourceFile(path, scope, false, "AST unavailable")
                     diagnostics += "$scope:$path: AST unavailable"
                 }
@@ -125,20 +142,25 @@ object JavaExtractor {
         }
         val references = mutableListOf<JavaReference>()
         for (candidate in pending) {
-            if (methods[candidate.targetId] == null) {
+            if (candidate.targetId in duplicateIds) {
+                unresolved += UnresolvedSite(candidate.id, candidate.location, candidate.sourceSet, "duplicate-declaration-identity")
+            } else if (methods[candidate.targetId] == null) {
                 if (candidate.sourceTarget) {
                     unresolved += UnresolvedSite(candidate.id, candidate.location, candidate.sourceSet, "target-outside-verified-sources")
                 }
             } else {
                 references += JavaReference(
                     candidate.id, candidate.targetId, candidate.location,
-                    candidate.enclosingId?.let(methods::get), candidate.sourceSet, candidate.kind,
+                    candidate.enclosingId?.takeUnless { it in duplicateIds }?.let { methods[it] ?: constructors[it] },
+                    candidate.sourceSet, candidate.kind,
                 )
             }
         }
         files += input.skippedFiles
         diagnostics += input.skippedFiles.map { "${it.sourceSet}:${it.path}: ${it.reason}" }
-        require(identity == JavaAnalysisIdentity.compute(input)) { "Analysis inputs changed during extraction" }
+        if (identity != JavaAnalysisIdentity.compute(input)) {
+            throw InspectException("snapshot-mismatch", "Analysis inputs changed during extraction")
+        }
         val coverage = AnalysisCoverage(
             diagnostics.isEmpty() && unresolved.isEmpty() && files.all { it.examined },
             files.count { it.sourceSet == "main" && it.examined }, files.count { it.sourceSet == "test" && it.examined },
@@ -154,10 +176,19 @@ object JavaExtractor {
         )
     }
 
+    private fun implicitMember(binding: IMethodBinding): Boolean {
+        val method = binding.methodDeclaration
+        if (method.isSyntheticRecordMethod) return true
+        if (!method.declaringClass.isEnum) return false
+        return (method.name == "values" && method.parameterTypes.isEmpty()) ||
+            (method.name == "valueOf" && method.parameterTypes.singleOrNull()?.qualifiedName == "java.lang.String")
+    }
+
     private fun recoveredSignature(binding: IMethodBinding): Boolean {
         val declaration = binding.methodDeclaration
         return declaration.isRecovered || recoveredType(declaration.declaringClass) ||
-            recoveredType(declaration.returnType) || declaration.parameterTypes.any(::recoveredType) ||
+            (!declaration.isConstructor && recoveredType(declaration.returnType)) ||
+            declaration.parameterTypes.any(::recoveredType) ||
             declaration.typeParameters.any(::recoveredType) || binding.parameterTypes.any(::recoveredType) ||
             binding.typeArguments.any(::recoveredType)
     }

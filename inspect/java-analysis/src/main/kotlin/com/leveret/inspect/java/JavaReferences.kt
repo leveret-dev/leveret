@@ -79,29 +79,35 @@ object JavaReferences {
         if (offset > context.totalRecords) throw InspectException("invalid-cursor", "Cursor exceeds query records")
         repeat(offset) { if (!records.hasNext()) throw InspectException("invalid-cursor", "Cursor exceeds query records"); records.next() }
         val items = mutableListOf<DetailRecord>()
-        fun reply(count: Int): ReferencePage {
+        fun delivery(count: Int): Delivery {
             val remaining = context.totalRecords - offset - count
-            return ReferencePage(context.summary, context.target, context.side, items.toList(),
-                Delivery(remaining == 0, remaining > 0, remaining, if (remaining == 0) null else encode(offset + count, context)))
+            return Delivery(remaining == 0, remaining > 0, remaining,
+                if (remaining == 0) null else encode(offset + count, context))
         }
-        var current = reply(0)
-        if (bytes(current) > byteBudget) throw InspectException("budget-too-small", "Response header exceeds budget", bytes(current))
+        val emptyDelivery = Delivery(true, false, 0, null)
+        val fixedBytes = bytes(ReferencePage(context.summary, context.target, context.side, emptyList(), emptyDelivery)) -
+            bytes(emptyDelivery)
+        fun required(count: Int, recordBytes: Int): Int =
+            fixedBytes + bytes(delivery(count)) + recordBytes + maxOf(0, count - 1)
+        val headerBytes = required(0, 0)
+        if (headerBytes > byteBudget) throw InspectException("budget-too-small", "Response header exceeds budget", headerBytes)
+        var recordBytes = 0
         while (records.hasNext()) {
             val next = records.next()
-            items += next
-            val candidate = reply(items.size)
-            if (bytes(candidate) > byteBudget) {
-                items.removeAt(items.lastIndex)
-                if (items.isEmpty()) throw InspectException("budget-too-small", "Next record exceeds budget", bytes(candidate))
+            val encodedBytes = bytes(next)
+            val count = items.size + 1
+            val candidateBytes = required(count, recordBytes + encodedBytes)
+            if (candidateBytes > byteBudget) {
+                if (items.isEmpty()) throw InspectException("budget-too-small", "Next record exceeds budget", candidateBytes)
                 break
             }
-            current = candidate
+            items += next
+            recordBytes += encodedBytes
         }
-        current = reply(items.size)
-        return current
+        return ReferencePage(context.summary, context.target, context.side, items, delivery(items.size))
     }
 
-    private fun bytes(page: ReferencePage): Int = json.toJson(page).toByteArray(StandardCharsets.UTF_8).size
+    private fun bytes(value: Any): Int = json.toJson(value).toByteArray(StandardCharsets.UTF_8).size
 
     private fun encode(offset: Int, context: PageContext): String {
         val payload = "$offset:${context.summary.analysisId}:${context.target.id}:${context.side}:${context.manifestDigest}"

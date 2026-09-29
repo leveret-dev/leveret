@@ -9,6 +9,10 @@ object JavaAnalysisIdentity {
     fun compute(input: JavaAnalysisInput): AnalysisIdentity {
         require(input.repositoryId.isNotBlank() && input.revision.isNotBlank())
         require(input.mainFiles.isNotEmpty() || input.testFiles.isNotEmpty())
+        val mainPaths = input.mainFiles.map { it.toRealPath() }.toSet()
+        val testPaths = input.testFiles.map { it.toRealPath() }.toSet()
+        require(mainPaths.size == input.mainFiles.size && testPaths.size == input.testFiles.size &&
+            mainPaths.none { it in testPaths }) { "A Java source may belong to only one source set" }
         val root = input.sourceRoot.toRealPath()
         val repo = if (input.classpath.mainClasspath.isEmpty() && input.classpath.testClasspath.isEmpty()) {
             input.artifactRoot.toAbsolutePath().normalize()

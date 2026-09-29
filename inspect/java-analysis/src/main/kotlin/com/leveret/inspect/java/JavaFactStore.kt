@@ -14,13 +14,13 @@ class JavaFactStore(private val sessions: SessionFactory) {
     private val gson = GsonBuilder().serializeNulls().create()
 
     init {
-        Schema(sessions).ensure(1, listOf(
+        Schema(sessions).ensure(3, listOf(
             "create table analyses (id varchar(64) primary key, repository varchar(1024) not null, revision varchar(128) not null, configuration varchar(64) not null, digest varchar(64) not null, summary clob not null)",
-            "create table methods (analysis_id varchar(64) not null, id varchar(2048) not null, path varchar(4096) not null, start_line int not null, start_col int not null, end_line int not null, end_col int not null, payload clob not null, primary key (analysis_id, id))",
+            "create table methods (analysis_id varchar(64) not null, id_hash varchar(64) not null, path varchar(4096) not null, start_line int not null, start_col int not null, end_line int not null, end_col int not null, payload clob not null, primary key (analysis_id, id_hash))",
             "create index method_location on methods (analysis_id, path, start_line, start_col)",
-            "create table refs (analysis_id varchar(64) not null, id varchar(4096) not null, target_id varchar(2048) not null, path varchar(4096) not null, start_line int not null, start_col int not null, payload clob not null, primary key (analysis_id, id))",
-            "create index ref_target on refs (analysis_id, target_id, path, start_line, start_col)",
-            "create table details (analysis_id varchar(64) not null, id varchar(4096) not null, path varchar(4096) not null, start_line int not null, start_col int not null, payload clob not null, primary key (analysis_id, id))",
+            "create table refs (analysis_id varchar(64) not null, id_hash varchar(64) not null, target_hash varchar(64) not null, path varchar(4096) not null, start_line int not null, start_col int not null, payload clob not null, primary key (analysis_id, id_hash))",
+            "create index ref_target on refs (analysis_id, target_hash, path, start_line, start_col)",
+            "create table details (analysis_id varchar(64) not null, id_hash varchar(64) not null, path varchar(4096) not null, start_line int not null, start_col int not null, payload clob not null, primary key (analysis_id, id_hash))",
             "create index detail_order on details (analysis_id, path, start_line, start_col)",
         ))
     }
@@ -44,9 +44,9 @@ class JavaFactStore(private val sessions: SessionFactory) {
                     it.setString(5, digest)
                     it.setString(6, gson.toJson(data.summary))
                 }
-                insert(session, "insert into methods (analysis_id,id,path,start_line,start_col,end_line,end_col,payload) values (?,?,?,?,?,?,?,?)", data.methods) { statement, method ->
+                insert(session, "insert into methods (analysis_id,id_hash,path,start_line,start_col,end_line,end_col,payload) values (?,?,?,?,?,?,?,?)", data.methods) { statement, method ->
                     statement.setString(1, id)
-                    statement.setString(2, method.id)
+                    statement.setString(2, sha(method.id))
                     statement.setString(3, method.location.path)
                     statement.setInt(4, method.nameRange.start.line)
                     statement.setInt(5, method.nameRange.start.column)
@@ -54,10 +54,10 @@ class JavaFactStore(private val sessions: SessionFactory) {
                     statement.setInt(7, method.nameRange.end.column)
                     statement.setString(8, gson.toJson(method))
                 }
-                insert(session, "insert into refs (analysis_id,id,target_id,path,start_line,start_col,payload) values (?,?,?,?,?,?,?)", data.references) { statement, reference ->
+                insert(session, "insert into refs (analysis_id,id_hash,target_hash,path,start_line,start_col,payload) values (?,?,?,?,?,?,?)", data.references) { statement, reference ->
                     statement.setString(1, id)
-                    statement.setString(2, reference.id)
-                    statement.setString(3, reference.targetId)
+                    statement.setString(2, sha(reference.id))
+                    statement.setString(3, sha(reference.targetId))
                     statement.setString(4, reference.location.path)
                     statement.setInt(5, reference.location.range.start.line)
                     statement.setInt(6, reference.location.range.start.column)
@@ -70,9 +70,9 @@ class JavaFactStore(private val sessions: SessionFactory) {
                         add(Triple("diagnostic:$index", Location("", Range(Position(0, 0), Position(0, 0))), DetailRecord.diagnostic(message)))
                     }
                 }
-                insert(session, "insert into details (analysis_id,id,path,start_line,start_col,payload) values (?,?,?,?,?,?)", details) { statement, item ->
+                insert(session, "insert into details (analysis_id,id_hash,path,start_line,start_col,payload) values (?,?,?,?,?,?)", details) { statement, item ->
                     statement.setString(1, id)
-                    statement.setString(2, item.first)
+                    statement.setString(2, sha(item.first))
                     statement.setString(3, item.second.path)
                     statement.setInt(4, item.second.range.start.line)
                     statement.setInt(5, item.second.range.start.column)
@@ -101,14 +101,22 @@ class JavaFactStore(private val sessions: SessionFactory) {
         if (path.startsWith('/') || path.split('/').any { it == ".." || it == "." } || position.line < 1 || position.column < 0) {
             throw InspectException("invalid-input", "Invalid declaration path or position")
         }
-        val matches = session.select("select payload from methods where analysis_id=? and path=? and start_line<=? and end_line>=?", {
-            it.setString(1, analysisId); it.setString(2, path); it.setInt(3, position.line); it.setInt(4, position.line)
-        }) { parseMethod(it.getString(1)) }.filter { method ->
-            val start = method.nameRange.start
-            val end = method.nameRange.end
-            (position.line > start.line || position.line == start.line && position.column >= start.column) &&
+        fun contains(range: Range): Boolean {
+            val start = range.start
+            val end = range.end
+            return (position.line > start.line || position.line == start.line && position.column >= start.column) &&
                 (position.line < end.line || position.line == end.line && position.column < end.column)
         }
+        val duplicate = session.select(
+            "select payload from details where analysis_id=? and path=? and start_line=?",
+            { it.setString(1, analysisId); it.setString(2, path); it.setInt(3, position.line) },
+        ) { parseDetail(it.getString(1)) }.any { detail ->
+            detail.unresolved?.let { it.id.startsWith("duplicate:") && contains(it.location.range) } == true
+        }
+        if (duplicate) throw InspectException("target-indeterminate", "Declaration has conflicting source identities")
+        val matches = session.select("select payload from methods where analysis_id=? and path=? and start_line<=? and end_line>=?", {
+            it.setString(1, analysisId); it.setString(2, path); it.setInt(3, position.line); it.setInt(4, position.line)
+        }) { parseMethod(it.getString(1)) }.filter { contains(it.nameRange) }
         if (matches.size > 1) throw InspectException("target-indeterminate", "Declaration selector matches multiple methods")
         return matches.singleOrNull() ?: throw InspectException("target-missing", "Method declaration not found at $path:${position.line}:${position.column}")
     }
@@ -125,14 +133,14 @@ class JavaFactStore(private val sessions: SessionFactory) {
             val target = methodAt(session, request.analysisId, request.target.path, request.target.position)
             val sql = """
                 select payload from (
-                  select path, start_line, start_col, id, payload from refs where analysis_id=? and target_id=?
+                  select 0 as detail_rank, path, start_line, start_col, id_hash, payload from refs where analysis_id=? and target_hash=?
                   union all
-                  select path, start_line, start_col, id, payload from details where analysis_id=?
-                ) order by path,start_line,start_col,id
+                  select 1 as detail_rank, path, start_line, start_col, id_hash, payload from details where analysis_id=?
+                ) order by detail_rank,path,start_line,start_col,id_hash
             """.trimIndent()
             session.prepare(sql).use { statement ->
                 statement.setString(1, request.analysisId)
-                statement.setString(2, target.id)
+                statement.setString(2, sha(target.id))
                 statement.setString(3, request.analysisId)
                 var total = 0
                 statement.executeQuery().use { result ->
@@ -203,8 +211,14 @@ class JavaFactStore(private val sessions: SessionFactory) {
             }
             "unresolved" -> {
                 val value = root.obj("unresolved")
+                val rawCandidates = value.get("candidates")
+                    ?: throw InspectException("analysis-unavailable", "Stored unresolved candidates omitted")
+                val candidates = if (rawCandidates.isJsonNull) null else rawCandidates.asJsonArray.map { candidate ->
+                    val record = candidate.asJsonObject
+                    UnresolvedCandidate(record.string("targetId"), record.string("basis"))
+                }
                 DetailRecord.unresolved(UnresolvedSite(value.string("id"), location(value.obj("location")),
-                    value.string("sourceSet"), value.string("reason")))
+                    value.string("sourceSet"), value.string("reason"), candidates))
             }
             "file" -> {
                 val value = root.obj("file")

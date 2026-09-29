@@ -354,12 +354,21 @@ async function evaluateCorpus(repo: string, cache: string, output: string, templ
       const before = performance.now();
       let inspect: Record<string, unknown>;
       try {
-        const page = await query(bridge, manifest, "head", { path, position: item.position });
-        inspect = { target_id: page.target.id, signature: page.target.signature,
-          checked: page.items.filter((detail) => detail.kind === "reference").map((detail) => ({
+        const first = await query(bridge, manifest, "head", { path, position: item.position });
+        const details = [...first.items];
+        let last = first;
+        let pages = 1;
+        while (last.delivery.nextCursor) {
+          if (pages >= 256) throw new Error("Inspect pagination exceeded 256 pages");
+          last = await query(bridge, manifest, "head", { path, position: item.position }, undefined, last.delivery.nextCursor);
+          details.push(...last.items);
+          pages++;
+        }
+        inspect = { target_id: first.target.id, signature: first.target.signature,
+          checked: details.filter((detail) => detail.kind === "reference").map((detail) => ({
             id: detail.reference!.id, path: detail.reference!.location.path, range: detail.reference!.location.range,
             kind: detail.reference!.kind, source_set: detail.reference!.sourceSet, basis: detail.reference!.basis,
-          })), coverage: page.summary.coverage, delivery: page.delivery };
+          })), coverage: first.summary.coverage, pages, delivery: last.delivery };
       } catch (error) {
         inspect = { error: error instanceof InspectJavaError ? { code: error.code, message: error.message } : String(error) };
       }

@@ -188,7 +188,7 @@ class GradleLockfileClasspathWorkerTest {
     }
 
     @Test
-    fun `throws when a locked jar is absent from the cache`(@TempDir dir: Path) {
+    fun `reports an absent locked jar as incomplete resolution`(@TempDir dir: Path) {
         Files.writeString(
             dir.resolve("gradle.lockfile"),
             "org.slf4j:slf4j-api:2.0.17=compileClasspath\n",
@@ -199,7 +199,7 @@ class GradleLockfileClasspathWorkerTest {
     }
 
     @Test
-    fun `throws when a cached pom is not pom packaging and the jar is missing`(@TempDir dir: Path) {
+    fun `reports a missing jar when the cached pom is not pom packaging`(@TempDir dir: Path) {
         Files.writeString(
             dir.resolve("gradle.lockfile"),
             "org.slf4j:slf4j-api:2.0.17=compileClasspath\n",

@@ -41,6 +41,7 @@ class JavaExtractorTest {
         val numeric = data.methods.single { it.signature.contains("price(int)") }
         assertThat(data.references.count { it.targetId == numeric.id }).isEqualTo(1)
         assertThat(data.unresolved.map { it.reason }).anyMatch { it.contains("binding") || it.contains("compiler") }
+        assertThat(data.unresolved.map { it.candidates }).containsOnlyNulls()
         assertThat(data.coverage.complete).isFalse()
     }
 
@@ -65,6 +66,31 @@ class JavaExtractorTest {
         assertThat(references.map { it.kind }).containsExactly("method-reference", "call")
         assertThat(references.map { it.enclosing }).containsExactly(null, null)
         assertThat(data.coverage.complete).isTrue()
+    }
+
+    @Test
+    fun `constructor and anonymous initializer have correct callable attribution`(@TempDir dir: Path) {
+        val main = dir.resolve("src/main/java/example/Pricing.java")
+        Files.createDirectories(main.parent)
+        Files.writeString(main, """
+            package example;
+            class Pricing {
+                static int price(int n) { return n; }
+                Pricing() { price(9); }
+                int outer() {
+                    Object instance = new Object() { int value = price(5); };
+                    return price(3);
+                }
+            }
+        """.trimIndent())
+        val data = JavaExtractor.extract(input(dir, listOf(main), emptyList()))
+        val target = data.methods.single { it.signature.contains(".price(int)") }
+        val byLine = data.references.filter { it.targetId == target.id }
+            .associateBy { it.location.range.start.line }
+        assertThat(byLine.keys).containsExactlyInAnyOrder(4, 6, 7)
+        assertThat(byLine[4]?.enclosing?.location?.range?.start?.line).isEqualTo(4)
+        assertThat(byLine[6]?.enclosing).isNull()
+        assertThat(byLine[7]?.enclosing?.signature).isEqualTo("example.Pricing.outer()")
     }
 
     @Test
@@ -118,7 +144,27 @@ class JavaExtractorTest {
         org.assertj.core.api.Assertions.assertThatThrownBy {
             JavaExtractor.extract(input(dir, listOf(main), listOf(main)))
         }.isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessageContaining("Conflicting declaration identity")
+    }
+
+    @Test
+    fun `duplicate type declarations leave unrelated checked callers intact`(@TempDir dir: Path) {
+        val main = dir.resolve("src/main/java/example/Pricing.java")
+        val other = dir.resolve("src/main/java/example/Other.java")
+        val duplicate = dir.resolve("src/test/java/example/Pricing.java")
+        val testCaller = dir.resolve("src/test/java/example/OtherTest.java")
+        Files.createDirectories(main.parent)
+        Files.createDirectories(duplicate.parent)
+        Files.writeString(main, "package example; class Pricing { static int price(int n) { return n; } }")
+        Files.writeString(other, "package example; class Other { static int safe(int n) { return n; } int caller() { return safe(3); } }")
+        Files.writeString(duplicate, "package example; class Pricing { static int price(int n) { return n + 1; } int ambiguous() { return price(4); } }")
+        Files.writeString(testCaller, "package example; class OtherTest { int checked() { return Other.safe(5); } }")
+        val data = JavaExtractor.extract(input(dir, listOf(main, other), listOf(duplicate, testCaller)))
+        val safe = data.methods.single { it.signature.contains("Other.safe(int)") }
+        assertThat(data.references.filter { it.targetId == safe.id }.map { it.location.path })
+            .containsExactly("src/main/java/example/Other.java", "src/test/java/example/OtherTest.java")
+        assertThat(data.references.filter { it.targetId.contains("Pricing;.price") }).isEmpty()
+        assertThat(data.unresolved.map { it.reason }).contains("duplicate-declaration-identity")
+        assertThat(data.coverage.complete).isFalse()
     }
 
     @Test
@@ -175,6 +221,26 @@ class JavaExtractorTest {
         val target = data.methods.single { it.signature.contains(".price(") }
         assertThat(data.references.filter { it.targetId == target.id }.map { it.location.range.start.line })
             .containsExactly(6)
+        assertThat(data.coverage.complete).isTrue()
+    }
+
+    @Test
+    fun `implicit enum and record members do not create false coverage gaps`(@TempDir dir: Path) {
+        val main = dir.resolve("src/main/java/example/Kind.java")
+        Files.createDirectories(main.parent)
+        Files.writeString(main, """
+            package example;
+            enum Kind {
+                ONE;
+                static Kind first() { return values()[0]; }
+                static Kind named() { return valueOf("ONE"); }
+            }
+            record Holder(int size) {
+                int read() { return size(); }
+            }
+        """.trimIndent())
+        val data = JavaExtractor.extract(input(dir, listOf(main), emptyList()))
+        assertThat(data.unresolved).isEmpty()
         assertThat(data.coverage.complete).isTrue()
     }
 
