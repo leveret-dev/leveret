@@ -1,8 +1,8 @@
-# Java reference evidence: deterministic evaluation
+# Java reference evidence: evaluation
 
 Date: 2026-09-29
 
-Status: Extraction, persistence, sandbox, and the registered reviewer tool were exercised. **Actual Leveret model consumption remains unverified:** no separate paid/local model-execution approval was supplied.
+Status: Extraction, persistence, sandbox, the registered reviewer tool, and **actual Leveret model consumption** were exercised. A real review consumed the out-of-diff caller and disclosed the missing-dependency gap (see [Real reviewer consumption](#real-reviewer-consumption)).
 
 ## Reproduction and provenance
 
@@ -42,8 +42,19 @@ The driver froze the first 20 syntax-derived method selectors, sorted by reposit
 - `npm run build`: successful.
 - `npm test`: 33 files, 257 tests passed.
 - `npm run test:inspect`: all JVM module tests passed. Existing classpath oracles may provision fixture-only caches as part of their test boundary; the production extractor never runs target build tools or tests.
-- `npx tsc --ignoreConfig --noEmit --target ES2023 --module NodeNext --moduleResolution NodeNext --types node --skipLibCheck --strict bench/inspect-java.mts`: successful. The opt-in deterministic CLI exercised the installed sandboxed command; review mode remained gated.
+- `npx tsc --ignoreConfig --noEmit --target ES2023 --module NodeNext --moduleResolution NodeNext --types node --skipLibCheck --strict bench/inspect-java.mts`: successful. The deterministic CLI exercised the installed sandboxed command.
 
-## Authorization and remaining acceptance
+## Real reviewer consumption
 
-The deterministic driver made **no provider calls**. Registered-tool tests called `leveret_java_references`, retrieved the unchanged caller source, and observed evidence IDs, but a scripted tool call is not a Leveret model review. Review mode requires a separate `LEVERET_PAID_MODEL_APPROVED=1` operator authorization and a real Pi reviewer trace. This gate was not opened, so there is no verified reviewer reasoning/coverage use of the returned caller or model disclosure of the missing-dependency case. Do not describe this feature as acceptance-complete, merged, deployed, or a replacement for Leveret's separate parity gate.
+Operator-authorized review mode (`LEVERET_PAID_MODEL_APPROVED=1`) ran the real Pi reviewer (`dist/runner/pi.js`) through Z.ai `glm-5.3-flash` at thinking level `high`, using a private `LEVERET_PI_AGENT_DIR` outside the checkout:
+
+`LEVERET_PAID_MODEL_APPROVED=1 LEVERET_PI_AGENT_DIR=<private dir> LEVERET_RUNNER_PROVIDER=zai LEVERET_RUNNER_MODEL=glm-5.3-flash LEVERET_RUNNER_EFFORT=high npx tsx bench/inspect-java.mts --mode review --config /tmp/leveret-java-eval-template.json --config-sha256 4223a889673bf2cc0cc8468f055b4ead56b0960440ba3ec132928b2399d55df3 --output /tmp/leveret-java-eval-20260929-review-3`
+
+Result `/tmp/leveret-java-eval-20260929-review-3/deterministic.json` (SHA-256 `e67c2b35ac5a48aabbaf1a258f61a7537d135eb68c5a1372f89c6b7e649c626e`), `reviewer_consumption: verified`:
+
+- Fixed change: 6 `leveret_java_references` calls. At least one head-side call resolved `Lexample/Pricing;.price(I)I` and returned the checked out-of-diff caller in `src/test/java/example/PricingTest.java`. The submitted findings then cited that call's evidence ID as the checked caller of the changed overload.
+- Missing-dependency variant: 12 calls. A head-side result carried incomplete coverage and two unresolved sites. The submitted phase output cited that evidence ID beside "diagnostic + 2 unresolved", so the gap was disclosed rather than presented as a complete zero result.
+
+The driver checks the audit trace, not the model's final prose alone. It picks calls by the identity the tool resolved and the coverage it returned, because the tool accepts any position inside the name token. It then requires that later assistant or phase-submission output cite that call's evidence ID and the caller path. For the missing variant, the gap disclosure must appear within 600 characters of that citation. An earlier run (`review-2`) showed the same consumption but was scored unverified. That driver required column 17 exactly (the model used columns 15 and 16), and it required the missing-variant query to target `price`. Both checks were stricter than the tool contract. Rechecked against the corrected driver, that trace passed, while swapped and empty call sets failed.
+
+This is one model on one fixture. It does not replace Leveret's separate parity gate. Nothing was merged or deployed.
