@@ -5,6 +5,7 @@ import { createReadStream } from "node:fs";
 import { mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { buildChangeManifest, type ChangeManifest } from "../src/change-evidence.js";
 import { InspectJavaError, loadInspectJavaConfig, openInspectJava, type InspectJavaBridge, type InspectJavaConfig } from "../src/inspect-java.js";
@@ -31,6 +32,7 @@ const templateSchema = z.object({
 const checkedPath = "src/test/java/example/PricingTest.java";
 const targetPath = "src/main/java/example/Pricing.java";
 const target = { path: targetPath, position: { line: 3, column: 17 } };
+const targetId = "Lexample/Pricing;.price(I)I";
 const baseSource = "package example;\nfinal class Pricing {\n    static int price(int quantity) { return quantity * 10; }\n    static int price(String code) { return code.length(); }\n}\n";
 const headSource = baseSource.replace("quantity * 10", "quantity * 12");
 const testSource = "package example;\nfinal class PricingTest {\n    int numeric() { return Pricing.price(3); }\n    int textual() { return Pricing.price(\"ABC\"); }\n}\n";
@@ -464,6 +466,18 @@ async function review(fixed: Fixture, config: { path: string; sha256: string }, 
   } };
   const ids = value.run_configuration?.tool_calls?.filter((call) => call.toolName === "leveret_java_references")
     .map((call) => call.toolCallId) ?? [];
+  const verdict = await traceConsumption(trace, ids, incomplete);
+  return {
+    status: verdict.evidenceReturned && verdict.subsequentUse && verdict.disclosedGap ? "verified" : "unverified",
+    tool_call_ids: ids, expected_evidence_returned: verdict.evidenceReturned, subsequent_evidence_use: verdict.subsequentUse,
+    incomplete_coverage_disclosed: verdict.disclosedGap,
+    model: value.run_configuration?.model, thinking: value.run_configuration?.thinking,
+    identities: value.run_configuration?.identities, audit_directory: trace,
+  };
+}
+
+/** Checks a real review's audit trace: the expected Java evidence was returned, then cited in later reasoning. */
+export async function traceConsumption(trace: string, ids: string[], incomplete: boolean) {
   const events = (await readFile(join(trace, "runner.ndjson"), "utf8")).split("\n").filter(Boolean)
     .map((line) => JSON.parse(line) as RunnerEvent);
   async function payload(event: RunnerEvent): Promise<Record<string, unknown>> {
@@ -474,24 +488,26 @@ async function review(fixed: Fixture, config: { path: string; sha256: string }, 
     }
     return event.payload && typeof event.payload === "object" ? event.payload as Record<string, unknown> : {};
   }
-  let checkedCall = false;
+  let evidenceReturned = false;
   let subsequentUse = false;
   let disclosedGap = !incomplete;
   for (const id of ids) {
     const started = events.find((event) => event.category === "tools" && event.event === "execution_start" && event.tool_call_id === id);
     const ended = events.find((event) => event.category === "tools" && event.event === "execution_end" && event.tool_call_id === id);
     if (!started || !ended || ended.sequence <= started.sequence) continue;
-    const args = (await payload(started)).args as { side?: string; target?: { path?: string; position?: { line?: number; column?: number } } } | undefined;
-    if (args?.side !== "head" || args.target?.path !== targetPath || args.target.position?.line !== 3 ||
-      args.target.position.column !== 17) continue;
+    const args = (await payload(started)).args as { side?: string } | undefined;
+    if (args?.side !== "head") continue;
     const toolResult = (await payload(ended)).result as { content?: Array<{ type?: string; text?: string }> } | undefined;
     const text = toolResult?.content?.find((part) => part.type === "text" && part.text?.startsWith("{"))?.text;
     const reply = referenceReplySchema.safeParse(JSON.parse(text ?? "null"));
     if (!reply.success || !reply.data.ok) continue;
-    if (!reply.data.result.items.some((item) => item.kind === "reference" &&
+    const { result } = reply.data;
+    // Select by what the tool resolved, not by the exact column the model chose inside the name token.
+    if (incomplete) {
+      if (result.summary.coverage.complete || !result.items.some((item) => item.kind === "unresolved")) continue;
+    } else if (result.target.id !== targetId || !result.items.some((item) => item.kind === "reference" &&
       item.reference?.location.path === checkedPath && item.reference.basis === "checked")) continue;
-    checkedCall = true;
-    if (incomplete && reply.data.result.summary.coverage.complete) continue;
+    evidenceReturned = true;
     const later: string[] = [];
     for (const event of events) {
       if (event.sequence <= ended.sequence) continue;
@@ -504,18 +520,16 @@ async function review(fixed: Fixture, config: { path: string; sha256: string }, 
       }
     }
     const reasoning = later.join("\n");
-    if (reasoning.includes(id) && reasoning.includes(checkedPath)) {
-      subsequentUse = true;
-      if (incomplete) disclosedGap = /unresolved|incomplete|missing dependency/i.test(reasoning);
+    if (!reasoning.includes(id) || !reasoning.includes(checkedPath)) continue;
+    subsequentUse = true;
+    if (incomplete) {
+      // The disclosure must accompany a citation of this call, not appear anywhere in the transcript.
+      for (let at = reasoning.indexOf(id); at >= 0 && !disclosedGap; at = reasoning.indexOf(id, at + 1)) {
+        disclosedGap = /unresolved|incomplete|complete=false|missing dependency/i.test(reasoning.slice(Math.max(0, at - 600), at + 600));
+      }
     }
   }
-  return {
-    status: checkedCall && subsequentUse && disclosedGap ? "verified" : "unverified",
-    tool_call_ids: ids, checked_caller_returned: checkedCall, subsequent_evidence_use: subsequentUse,
-    incomplete_coverage_disclosed: disclosedGap,
-    model: value.run_configuration?.model, thinking: value.run_configuration?.thinking,
-    identities: value.run_configuration?.identities, audit_directory: trace,
-  };
+  return { evidenceReturned, subsequentUse, disclosedGap };
 }
 
 async function main(): Promise<void> {
@@ -575,7 +589,7 @@ async function main(): Promise<void> {
   if (args.mode === "review" && reviewResult.status !== "verified") process.exitCode = 1;
 }
 
-main().catch((error) => {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch((error) => {
   console.error(JSON.stringify({ ok: false, error: { code: error instanceof InspectJavaError ? error.code : "evaluation-failed", message: String(error) } }));
   process.exitCode = 1;
 });
