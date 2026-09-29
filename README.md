@@ -133,6 +133,35 @@ detected packaged language. Missing indexes fail closed by default; set
 npm test        # integration suite; exercises the real tools
 ```
 
+## Repository layout
+
+This is the canonical Leveret monorepo. It contains two independent components:
+
+| Path | Component | Toolchain |
+|---|---|---|
+| repository root (`src/`, `test/`, `docs/`, …) | Leveret: engine, MCP server, runner, GitHub App | Node.js, TypeScript, npm |
+| [`inspect/`](inspect/README.md) | Leveret Inspect: Kotlin/JVM runtime, persistence, and classpath workers | JDK 25+, Gradle wrapper |
+
+The components share a repository, not a runtime: there is no integration between the
+TypeScript engine and the Kotlin modules. Inspect keeps its own Gradle settings, module
+names, and packages under `inspect/`. Only the current implementation is imported;
+the source repository's history, research, and specifications are not included.
+
+| Command | Runs |
+|---|---|
+| `npm run build` / `npm test` | TypeScript build / test suite (Leveret) |
+| `npm run build:inspect` / `npm run test:inspect` | `./inspect/gradlew -p inspect build` / `test` |
+| `npm run build:all` / `npm run test:all` | Both components, TypeScript first |
+
+The JVM build requires JDK 25 or newer. `build:inspect` and `build:all` also run the
+JVM tests, including Linux-only classpath oracles requiring Bubblewrap, Git, Maven,
+JDK 21, and network access for cold fixture caches. See
+[Inspect build prerequisites](inspect/README.md#build-and-test). Inspect can also be built from
+`inspect/` with `./gradlew build`.
+
+Once per clone, run `sh scripts/setup-hooks.sh` from the repository root to activate the
+tracked Git hooks. Inspect has no separate hook setup.
+
 ## Design and status
 
 [DESIGN.md](DESIGN.md) holds the architecture and decisions: the three-grade

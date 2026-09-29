@@ -1,0 +1,11 @@
+# ── Gradle / Kotlin build output ─────────────────────────────────────────────
+# Trailing-slash-only patterns match at every depth, so runtime/build/ and any
+# future module's build directory are covered without repeating them.
+.gradle/
+.kotlin/
+build/
+*.class
+
+# The repository-root indexes are canonical; nested indexes are local scratch.
+/graphify-out/
+/.codegraph/
