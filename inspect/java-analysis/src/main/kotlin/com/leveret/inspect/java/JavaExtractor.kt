@@ -135,6 +135,8 @@ object JavaExtractor {
                 )
             }
         }
+        files += input.skippedFiles
+        diagnostics += input.skippedFiles.map { "${it.sourceSet}:${it.path}: ${it.reason}" }
         require(identity == JavaAnalysisIdentity.compute(input)) { "Analysis inputs changed during extraction" }
         val coverage = AnalysisCoverage(
             diagnostics.isEmpty() && unresolved.isEmpty() && files.all { it.examined },

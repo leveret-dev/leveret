@@ -6,6 +6,7 @@ plugins {
 }
 
 dependencies {
+    runtimeOnly(project(":java-analysis"))
     implementation(libs.slf4j.api)
     implementation(libs.logback.classic)
     testImplementation(libs.junit.jupiter)

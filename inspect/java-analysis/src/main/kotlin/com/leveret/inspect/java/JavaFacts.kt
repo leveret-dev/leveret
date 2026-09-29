@@ -63,4 +63,5 @@ data class JavaAnalysisInput(
     val javaLevel: String,
     val classpath: ClasspathAnalysis,
     val artifactRoot: Path,
+    val skippedFiles: List<SourceFile> = emptyList(),
 )

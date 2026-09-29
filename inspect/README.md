@@ -60,8 +60,9 @@ After `:runtime:installDist`, run from `inspect/`:
 runtime/build/install/leveret-inspect/bin/leveret-inspect -Dleveret.log.console=true
 ```
 
-The executable loads settings, prepares its directories, and reports the resolved
-configuration. It does not yet invoke an analysis pipeline.
+Without the `java` subcommand, the executable loads settings, prepares its
+directories, and reports the resolved configuration; it does not analyze a
+repository or clear data for internal Java worker commands.
 
 The installation contains `conf/leveret.properties`. Recognized settings resolve from
 that file, environment variables, `-Dkey=value` application arguments, and JVM system
@@ -71,6 +72,35 @@ with dots replaced by underscores, such as `LEVERET_LOG_LEVEL`.
 Relative directory settings resolve against the installation home. `data/` is durable,
 `logs/` contains `leveret.log`, and `temp/` is cleared at startup. Do not put durable data
 in `temp/`. Restrict configuration, data, and log access to the account running the process.
+
+## Internal Java reference worker
+
+The host bridge invokes `leveret-inspect java --request /work/request.json` with
+one host-generated JSON command. This is an internal protocol, not a separate
+Inspect service or an API for reviewed source to invoke. Analysis uses Git
+objects for pinned base/head snapshots, verifies every selected head source
+and build metadata file against the live checkout, and rejects dirty or
+untracked Java inputs. Skipped Java roots/modules remain in incomplete coverage.
+Completed analyses are stored in a dedicated H2 file outside the checkout.
+
+Trusted configuration is a SHA-256-pinned JSON file outside the reviewed
+checkout. It selects `repositoryId`, the installed `distribution`, a
+`distributionFiles` map containing the launcher and every `lib/` JAR with
+SHA-256 digests, `jdkHome` and `jdkFiles` digests for `bin/java`, `release`,
+`lib/modules`, and `lib/server/libjvm.so`, the operator-owned bare `cache`,
+one `module`, `build` (`maven` or `gradle`), one `mainRoots` and one
+`testRoots` entry, `javaLevel`, and positive `limits`. No target repository
+file chooses the executable, cache, mounts, or worker limits. Only classpath
+artifacts already in the cache are copied into private scratch; provisioning
+and target builds are not worker operations.
+
+The supported extraction host is Linux x86-64 with usable Bubblewrap user,
+network, PID, and mount namespaces and `prlimit`. Unavailable isolation fails
+closed. Defaults: 1 GiB JVM heap, 8 GiB virtual address-space soft/hard limit,
+256 MiB metaspace, 128 MiB each for direct buffers and code cache, a 180-second
+deadline, and 8 MiB stdout/stderr capture. The address-space limit is not an
+RSS guarantee. The worker receives no inherited provider/GitHub credentials,
+HOME contents, network, target executables, or target build invocation.
 
 ## License
 
