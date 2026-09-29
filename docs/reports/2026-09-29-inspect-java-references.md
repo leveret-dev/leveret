@@ -40,7 +40,7 @@ The driver froze the first 20 syntax-derived method selectors, sorted by reposit
 
 - `./inspect/gradlew -p inspect :runtime:installDist`: successful; installed distribution contains `THIRD-PARTY-NOTICES.txt`.
 - `npm run build`: successful.
-- `npm test`: 33 files, 257 tests passed.
+- `npm test`: 33 files, 258 tests passed.
 - `npm run test:inspect`: all JVM module tests passed. Existing classpath oracles may provision fixture-only caches as part of their test boundary; the production extractor never runs target build tools or tests.
 - `npx tsc --ignoreConfig --noEmit --target ES2023 --module NodeNext --moduleResolution NodeNext --types node --skipLibCheck --strict bench/inspect-java.mts`: successful. The deterministic CLI exercised the installed sandboxed command.
 
@@ -55,6 +55,8 @@ Result `/tmp/leveret-java-eval-20260929-review-3/deterministic.json` (SHA-256 `e
 - Fixed change: 6 `leveret_java_references` calls. At least one head-side call resolved `Lexample/Pricing;.price(I)I` and returned the checked out-of-diff caller in `src/test/java/example/PricingTest.java`. The submitted findings then cited that call's evidence ID as the checked caller of the changed overload.
 - Missing-dependency variant: 12 calls. A head-side result carried incomplete coverage and two unresolved sites. The submitted phase output cited that evidence ID beside "diagnostic + 2 unresolved", so the gap was disclosed rather than presented as a complete zero result.
 
-The driver checks the audit trace, not the model's final prose alone. It picks calls by the identity the tool resolved and the coverage it returned, because the tool accepts any position inside the name token. It then requires that later assistant or phase-submission output cite that call's evidence ID and the caller path. For the missing variant, the gap disclosure must appear within 600 characters of that citation. An earlier run (`review-2`) showed the same consumption but was scored unverified. That driver required column 17 exactly (the model used columns 15 and 16), and it required the missing-variant query to target `price`. Both checks were stricter than the tool contract. Rechecked against the corrected driver, that trace passed, while swapped and empty call sets failed.
+The driver checks the audit trace, not the model's final prose alone. It picks calls by the identity and coverage the tool returned, because the tool accepts any position inside the name token. Use counts only when a later `leveret_submit_phase` or `phase_submitted` payload holds a record that cites the call's evidence ID and names the caller file; thinking text does not count. For the missing variant, that same record must disclose the gap. Wording in a neighbouring record does not count. Any head-side query with incomplete coverage and unresolved sites qualifies in the missing variant, because coverage is analysis-wide and the variant tests disclosure, not selection of the changed method. `test/inspect-java-bench.test.ts` pins these accept and reject paths on synthetic traces.
+
+An earlier run (`review-2`) was scored unverified because that driver required column 17 exactly (the model used columns 15 and 16) and required the missing-variant query to target `price`. Both checks were stricter than the tool contract. That trace, and `review-3`, pass the corrected driver. Swapping the fixed and missing verdicts fails for `review-2`. For `review-3`, the missing trace also passes as a fixed check, because that review separately queried `price(int)` on head and cited its checked caller.
 
 This is one model on one fixture. It does not replace Leveret's separate parity gate. Nothing was merged or deployed.

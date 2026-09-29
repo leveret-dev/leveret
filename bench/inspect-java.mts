@@ -508,28 +508,42 @@ export async function traceConsumption(trace: string, ids: string[], incomplete:
     } else if (result.target.id !== targetId || !result.items.some((item) => item.kind === "reference" &&
       item.reference?.location.path === checkedPath && item.reference.basis === "checked")) continue;
     evidenceReturned = true;
-    const later: string[] = [];
+    // Only submitted phase output counts as use; the citing record itself must name the caller file and, for an
+    // incomplete analysis, disclose the gap. Thinking text and unrelated neighbouring records do not qualify.
     for (const event of events) {
+      if (subsequentUse && disclosedGap) break;
       if (event.sequence <= ended.sequence) continue;
-      if (event.category === "assistant" && event.event === "message_end" ||
-        event.category === "result" && event.event === "phase_submitted") {
-        later.push(JSON.stringify(await payload(event)));
-      } else if (event.category === "tools" && event.event === "execution_start") {
-        const data = await payload(event);
-        if (data.tool === "leveret_submit_phase") later.push(JSON.stringify(data));
-      }
-    }
-    const reasoning = later.join("\n");
-    if (!reasoning.includes(id) || !reasoning.includes(checkedPath)) continue;
-    subsequentUse = true;
-    if (incomplete) {
-      // The disclosure must accompany a citation of this call, not appear anywhere in the transcript.
-      for (let at = reasoning.indexOf(id); at >= 0 && !disclosedGap; at = reasoning.indexOf(id, at + 1)) {
-        disclosedGap = /unresolved|incomplete|complete=false|missing dependency/i.test(reasoning.slice(Math.max(0, at - 600), at + 600));
+      const submitted = event.category === "result" && event.event === "phase_submitted" ||
+        event.category === "tools" && event.event === "execution_start";
+      if (!submitted) continue;
+      const data = await payload(event);
+      if (event.category === "tools" && data.tool !== "leveret_submit_phase") continue;
+      for (const record of citingRecords(data, id)) {
+        if (!record.includes(checkedPath)) continue;
+        subsequentUse = true;
+        if (incomplete && /unresolved|incomplete|complete=false|missing dependency/i.test(record)) disclosedGap = true;
       }
     }
   }
   return { evidenceReturned, subsequentUse, disclosedGap };
+}
+
+/** Own text of every object in `value` that directly cites `id` in a string field or string-array field. */
+function citingRecords(value: unknown, id: string, found: string[] = []): string[] {
+  if (Array.isArray(value)) {
+    for (const item of value) citingRecords(item, id, found);
+  } else if (value && typeof value === "object") {
+    const own: string[] = [];
+    for (const field of Object.values(value)) {
+      if (typeof field === "string") own.push(field);
+      else if (Array.isArray(field) && field.every((item) => typeof item === "string")) own.push(...field);
+      else citingRecords(field, id, found);
+    }
+    if (own.some((text) => text.includes(id))) found.push(own.join("\n"));
+  } else if (typeof value === "string" && value.startsWith("{")) {
+    try { citingRecords(JSON.parse(value), id, found); } catch { /* plain text, not a record */ }
+  }
+  return found;
 }
 
 async function main(): Promise<void> {
