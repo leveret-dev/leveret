@@ -129,23 +129,34 @@ CodeGraph and code-only Graphify indexes, then warms one Serena symbol query per
 detected packaged language. Missing indexes fail closed by default; set
 `LEVERET_REQUIRE_INDEXES=0` only for an explicitly degraded run.
 
+Optional Java reference evidence requires the installed Inspect distribution,
+cache-only artifacts, Linux Bubblewrap and `prlimit`, and paired
+`LEVERET_INSPECT_JAVA_CONFIG` / `LEVERET_INSPECT_JAVA_CONFIG_SHA256` host values.
+It supports one Java module with main/test sources, distinguishes exact
+overloads and method-reference expressions, and reports unresolved or skipped
+scope separately. A complete response is not proof a change is safe.
+See [Inspect's supported host and configuration](inspect/README.md#internal-java-reference-worker).
+
 ```sh
 npm test        # integration suite; exercises the real tools
 ```
 
 ## Repository layout
 
-This is the canonical Leveret monorepo. It contains two independent components:
+This is the canonical Leveret monorepo. Inspect is Leveret's JVM inspection
+module; it retains an independent Gradle build:
 
 | Path | Component | Toolchain |
 |---|---|---|
 | repository root (`src/`, `test/`, `docs/`, …) | Leveret: engine, MCP server, runner, GitHub App | Node.js, TypeScript, npm |
-| [`inspect/`](inspect/README.md) | Leveret Inspect: Kotlin/JVM runtime, persistence, and classpath workers | JDK 25+, Gradle wrapper |
+| [`inspect/`](inspect/README.md) | Inspect: Java classpath and checked method-reference evidence for Leveret | JDK 25+, Gradle wrapper |
 
-The components share a repository, not a runtime: there is no integration between the
-TypeScript engine and the Kotlin modules. Inspect keeps its own Gradle settings, module
-names, and packages under `inspect/`. Only the current implementation is imported;
-the source repository's history, research, and specifications are not included.
+With a hash-pinned host configuration outside the reviewed checkout, the
+TypeScript reviewer calls Inspect's isolated JVM worker for exact Java method
+references outside a pinned diff. Without it, the capability is reported
+unavailable; structural matches do not become checked calls. Inspect has no
+separate service or product lifecycle. Its original private history and
+research are not imported into this public monorepo.
 
 | Command | Runs |
 |---|---|
