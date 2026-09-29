@@ -9,6 +9,7 @@ dependencies {
     implementation(project(":persistence"))
     implementation(libs.jdt.core)
     implementation(libs.gson)
+    testImplementation(project(":runtime"))
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
     testRuntimeOnly(libs.junit.platform.launcher)
