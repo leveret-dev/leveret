@@ -80,6 +80,21 @@ describe("Inspect Java boundary", () => {
     } finally { await bridge.close(); }
   }, 240_000);
 
+  it("resolves explicit Maven-style Java 8 language settings", async () => {
+    const path = join(home, "java8-config.json");
+    writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(configPath, "utf8")), javaLevel: "1.8" }));
+    const config = await loadInspectJavaConfig(repo, path, createHash("sha256").update(readFileSync(path)).digest("hex"));
+    const bridge = await openInspectJava(repo, manifest, config, join(home, "java8-runs"));
+    try {
+      const page = await bridge.references({
+        analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
+        manifest, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 } },
+      });
+      expect(page.items.filter((item) => item.kind === "reference").map((item) => item.reference?.location.path))
+        .toEqual(["src/test/java/example/PricingTest.java"]);
+    } finally { await bridge.close(); }
+  }, 240_000);
+
   it("registered reviewer phases retrieve checked test caller evidence", async () => {
     const config = await loadInspectJavaConfig(repo, configPath, digest);
     const bridge = await openInspectJava(repo, manifest, config, join(home, "tool-runs"));
