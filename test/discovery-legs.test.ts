@@ -1,4 +1,5 @@
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { Value } from "typebox/value";
 import { describe, expect, it, vi } from "vitest";
 import type { ChangeManifest } from "../src/change-evidence.js";
 import type { EvidencePack } from "../src/evidence-pack.js";
@@ -10,9 +11,9 @@ import {
   assignDiscoveryFiles,
   buildDiscoveryLegPlans,
   discoveryMode,
-  phaseToolIdentity,
   parseDiscoveryLegOutput,
   runSpecializedDiscovery,
+  phaseToolIdentity,
   selectPhaseTools,
   validateDiscoveryEvidence,
   type DiscoveryLegPlan,
@@ -63,7 +64,7 @@ const disclosureFor = (
   checklists: plan.checklistIds.map((id) => ({ id, state: "examined" as const })),
   stopping: { rule: plan.definition.stoppingRule, reason: "complete" },
 });
-const tools = ["leveret_diff", "leveret_read", "leveret_grep", "leveret_find", "leveret_ast_search", "leveret_probe", "leveret_scan", "leveret_context", "leveret_memory", "codegraph_explore", "graphify_query", "graphify_path", "graphify_explain", "lsp_find_declaration", "lsp_find_referencing_symbols"].map((name) => ({ name, label: name, description: name, parameters: {}, execute: vi.fn() })) as unknown as ToolDefinition[];
+const tools = ["leveret_diff", "leveret_read", "leveret_grep", "leveret_find", "leveret_ast_search", "leveret_probe", "leveret_scan", "leveret_context", "leveret_memory", "leveret_java_references", "codegraph_explore", "graphify_query", "graphify_path", "graphify_explain", "lsp_find_declaration", "lsp_find_referencing_symbols"].map((name) => ({ name, label: name, description: name, parameters: {}, execute: vi.fn() })) as unknown as ToolDefinition[];
 
 describe("specialized discovery", () => {
   it("keeps discovery and scheduling host-owned and separate", () => {
@@ -83,15 +84,17 @@ describe("specialized discovery", () => {
     expect(assignments.find((item) => item.file === ".github/workflows/ci.yml")?.assignedLegs).toEqual(["correctness", "test-honesty", "contract-operability"]);
     expect(assignments.find((item) => item.file === "unknown.txt")?.assignedLegs).toEqual(["contract-operability"]);
     const plans = buildDiscoveryLegPlans(manifest, evidencePack, guidance, { mode: "diff-only", availability: "unavailable" });
-    expect(new Set(plans.map((plan) => plan.inputSha256)).size).toBe(3);
     expect(JSON.stringify(plans)).not.toMatch(/SECRET_(SCAN|RULE|MUTATION|RESIDUAL|ANALYZER)_TARGET/);
+    expect(new Set(plans.map((plan) => plan.inputSha256)).size).toBe(3);
     expect(new Set(plans.map((plan) => JSON.stringify(phaseToolIdentity(selectPhaseTools(tools, plan.definition.requiredTools, plan.definition.optionalTools)).names))).size).toBe(3);
-    expect(new Set(plans.flatMap((plan) => plan.checklistIds))).toEqual(new Set(MECHANISM_CHECKLISTS.map((checklist) => checklist.id)));
     expect(JSON.stringify(plans.map((plan) => plan.input))).not.toMatch(/pfblockerng-(2444|2521)-r/);
+    expect(new Set(plans.flatMap((plan) => plan.checklistIds))).toEqual(new Set(MECHANISM_CHECKLISTS.map((checklist) => checklist.id)));
     for (const plan of plans) {
       const selected = selectPhaseTools(tools, plan.definition.requiredTools, plan.definition.optionalTools);
       expect(phaseToolIdentity(selected).names).toEqual([...plan.definition.requiredTools, ...plan.definition.optionalTools]);
-      expect(selected.map((tool) => tool.name)).not.toEqual(expect.arrayContaining(["leveret_scan", "leveret_context"]));
+      for (const forbidden of ["leveret_scan", "leveret_context"]) {
+        expect(selected.map((tool) => tool.name)).not.toContain(forbidden);
+      }
     }
   });
 
@@ -160,9 +163,13 @@ describe("specialized discovery", () => {
     expect(called).toEqual(["correctness", "test-honesty"]);
     const verifierTools = selectPhaseTools(tools, TARGETED_VERIFIER_TOOLS.required, TARGETED_VERIFIER_TOOLS.optional, true);
     expect(verifierTools.map((tool) => tool.name)).toEqual([...TARGETED_VERIFIER_TOOLS.required, ...TARGETED_VERIFIER_TOOLS.optional]);
-    expect(verifierTools.map((tool) => tool.name)).not.toEqual(expect.arrayContaining(["leveret_scan", "leveret_context", "leveret_memory", "codegraph_explore"]));
-    const diffSchema = JSON.stringify(verifierTools.find((tool) => tool.name === "leveret_diff")?.parameters);
-    expect(diffSchema).toContain('"const":"patch"'); expect(diffSchema).not.toContain('"const":"manifest"'); expect(diffSchema).toContain('"required":["kind","paths"]');
+    for (const forbidden of ["leveret_scan", "leveret_context", "leveret_memory", "codegraph_explore"]) {
+      expect(verifierTools.map((tool) => tool.name)).not.toContain(forbidden);
+    }
+    const verifierDiff = verifierTools.find((tool) => tool.name === "leveret_diff")!;
+    expect(Value.Check(verifierDiff.parameters, { kind: "manifest" })).toBe(false);
+    expect(Value.Check(verifierDiff.parameters, { kind: "patch", paths: ["src/core.ts"] })).toBe(true);
+    expect(Value.Check(verifierDiff.parameters, { kind: "patch", paths: [] })).toBe(false);
     const gaps = verifySchemaGaps({ report: [], verdicts: [{ id: "correctness:R1", grade: "dropped", reason: "not grounded" }], coverage: { lenses: ["correctness-hostile-inputs", "contract-conformance", "test-honesty", "blast-radius", "leads-triage"].map((lens) => ({ lens, outcome: "checked" })), files: manifest.files.map((file) => ({ file: file.path, verdict: file.path === "src/core.ts" ? "findings" : "considered-fine" })) }, resolutions: [] }, { concerns: [{ id: "correctness:R1", file: "src/core.ts" }], leads: [], changedFiles: manifest.files.map((file) => file.path), priorThreadIds: ["prior-1"] });
     expect(gaps).toContain("resolutions:missing:prior-1");
   });

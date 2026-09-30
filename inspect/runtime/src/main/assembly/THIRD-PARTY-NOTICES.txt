@@ -1,0 +1,27 @@
+Additional libraries bundled for Java reference analysis:
+
+Eclipse JDT Core 3.46.0 (org.eclipse.jdt:org.eclipse.jdt.core)
+Eclipse Java compiler 3.46.0 (org.eclipse.jdt:ecj)
+Project: Eclipse Foundation and contributors.
+License: Eclipse Public License 2.0 (EPL-2.0)
+https://www.eclipse.org/legal/epl-2.0/
+https://repo.maven.apache.org/maven2/org/eclipse/jdt/org.eclipse.jdt.core/3.46.0/org.eclipse.jdt.core-3.46.0.pom
+
+Eclipse Platform bundles required by JDT Core (group org.eclipse.platform):
+org.eclipse.core.commands 3.12.500, org.eclipse.core.contenttype 3.9.800,
+org.eclipse.core.expressions 3.9.600, org.eclipse.core.filesystem 1.11.400,
+org.eclipse.core.jobs 3.15.700, org.eclipse.core.resources 3.24.0,
+org.eclipse.core.runtime 3.34.200, org.eclipse.equinox.app 1.7.600,
+org.eclipse.equinox.common 3.20.400, org.eclipse.equinox.preferences 3.12.100,
+org.eclipse.equinox.registry 3.12.600, org.eclipse.osgi 3.24.200,
+org.eclipse.text 3.14.700
+Project: Eclipse Foundation and contributors.
+License: Eclipse Public License 2.0 (EPL-2.0), as declared in each artifact's POM.
+https://www.eclipse.org/legal/epl-2.0/
+https://repo.maven.apache.org/maven2/org/eclipse/platform/
+
+Gson 2.13.2 (com.google.code.gson:gson)
+Copyright Google LLC and contributors.
+License: Apache License 2.0 (Apache-2.0)
+https://www.apache.org/licenses/LICENSE-2.0.txt
+https://repo.maven.apache.org/maven2/com/google/code/gson/gson/2.13.2/gson-2.13.2.pom

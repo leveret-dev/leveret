@@ -1,0 +1,24 @@
+#!/bin/sh
+# Keeps graphify-out/graph.json in step with the commit that changes the tree.
+# Any staged change other than the graph itself rebuilds the graph in place
+# (PYTHONHASHSEED=0, through the resolved launcher) and stages it. Decided by
+# git's own index diff, so a path holding a newline cannot pose as the graph.
+# Synchronous, so a rebase/merge/cherry-pick in progress is no reason to skip.
+# A failed rebuild or a missing Graphify launcher fails the commit; bypass in an
+# emergency with `git commit --no-verify`.
+#
+# Enable: sh scripts/setup-hooks.sh
+
+set -u
+
+root=$(git rev-parse --show-toplevel) || exit 1
+cd "$root" || exit 1
+
+git diff --cached --quiet -- . ':!graphify-out/graph.json' && exit 0
+
+printf '[pre-commit] %s\n' 'graph freshness (rebuild graphify-out/graph.json and stage it)'
+if ! { sh scripts/agent/check-graph-fresh.sh --refresh && git add -- graphify-out/graph.json; }; then
+	printf '[pre-commit] FAILED: %s\n' 'graph freshness' >&2
+	printf '[pre-commit] Fix it, or bypass with: git commit --no-verify\n' >&2
+	exit 1
+fi

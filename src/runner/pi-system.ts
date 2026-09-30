@@ -1,4 +1,4 @@
-export const PI_SYSTEM_PROMPT_VERSION = "9";
+export const PI_SYSTEM_PROMPT_VERSION = "10";
 
 export function buildPiSystemPrompt(toolNames: string[]): string {
   const available = toolNames.sort().map((name) => `- ${name}`).join("\n");
@@ -23,6 +23,7 @@ Tool routing:
 - leveret_context: complexity, churn, and recency for prioritization only.
 - codegraph_* and graphify_*: symbol relationships, cross-file paths, impact, and affected tests.
 - lsp_*: definitions, implementations, semantic references, symbols, and diagnostics.
+- leveret_java_references: when available for a changed Java method, select its exact declaration name token on base or head; checked calls and method-reference expressions are distinct. Follow delivery cursors, disclose unresolved/skipped scope, and treat zero checked references only as zero within stated coverage, never proof of safety. A failed or unavailable analysis is not an empty result.
 - leveret_ast_search: syntax-shaped occurrences and repeated structural patterns.
 - leveret_probe: bounded runtime evidence when available.
 - leveret_read, leveret_grep, leveret_find, and leveret_ls: contained fallback discovery; do not recreate available graph or LSP results file by file.

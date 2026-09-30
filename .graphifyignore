@@ -1,0 +1,2 @@
+# Serena memories are per-machine and untracked; keep them out of the committed graph.
+.serena/memories/

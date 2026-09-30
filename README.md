@@ -129,9 +129,49 @@ CodeGraph and code-only Graphify indexes, then warms one Serena symbol query per
 detected packaged language. Missing indexes fail closed by default; set
 `LEVERET_REQUIRE_INDEXES=0` only for an explicitly degraded run.
 
+Optional Java reference evidence requires the installed Inspect distribution,
+cache-only artifacts, Linux Bubblewrap and `prlimit`, and paired
+`LEVERET_INSPECT_JAVA_CONFIG` / `LEVERET_INSPECT_JAVA_CONFIG_SHA256` host values.
+It supports one Java module with main/test sources, distinguishes exact
+overloads and method-reference expressions, and reports unresolved or skipped
+scope separately. A complete response is not proof a change is safe.
+See [Inspect's supported host and configuration](inspect/README.md#internal-java-reference-worker).
+
 ```sh
 npm test        # integration suite; exercises the real tools
 ```
+
+## Repository layout
+
+This is the canonical Leveret monorepo. Inspect is Leveret's JVM inspection
+module; it retains an independent Gradle build:
+
+| Path | Component | Toolchain |
+|---|---|---|
+| repository root (`src/`, `test/`, `docs/`, …) | Leveret: engine, MCP server, runner, GitHub App | Node.js, TypeScript, npm |
+| [`inspect/`](inspect/README.md) | Inspect: Java classpath and checked method-reference evidence for Leveret | JDK 25+, Gradle wrapper |
+
+With a hash-pinned host configuration outside the reviewed checkout, the
+TypeScript reviewer calls Inspect's isolated JVM worker for exact Java method
+references outside a pinned diff. Without it, the capability is reported
+unavailable; structural matches do not become checked calls. Inspect has no
+separate service or product lifecycle. Its original private history and
+research are not imported into this public monorepo.
+
+| Command | Runs |
+|---|---|
+| `npm run build` / `npm test` | TypeScript build / test suite (Leveret) |
+| `npm run build:inspect` / `npm run test:inspect` | `./inspect/gradlew -p inspect build` / `test` |
+| `npm run build:all` / `npm run test:all` | Both components, TypeScript first |
+
+The JVM build requires JDK 25 or newer. `build:inspect` and `build:all` also run the
+JVM tests, including Linux-only classpath oracles requiring Bubblewrap, Git, Maven,
+JDK 21, and network access for cold fixture caches. See
+[Inspect build prerequisites](inspect/README.md#build-and-test). Inspect can also be built from
+`inspect/` with `./gradlew build`.
+
+Once per clone, run `sh scripts/setup-hooks.sh` from the repository root to activate the
+tracked Git hooks. Inspect has no separate hook setup.
 
 ## Design and status
 

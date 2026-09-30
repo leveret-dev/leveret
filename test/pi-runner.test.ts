@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Type } from "typebox";
+import { Value } from "typebox/value";
 import { auditConfig, createAuditRun, withAuditTrace } from "../src/audit.js";
 import type { ChangeEvidence, ChangeManifest } from "../src/change-evidence.js";
 import { run, runStreaming } from "../src/exec.js";
@@ -138,14 +139,6 @@ describe("Pi runtime isolation", () => {
   it("registers no mutation or unrestricted shell tools", async () => {
     const tools = await buildPiTools(toolOptions("/tmp/repo"));
     const names = tools.tools.map((tool) => tool.name);
-    expect(names).toContain("leveret_scan");
-    expect(names).toContain("leveret_diff");
-    const diff = tools.tools.find((tool) => tool.name === "leveret_diff")!;
-    expect(JSON.stringify(diff.parameters)).toContain("\"kind\"");
-    expect(JSON.stringify(diff.parameters)).toContain("\"required\":[\"kind\"]");
-    expect(JSON.stringify(diff.parameters)).toContain("\"paths\"");
-    expect(names).toContain("leveret_ast_search");
-    expect(names).toContain("leveret_read");
     expect(names).not.toContain("read");
     expect(names).not.toContain("grep");
     expect(names).not.toContain("find");
@@ -156,10 +149,26 @@ describe("Pi runtime isolation", () => {
     expect(names).not.toContain("leveret_probe");
     expect(names).not.toContain("leveret_remember");
     expect(names).not.toContain("leveret_learn");
+    expect(names).toEqual(expect.arrayContaining(["leveret_scan", "leveret_diff", "leveret_ast_search", "leveret_read"]));
+    const diff = tools.tools.find((tool) => tool.name === "leveret_diff")!;
+    expect(Value.Check(diff.parameters, { kind: "manifest" })).toBe(true);
+    expect(Value.Check(diff.parameters, { kind: "patch", paths: ["src/core.ts"] })).toBe(true);
+    expect(Value.Check(diff.parameters, {})).toBe(false);
     expect(tools.capabilities.tool_schema_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(tools.capabilities.tool_source_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(tools.capabilities.tool_inventory).toEqual([...names].sort());
     await tools.close();
+  });
+
+  it("reports Java references unavailable when no trusted configuration was supplied", async () => {
+    const bundle = await buildPiTools(toolOptions("/tmp/repo"));
+    try {
+      expect(bundle.capabilities.java_references).toMatchObject({
+        availability: "unavailable",
+        reason: "trusted Java configuration not supplied",
+      });
+      expect(bundle.tools.find((tool) => tool.name === "leveret_java_references")).toBeUndefined();
+    } finally { await bundle.close(); }
   });
   it("exposes host skill instructions without opening host filesystem access", async () => {
     const root = mkdtempSync(join(tmpdir(), "leveret-host-skill-"));
