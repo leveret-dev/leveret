@@ -21396,7 +21396,7 @@
       },
       "norm_label": "graphify_driver_mode",
       "source_file": "tests/shell/agent_graphify_merge_driver_spec.sh",
-      "source_location": "L85"
+      "source_location": "L86"
     },
     {
       "id": "tests_shell_agent_graphify_merge_driver_spec_setup",
@@ -33899,7 +33899,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "scripts/agent/ensure-graphify.sh",
-      "source_location": "L43",
+      "source_location": "L47",
       "weight": 1.0
     },
     {
@@ -33935,7 +33935,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "scripts/agent/ensure-graphify.sh",
-      "source_location": "L53",
+      "source_location": "L57",
       "weight": 1.0
     },
     {
@@ -75206,7 +75206,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/shell/agent_graphify_merge_driver_spec.sh",
-      "source_location": "L85",
+      "source_location": "L86",
       "weight": 1.0
     },
     {
@@ -85004,5 +85004,5 @@
       "source_file": "docs/reports/2026-08-24-pi-quality-vs-omp-coderabbit.md"
     }
   ],
-  "built_at_commit": "55972d251b222ff9fd42a653b7929d7b164d9b4c"
+  "built_at_commit": "1df3129ed8b18cca1cdf041ec3e7e6cb064c3538"
 }
