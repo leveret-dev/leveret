@@ -39,13 +39,11 @@ main() {
 	patch_graphify=$root/scripts/agent/patch-graphify.sh
 	[ -f "$patch_graphify" ] || patch_graphify=$(dirname "$0")/patch-graphify.sh
 
-	# graspologic_native supplies the Leiden binding cluster.py calls first. The
-	# `leiden` extra installs graspologic, whose metadata stops below Python 3.13, so
-	# from 3.13 the extra installs nothing and clustering silently degrades to
-	# NetworkX Louvain. Naming the native abi3 wheel keeps Leiden on every
-	# interpreter. Drop this once Graphify-Labs/graphify#3310 ships and use
-	# `graphifyy[leiden]`.
-	uv tool install --upgrade --with 'graspologic-native>=1.2.1,<2.0.0' 'graphifyy>=0.9.51' 1>&2 ||
+	# Install the pfBlockerNG fork's integration head at an immutable commit (0.9.72),
+	# as pfBlockerNG does. Its `leiden` extra pulls the native Leiden binding on every
+	# interpreter, so clustering never silently falls back to Louvain. Bump the SHA
+	# when the fork's integration branch advances.
+	uv tool install --upgrade 'graphifyy[leiden] @ git+https://github.com/pfBlockerNG/graphify@58f57162775a2b8626a2920462960244bc024682' 1>&2 ||
 		fail 'Graphify installation failed'
 	graphify_bin=$(resolve_graphify_launcher) ||
 		fail 'cannot resolve the installed Graphify launcher'
