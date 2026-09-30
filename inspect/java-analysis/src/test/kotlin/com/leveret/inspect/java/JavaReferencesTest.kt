@@ -71,4 +71,36 @@ class JavaReferencesTest {
         }
         assertThat(invalidBudget.code).isEqualTo("invalid-input")
     }
+
+    @Test
+    fun `every page fits its byte budget across the whole budget range`() {
+        val summary = AnalysisSummary("a", "fixture", "head", "config", AnalysisCoverage(false, 1, 1, 0, 0, 0, 1, 1))
+        val target = JavaMethod("method-a", "price(int)", Location("Pricing.java", Range(Position(1, 0), Position(1, 20))),
+            Range(Position(1, 4), Position(1, 9)), "main")
+        val records = (1..12).map { number -> DetailRecord.reference(JavaReference(
+            "ref-$number", target.id, Location("PricingTest.java", Range(Position(number, 1), Position(number, 12))),
+            null, "test", "call",
+        )) } + (1..6).map { DetailRecord.file(SourceFile("Other$it.java", "test", false, "unsupported-root")) }
+        val context = PageContext(summary, target, "head", "manifest-a", records.size)
+        val json = com.google.gson.GsonBuilder().serializeNulls().create()
+        var checked = 0
+        for (budget in 200..3000) {
+            val delivered = mutableListOf<DetailRecord>()
+            var cursor: String? = null
+            try {
+                do {
+                    val page = JavaReferences.page(records.iterator(), context, budget, cursor)
+                    assertThat(json.toJson(page).toByteArray(Charsets.UTF_8).size).describedAs("budget $budget").isLessThanOrEqualTo(budget)
+                    delivered += page.items
+                    cursor = page.delivery.nextCursor
+                } while (cursor != null)
+            } catch (error: InspectException) {
+                assertThat(error.code).isEqualTo("budget-too-small")
+                continue
+            }
+            assertThat(delivered).describedAs("budget $budget").isEqualTo(records)
+            checked++
+        }
+        assertThat(checked).isGreaterThan(2000)
+    }
 }

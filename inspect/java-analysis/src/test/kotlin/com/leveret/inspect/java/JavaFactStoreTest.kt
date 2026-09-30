@@ -230,15 +230,17 @@ class JavaFactStoreTest {
         val declaration = data.methods.single { it.signature.contains(".price(") }
         opened(home) { JavaFactStore(it).publish(data) }
         opened(home) { sessions ->
-            val error = org.junit.jupiter.api.assertThrows<InspectException> {
-                JavaFactStore(sessions).query(ReferenceRequest(
-                    data.summary.analysisId, data.summary.configurationSha256,
-                    ChangeManifest("head", "head", emptyList()), "head",
-                    TargetSelector(declaration.location.path,
-                        declaration.nameRange.start.copy(column = declaration.nameRange.start.column + 1)),
-                ))
+            // Both copies share the name position; neither may be selected as a unique target.
+            for (path in listOf("src/main/java/example/Pricing.java", "src/test/java/example/Pricing.java")) {
+                val error = org.junit.jupiter.api.assertThrows<InspectException> {
+                    JavaFactStore(sessions).query(ReferenceRequest(
+                        data.summary.analysisId, data.summary.configurationSha256,
+                        ChangeManifest("head", "head", emptyList()), "head",
+                        TargetSelector(path, declaration.nameRange.start.copy(column = declaration.nameRange.start.column + 1)),
+                    ))
+                }
+                assertThat(error.code).describedAs(path).isEqualTo("target-indeterminate")
             }
-            assertThat(error.code).isEqualTo("target-indeterminate")
         }
     }
 
