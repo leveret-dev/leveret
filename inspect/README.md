@@ -96,7 +96,7 @@ checkout. It selects `repositoryId`, the installed `distribution`, a
 SHA-256 digests, `jdkHome` and `jdkFiles` digests for `bin/java`, `release`,
 `lib/modules`, and `lib/server/libjvm.so`, the operator-owned bare `cache`,
 one `module`, `build` (`maven` or `gradle`), one `mainRoots` and one
-`testRoots` entry, `javaLevel`, and positive `limits`. No target repository
+`testRoots` entry, `javaLevel`, and `limits`. No target repository
 file chooses the executable, cache, mounts, or worker limits. Only classpath
 artifacts already in the cache are copied into private scratch; provisioning
 and target builds are not worker operations.
@@ -112,10 +112,19 @@ and pages details within its byte budget. Model-visible results carry the
 existing tool evidence ID; the model cannot select the worker or its mounts.
 
 The supported extraction host is Linux x86-64 with usable Bubblewrap user,
-network, PID, and mount namespaces and `prlimit`. Unavailable isolation fails
-closed. Defaults: 1 GiB JVM heap, 8 GiB virtual address-space soft/hard limit,
-256 MiB metaspace, 128 MiB each for direct buffers and code cache, a 180-second
-deadline, and 8 MiB stdout/stderr capture. The address-space limit is not an
+network, PID, and mount namespaces, `prlimit`, `/usr/lib` and `/usr/lib64`,
+and these tools in `/usr/bin`: `bwrap`, `prlimit`, `dash`, `uname`, `ls`,
+`xargs`, `echo`, `sed`, and `tr`. `dash` becomes the sandbox's `/bin/sh`; some
+distributions, such as Fedora and RHEL, do not install it by default.
+Unavailable isolation fails closed.
+
+`limits` has no defaults; all four fields are required. `heapBytes` must be at
+least 16 MiB and less than `addressSpaceBytes`, which is applied as the
+virtual address-space soft and hard limit. `deadlineMs` bounds the worker, and
+`maxOutputBytes` (at most 8,388,608) caps stdout/stderr capture. The evaluation
+template uses 1 GiB heap, 8 GiB address space, 180 seconds, and 8 MiB. The
+sandbox also fixes 256 MiB metaspace and 128 MiB each for direct buffers and
+code cache; these are not configurable. The address-space limit is not an
 RSS guarantee. The worker receives no inherited provider/GitHub credentials,
 HOME contents, network, target executables, or target build invocation.
 
