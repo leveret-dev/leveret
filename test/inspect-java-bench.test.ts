@@ -28,13 +28,13 @@ function reply(options: { complete: boolean; side?: "base" | "head"; targetId?: 
 }
 
 /** Writes a real-shaped audit trace: one Java reference call, then the given submitted phase payload. */
-function trace(dir: string, result: ReturnType<typeof reply>, submitted: unknown, side = result.result.side) {
+function trace(dir: string, result: ReturnType<typeof reply>, submitted: unknown, side = result.result.side, submitTool = "leveret_submit_phase") {
   const events = [
     { sequence: 1, category: "tools", event: "execution_start", tool_call_id: "call_java", payload: { tool: "leveret_java_references", args: { side } } },
     { sequence: 2, category: "tools", event: "execution_end", tool_call_id: "call_java", payload: { tool: "leveret_java_references",
       result: { content: [{ type: "text", text: "evidence_id: call_java" }, { type: "text", text: JSON.stringify(result) }] } } },
     { sequence: 3, category: "assistant", event: "message_end", payload: { thinking: `call_java ${caller} unresolved` } },
-    { sequence: 4, category: "tools", event: "execution_start", tool_call_id: "call_submit", payload: { tool: "leveret_submit_phase", args: submitted } },
+    { sequence: 4, category: "tools", event: "execution_start", tool_call_id: "call_submit", payload: { tool: submitTool, args: submitted } },
   ];
   writeFileSync(join(dir, "runner.ndjson"), events.map((event) => JSON.stringify(event)).join("\n"));
   return dir;
@@ -73,8 +73,12 @@ describe("Inspect Java evaluation", () => {
         .toEqual({ evidenceReturned: true, subsequentUse: true, disclosedGap: true });
       expect(await verdict(reply({ complete: false }), finding(`${caller}: diagnostic + 2 unresolved`), true))
         .toEqual({ evidenceReturned: true, subsequentUse: true, disclosedGap: true });
-      // Thinking-only citation is not use.
+      // Thinking-only citation is not use, nor is a submitted citation that omits the caller file.
       expect((await verdict(reply({ complete: true }), { findings: [] }, false)).subsequentUse).toBe(false);
+      expect((await verdict(reply({ complete: true }), finding("checked caller exists"), false)).subsequentUse).toBe(false);
+      // Arguments to other tools are not submitted output.
+      expect((await traceConsumption(trace(home, reply({ complete: true }), finding(caller), "head", "leveret_read"), ["call_java"], false))
+        .subsequentUse).toBe(false);
       // Gap wording in a neighbouring record does not count as disclosure for this call.
       expect(await verdict(reply({ complete: false }), { findings: [
         { evidence_ids: ["call_java"], evidence_hint: `checked caller ${caller}` },

@@ -2,7 +2,7 @@
 
 Date: 2026-09-29
 
-Status: Extraction, persistence, sandbox, the registered reviewer tool, and **actual Leveret model consumption** were exercised. A real review consumed the out-of-diff caller and disclosed the missing-dependency gap (see [Real reviewer consumption](#real-reviewer-consumption)).
+Status: Extraction, persistence, sandbox, the registered reviewer tool, and **actual Leveret model consumption** were exercised. In the fixed change, a real review cited the checked out-of-diff caller of the changed overload. In the missing-dependency variant, it disclosed the unresolved sites when citing its query of the method with the missing type (see [Real reviewer consumption](#real-reviewer-consumption)).
 
 ## Reproduction and provenance
 
@@ -53,7 +53,7 @@ Operator-authorized review mode (`LEVERET_PAID_MODEL_APPROVED=1`) ran the real P
 Result `/tmp/leveret-java-eval-20260929-review-3/deterministic.json` (SHA-256 `e67c2b35ac5a48aabbaf1a258f61a7537d135eb68c5a1372f89c6b7e649c626e`), `reviewer_consumption: verified`:
 
 - Fixed change: 6 `leveret_java_references` calls. At least one head-side call resolved `Lexample/Pricing;.price(I)I` and returned the checked out-of-diff caller in `src/test/java/example/PricingTest.java`. The submitted findings then cited that call's evidence ID as the checked caller of the changed overload.
-- Missing-dependency variant: 12 calls. A head-side result carried incomplete coverage and two unresolved sites. The submitted phase output cited that evidence ID beside "diagnostic + 2 unresolved", so the gap was disclosed rather than presented as a complete zero result.
+- Missing-dependency variant: 12 calls. The head-side query of `PricingTest.missing()` returned incomplete coverage and two unresolved sites. The submitted phase output cited that evidence ID beside "diagnostic + 2 unresolved", so the gap was disclosed rather than presented as a complete zero result. A separate submitted record in the same review cited a head query of `price(int)` but did not repeat the gap there; the driver does not require the disclosure to accompany the changed method's query.
 
 The driver checks the audit trace, not the model's final prose alone. It picks calls by the identity and coverage the tool returned, because the tool accepts any position inside the name token. Use counts only when a later `leveret_submit_phase` or `phase_submitted` payload holds a record that cites the call's evidence ID and names the caller file; thinking text does not count. For the missing variant, that same record must disclose the gap. Wording in a neighbouring record does not count. Any head-side query with incomplete coverage and unresolved sites qualifies in the missing variant, because coverage is analysis-wide and the variant tests disclosure, not selection of the changed method. `test/inspect-java-bench.test.ts` pins these accept and reject paths on synthetic traces.
 

@@ -84,10 +84,11 @@ and build metadata file against the live checkout, and rejects dirty or
 untracked Java inputs. Skipped Java roots/modules remain in incomplete coverage.
 Completed analyses are stored in a dedicated H2 file outside the checkout.
 
-Leveret's trusted review host owns `LEVERET_BASE` and must supply only its
-verified accepted revision as the manifest base. Inspect checks the pinned
-commit and analysis identity; Git history alone cannot establish whether a
-commit was accepted. A head snapshot never silently substitutes for base.
+Leveret's trusted review host owns `LEVERET_BASE` and is required to supply
+only its verified accepted revision as the manifest base. Inspect checks that
+the base resolves to the pinned commit and matches the analysis identity; it
+cannot tell from Git history whether a commit was accepted. A head snapshot
+never silently substitutes for base.
 
 Trusted configuration is a SHA-256-pinned JSON file outside the reviewed
 checkout. It selects `repositoryId`, the installed `distribution`, a
@@ -118,12 +119,21 @@ deadline, and 8 MiB stdout/stderr capture. The address-space limit is not an
 RSS guarantee. The worker receives no inherited provider/GitHub credentials,
 HOME contents, network, target executables, or target build invocation.
 
-Known limits: JDT parses sources with the worker JDK's default charset (UTF-8),
-so sources in another encoding can misparse. A module with more than 2,000 Java
-files outside its configured roots is rejected as `resource-exhausted`. Maven
-`system`-scope dependencies have no dedicated handling or test. Because
-configured initialization fails closed, a broken trusted configuration blocks
-the review until the operator fixes or removes it.
+Tracked forms: method invocations, `super.m(...)` calls, and method references
+other than constructor references. Instance creation (`new X()`), `this(...)`
+and `super(...)` constructor calls, and `X::new` are not tracked. Implicit enum
+`values()`/`valueOf(String)` and synthetic record members are not tracked
+either, and their call sites are not reported as coverage gaps. A site inside a
+lambda has no enclosing callable (`enclosing` is `null`).
+
+Known limits: Java sources must be valid UTF-8; other bytes are rejected as
+`invalid-input`, and JDT reads sources as UTF-8. If the repository holds more
+than 2,000 Java files outside the configured module's roots, the review is
+rejected as `resource-exhausted`. This count covers the whole repository,
+including sibling modules, so large multi-module repositories cannot be
+configured today. Maven `system`-scope dependencies have no dedicated handling
+or test. Because configured initialization fails closed, a broken trusted
+configuration blocks the review until the operator fixes or removes it.
 
 ## License
 

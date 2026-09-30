@@ -143,7 +143,7 @@ class JavaExtractorTest {
         Files.writeString(main, "package example; class Pricing { int price(int n) { return n; } }")
         org.assertj.core.api.Assertions.assertThatThrownBy {
             JavaExtractor.extract(input(dir, listOf(main), listOf(main)))
-        }.isInstanceOf(IllegalArgumentException::class.java)
+        }.isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("only one source set")
     }
 
     @Test
@@ -156,12 +156,17 @@ class JavaExtractorTest {
         Files.createDirectories(duplicate.parent)
         Files.writeString(main, "package example; class Pricing { static int price(int n) { return n; } }")
         Files.writeString(other, "package example; class Other { static int safe(int n) { return n; } int caller() { return safe(3); } }")
-        Files.writeString(duplicate, "package example; class Pricing { static int price(int n) { return n + 1; } int ambiguous() { return price(4); } }")
+        Files.writeString(duplicate, "package example; class Pricing { static int price(int n) { return Other.safe(n) + 1; } int ambiguous() { return price(4); } }")
         Files.writeString(testCaller, "package example; class OtherTest { int checked() { return Other.safe(5); } }")
         val data = JavaExtractor.extract(input(dir, listOf(main, other), listOf(duplicate, testCaller)))
         val safe = data.methods.single { it.signature.contains("Other.safe(int)") }
-        assertThat(data.references.filter { it.targetId == safe.id }.map { it.location.path })
-            .containsExactly("src/main/java/example/Other.java", "src/test/java/example/OtherTest.java")
+        val safeCallers = data.references.filter { it.targetId == safe.id }
+        assertThat(safeCallers.map { it.location.path }).containsExactly(
+            "src/main/java/example/Other.java", "src/test/java/example/OtherTest.java", "src/test/java/example/Pricing.java")
+        // A call inside a duplicated declaration must not be attributed to either copy.
+        assertThat(safeCallers.single { it.location.path == "src/test/java/example/Pricing.java" }.enclosing).isNull()
+        assertThat(safeCallers.single { it.location.path == "src/test/java/example/OtherTest.java" }.enclosing?.signature)
+            .isEqualTo("example.OtherTest.checked()")
         assertThat(data.references.filter { it.targetId.contains("Pricing;.price") }).isEmpty()
         assertThat(data.unresolved.map { it.reason }).contains("duplicate-declaration-identity")
         assertThat(data.coverage.complete).isFalse()
@@ -242,6 +247,34 @@ class JavaExtractorTest {
         val data = JavaExtractor.extract(input(dir, listOf(main), emptyList()))
         assertThat(data.unresolved).isEmpty()
         assertThat(data.coverage.complete).isTrue()
+    }
+
+    @Test
+    fun `user-declared values and valueOf members remain checked references`(@TempDir dir: Path) {
+        val main = dir.resolve("src/main/java/example/Kind.java")
+        Files.createDirectories(main.parent)
+        Files.writeString(main, """
+            package example;
+            class Bag {
+                static int values() { return 1; }
+                static int valueOf(String s) { return 2; }
+                int use() { return values() + valueOf("x"); }
+            }
+            enum Kind {
+                ONE;
+                static int valueOf(int n) { return n; }
+                static int values(int n) { return n; }
+                int use() { return valueOf(3) + values(4); }
+            }
+            record Holder(int size) {
+                public int size() { return size; }
+                int read() { return size(); }
+            }
+        """.trimIndent())
+        val data = JavaExtractor.extract(input(dir, listOf(main), emptyList()))
+        assertThat(data.references.map { it.targetId.substringAfter(";.") }).containsExactlyInAnyOrder(
+            "values()I", "valueOf(Ljava/lang/String;)I", "valueOf(I)I", "values(I)I", "size()I")
+        assertThat(data.unresolved).isEmpty()
     }
 
     @Test

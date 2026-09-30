@@ -64,7 +64,7 @@ const disclosureFor = (
   checklists: plan.checklistIds.map((id) => ({ id, state: "examined" as const })),
   stopping: { rule: plan.definition.stoppingRule, reason: "complete" },
 });
-const tools = ["leveret_diff", "leveret_read", "leveret_grep", "leveret_find", "leveret_ast_search", "leveret_probe", "leveret_scan", "leveret_context", "leveret_memory", "codegraph_explore", "graphify_query", "graphify_path", "graphify_explain", "lsp_find_declaration", "lsp_find_referencing_symbols"].map((name) => ({ name, label: name, description: name, parameters: {}, execute: vi.fn() })) as unknown as ToolDefinition[];
+const tools = ["leveret_diff", "leveret_read", "leveret_grep", "leveret_find", "leveret_ast_search", "leveret_probe", "leveret_scan", "leveret_context", "leveret_memory", "leveret_java_references", "codegraph_explore", "graphify_query", "graphify_path", "graphify_explain", "lsp_find_declaration", "lsp_find_referencing_symbols"].map((name) => ({ name, label: name, description: name, parameters: {}, execute: vi.fn() })) as unknown as ToolDefinition[];
 
 describe("specialized discovery", () => {
   it("keeps discovery and scheduling host-owned and separate", () => {
@@ -91,7 +91,7 @@ describe("specialized discovery", () => {
     expect(new Set(plans.flatMap((plan) => plan.checklistIds))).toEqual(new Set(MECHANISM_CHECKLISTS.map((checklist) => checklist.id)));
     for (const plan of plans) {
       const selected = selectPhaseTools(tools, plan.definition.requiredTools, plan.definition.optionalTools);
-      expect(phaseToolIdentity(selected).names).toEqual(expect.arrayContaining([...plan.definition.requiredTools]));
+      expect(phaseToolIdentity(selected).names).toEqual([...plan.definition.requiredTools, ...plan.definition.optionalTools]);
       for (const forbidden of ["leveret_scan", "leveret_context"]) {
         expect(selected.map((tool) => tool.name)).not.toContain(forbidden);
       }
@@ -162,7 +162,7 @@ describe("specialized discovery", () => {
     })).rejects.toThrow("required leg failed");
     expect(called).toEqual(["correctness", "test-honesty"]);
     const verifierTools = selectPhaseTools(tools, TARGETED_VERIFIER_TOOLS.required, TARGETED_VERIFIER_TOOLS.optional, true);
-    expect(verifierTools.map((tool) => tool.name)).toEqual(expect.arrayContaining([...TARGETED_VERIFIER_TOOLS.required]));
+    expect(verifierTools.map((tool) => tool.name)).toEqual([...TARGETED_VERIFIER_TOOLS.required, ...TARGETED_VERIFIER_TOOLS.optional]);
     for (const forbidden of ["leveret_scan", "leveret_context", "leveret_memory", "codegraph_explore"]) {
       expect(verifierTools.map((tool) => tool.name)).not.toContain(forbidden);
     }
