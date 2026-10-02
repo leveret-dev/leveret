@@ -3,6 +3,19 @@
 Status: primary-source research, 2026-08-24. This note proposes checks and
 retrieval design only; it does not implement rules or change reviewer prompts.
 
+**Forward-looking qualification (2026-10-02).** The mechanism analysis below is the
+2026-08-24 record and is not rewritten. Leveret runs on the client's infrastructure
+with the client's provider account, so its priorities are evidence quality,
+consequential defect recall, independent verification, accurate and actionable
+reports, beyond-diff evidence, and honest coverage
+([DESIGN.md](../../DESIGN.md#current-priorities-and-deployment-reality-owner-decision-2026-10-02)).
+The recommendations here are ranked on that basis: each deterministic rule or
+caveat card is justified by the missed defects it recovers and by how precisely it
+avoids noise, not by tokens saved. Guidance and context budgets below are
+retrieval-safety and prompt-mechanics limits on how much material one model turn
+receives; they are **not** repository file-eligibility caps, and nothing here
+authorizes skipping a file because a budget is full.
+
 ## Scope and conclusion
 
 The source set is the twelve mechanisms still missed after the latest replay
@@ -206,13 +219,21 @@ completeness, or workflow command-state reasoning
 
 ## Recommended layers
 
+Ranking (2026-10-02): first, the deterministic rules and explicit reviewer-judgment
+questions, because they target the twelve mechanisms missed in the 2026-08-24
+replay, some recovered in later preliminary runs (see
+[the quality tracker](https://github.com/leveret-dev/leveret/issues/64)); second,
+precomputed guidance retrieval helps the reviewer reach that evidence. Each rule
+should be judged by recall on its mechanism and by the noise it adds, as with
+every other proposed check.
+
 ### Available now
 
 1. Keep Leveret's ShellCheck, actionlint, zizmor, Semgrep, ast-grep, and LSP
    baseline. They remove syntax/security/type noise before model review, but must
    not be scored as recall for these mechanisms. Leveret already supports local
    Semgrep/ast-grep packs
-   ([current engine belt](../../README.md#how-it-works),
+   ([current engine belt](../../README.md#the-reviewer-toolbelt),
    [rule-pack recipe](../recipes.md#custom-repo-rules-built-in-semgrep--ast-grep-engines)).
 2. Where ShellSpec is already the repository's test runner, use the real target
    shell, explicit path/status/mode assertions, parameter tables derived from a
@@ -336,6 +357,12 @@ At review time:
    8 KiB total guidance budget;
 5. suppress a residual question when a deterministic finding or proof already
    resolves it.
+
+These numbers are proposed packet-size limits that keep trusted guidance from
+displacing the diff and code evidence in the model's context; they are not file
+caps and do not reduce which files are examined. When a card is dropped for space,
+the packet should name the dropped card so the omission is reported rather than
+silent (2026-10-02 clarification).
 
 Examples:
 

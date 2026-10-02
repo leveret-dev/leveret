@@ -10,7 +10,9 @@
 
 **Spec:** [Approved Java references specification](../specs/2026-09-29-inspect-java-references-design.md).
 
-**Status:** Proposed implementation plan; no implementation or paid execution authorized. Continue on `docs/inspect-java-references` in its existing isolated worktree after plan approval and execution-method selection.
+**Status (2026-10-02):** Delivered in [Java reference evidence for reviews](https://github.com/leveret-dev/leveret/pull/78), including actual model consumption. See the [evaluation report](../../reports/2026-09-29-inspect-java-references.md) for exercised behavior and limits. The task checkboxes below preserve the original plan, not a new backlog; do not recreate its retired branch or worktree. General review-quality/parity evaluation remains separate.
+
+**Current direction:** Leveret runs on client infrastructure. Prioritize useful findings, independent verification, honest coverage and actionable reports. Arbitrary file-count caps are not the default product policy; [client-controlled Java limits](https://github.com/leveret-dev/leveret/pull/80) is open, not yet merged. Context/transport and worker safety bounds are not repository-size quotas. Own-tool paid/local evaluations are pre-authorized; use Grok, Gemini Flash or Z.ai Flash without changing pinned models in formal comparisons.
 
 ## Global Constraints
 
@@ -23,7 +25,7 @@
 - “The worker has an enforced memory cap and deadline, no analysis credentials, and no network access during extraction.” No target builds, generators, processors, package managers, or tests.
 - “Complete delivery does not imply complete analysis.” Preserve summary coverage on every page; zero checked references is not proof of safety.
 - Reuse existing classpath workers, H2, `ChangeManifest`, tool evidence IDs, audit capture, and phase selection. Do not add a graph service, fallback resolver, or new product lifecycle.
-- “Any paid model run remains subject to separate execution approval; a scripted query alone does not satisfy the real-review acceptance criterion.” Historical private research stays private.
+- A scripted query alone does not satisfy real-review consumption. Own-tool paid/local evaluation is pre-authorized by the maintainer's standing policy; the historical per-run approval requirements below are superseded. Historical private research stays private.
 
 ## Review Focus
 

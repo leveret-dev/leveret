@@ -800,17 +800,43 @@
       "source_location": "L49"
     },
     {
+      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_query_object_iterator_l153",
+      "label": "Iterator",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 118,
+      "community_name": "JavaReferences.kt",
+      "file_type": "code",
+      "norm_label": "iterator",
+      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFactStore.kt",
+      "source_location": "L153"
+    },
+    {
       "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javareferences_delivery",
       "label": "Delivery",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 118,
-      "community_name": ".query",
+      "community_name": "JavaReferences.kt",
       "file_type": "code",
       "norm_label": "delivery",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
       "source_location": "L34"
+    },
+    {
+      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javareferences_detailrecord",
+      "label": "DetailRecord",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 118,
+      "community_name": "JavaReferences.kt",
+      "file_type": "code",
+      "norm_label": "detailrecord",
+      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
+      "source_location": "L23"
     },
     {
       "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javareferences_javareferences",
@@ -819,7 +845,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 118,
-      "community_name": ".query",
+      "community_name": "JavaReferences.kt",
       "file_type": "code",
       "norm_label": "javareferences",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
@@ -832,7 +858,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 118,
-      "community_name": ".query",
+      "community_name": "JavaReferences.kt",
       "file_type": "code",
       "norm_label": "pagecontext",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
@@ -845,7 +871,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 118,
-      "community_name": ".query",
+      "community_name": "JavaReferences.kt",
       "file_type": "code",
       "norm_label": "referencepage",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
@@ -2685,6 +2711,19 @@
       "source_location": "L4"
     },
     {
+      "id": "inspect_java_classpath_src_main_kotlin_com_leveret_inspect_classpath_classpathanalysis_classpathdiagnostic",
+      "label": "ClasspathDiagnostic",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 38,
+      "community_name": "GradleLockfileClasspathWorker",
+      "file_type": "code",
+      "norm_label": "classpathdiagnostic",
+      "source_file": "inspect/java-classpath/src/main/kotlin/com/leveret/inspect/classpath/ClasspathAnalysis.kt",
+      "source_location": "L24"
+    },
+    {
       "id": "inspect_java_classpath_src_main_kotlin_com_leveret_inspect_classpath_gradlelockfileclasspathworker_gradlelockfileclasspathworker",
       "label": "GradleLockfileClasspathWorker",
       "_callable": true,
@@ -2951,7 +2990,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": "analysiscoverage",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFacts.kt",
@@ -2964,7 +3003,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": "analysisdata",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFacts.kt",
@@ -2977,7 +3016,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": "analysissummary",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFacts.kt",
@@ -2990,7 +3029,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": "javamethod",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFacts.kt",
@@ -3003,7 +3042,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": "javareference",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFacts.kt",
@@ -3016,7 +3055,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": "location",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFacts.kt",
@@ -3029,7 +3068,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": "range",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFacts.kt",
@@ -3042,7 +3081,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": "sourcefile",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFacts.kt",
@@ -3055,7 +3094,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": "unresolvedcandidate",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFacts.kt",
@@ -3068,37 +3107,11 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": "unresolvedsite",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFacts.kt",
       "source_location": "L26"
-    },
-    {
-      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_query_object_iterator_l153",
-      "label": "Iterator",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 48,
-      "community_name": ".parseDetail",
-      "file_type": "code",
-      "norm_label": "iterator",
-      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFactStore.kt",
-      "source_location": "L153"
-    },
-    {
-      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javareferences_detailrecord",
-      "label": "DetailRecord",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 48,
-      "community_name": ".parseDetail",
-      "file_type": "code",
-      "norm_label": "detailrecord",
-      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
-      "source_location": "L23"
     },
     {
       "id": "inspect_java_analysis_src_test_kotlin_com_leveret_inspect_java_javareferencestest_javareferencestest",
@@ -3107,7 +3120,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": "javareferencestest",
       "source_file": "inspect/java-analysis/src/test/kotlin/com/leveret/inspect/java/JavaReferencesTest.kt",
@@ -3281,19 +3294,6 @@
       "norm_label": "execresult",
       "source_file": "src/exec.ts",
       "source_location": "L8"
-    },
-    {
-      "id": "inspect_java_classpath_src_main_kotlin_com_leveret_inspect_classpath_classpathanalysis_classpathdiagnostic",
-      "label": "ClasspathDiagnostic",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 52,
-      "community_name": "ClasspathAnalysis.kt",
-      "file_type": "code",
-      "norm_label": "classpathdiagnostic",
-      "source_file": "inspect/java-classpath/src/main/kotlin/com/leveret/inspect/classpath/ClasspathAnalysis.kt",
-      "source_location": "L24"
     },
     {
       "id": "inspect_persistence_src_main_kotlin_com_leveret_inspect_db_config_databasesettings_databasesettings",
@@ -5621,28 +5621,28 @@
       "source_location": "L69"
     },
     {
-      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_query",
-      "label": ".query()",
+      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_query_object_iterator_l153_next",
+      "label": ".next()",
       "_callable": true,
       "_origin": "ast",
       "community": 118,
-      "community_name": ".query",
+      "community_name": "JavaReferences.kt",
       "file_type": "code",
-      "norm_label": ".query()",
+      "norm_label": ".next()",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFactStore.kt",
-      "source_location": "L124"
+      "source_location": "L167"
     },
     {
-      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_sha",
-      "label": ".sha()",
+      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javareferences_detailrecord_diagnostic",
+      "label": ".diagnostic()",
       "_callable": true,
       "_origin": "ast",
       "community": 118,
-      "community_name": ".query",
+      "community_name": "JavaReferences.kt",
       "file_type": "code",
-      "norm_label": ".sha()",
-      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFactStore.kt",
-      "source_location": "L255"
+      "norm_label": ".diagnostic()",
+      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
+      "source_location": "L31"
     },
     {
       "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javareferences_javareferences_bytes",
@@ -5650,7 +5650,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 118,
-      "community_name": ".query",
+      "community_name": "JavaReferences.kt",
       "file_type": "code",
       "norm_label": ".bytes()",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
@@ -5662,7 +5662,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 118,
-      "community_name": ".query",
+      "community_name": "JavaReferences.kt",
       "file_type": "code",
       "norm_label": ".decode()",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
@@ -5674,7 +5674,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 118,
-      "community_name": ".query",
+      "community_name": "JavaReferences.kt",
       "file_type": "code",
       "norm_label": ".digest()",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
@@ -5686,23 +5686,11 @@
       "_callable": true,
       "_origin": "ast",
       "community": 118,
-      "community_name": ".query",
+      "community_name": "JavaReferences.kt",
       "file_type": "code",
       "norm_label": ".encode()",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
       "source_location": "L112"
-    },
-    {
-      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javareferences_javareferences_outsidediff",
-      "label": ".outsideDiff()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 118,
-      "community_name": ".query",
-      "file_type": "code",
-      "norm_label": ".outsidediff()",
-      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
-      "source_location": "L48"
     },
     {
       "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javareferences_javareferences_page",
@@ -5710,7 +5698,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 118,
-      "community_name": ".query",
+      "community_name": "JavaReferences.kt",
       "file_type": "code",
       "norm_label": ".page()",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
@@ -5722,23 +5710,11 @@
       "_callable": true,
       "_origin": "ast",
       "community": 118,
-      "community_name": ".query",
+      "community_name": "JavaReferences.kt",
       "file_type": "code",
       "norm_label": ".sha()",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
       "source_location": "L131"
-    },
-    {
-      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javareferences_javareferences_validate",
-      "label": ".validate()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 118,
-      "community_name": ".query",
-      "file_type": "code",
-      "norm_label": ".validate()",
-      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
-      "source_location": "L64"
     },
     {
       "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_bool",
@@ -5813,6 +5789,18 @@
       "source_location": "L233"
     },
     {
+      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_parsedetail",
+      "label": ".parseDetail()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 119,
+      "community_name": "JavaFactStore",
+      "file_type": "code",
+      "norm_label": ".parsedetail()",
+      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFactStore.kt",
+      "source_location": "L201"
+    },
+    {
       "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_parsemethod",
       "label": ".parseMethod()",
       "_callable": true,
@@ -5849,6 +5837,30 @@
       "source_location": "L197"
     },
     {
+      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_query",
+      "label": ".query()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 119,
+      "community_name": "JavaFactStore",
+      "file_type": "code",
+      "norm_label": ".query()",
+      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFactStore.kt",
+      "source_location": "L124"
+    },
+    {
+      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_query_object_iterator_l153_hasnext",
+      "label": ".hasNext()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 119,
+      "community_name": "JavaFactStore",
+      "file_type": "code",
+      "norm_label": ".hasnext()",
+      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFactStore.kt",
+      "source_location": "L155"
+    },
+    {
       "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_range",
       "label": ".range()",
       "_callable": true,
@@ -5859,6 +5871,18 @@
       "norm_label": ".range()",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFactStore.kt",
       "source_location": "L198"
+    },
+    {
+      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_sha",
+      "label": ".sha()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 119,
+      "community_name": "JavaFactStore",
+      "file_type": "code",
+      "norm_label": ".sha()",
+      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFactStore.kt",
+      "source_location": "L255"
     },
     {
       "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_string",
@@ -5883,6 +5907,30 @@
       "norm_label": ".summary()",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFactStore.kt",
       "source_location": "L90"
+    },
+    {
+      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javareferences_javareferences_outsidediff",
+      "label": ".outsideDiff()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 119,
+      "community_name": "JavaFactStore",
+      "file_type": "code",
+      "norm_label": ".outsidediff()",
+      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
+      "source_location": "L48"
+    },
+    {
+      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javareferences_javareferences_validate",
+      "label": ".validate()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 119,
+      "community_name": "JavaFactStore",
+      "file_type": "code",
+      "norm_label": ".validate()",
+      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
+      "source_location": "L64"
     },
     {
       "id": "inspect_runtime_src_main_kotlin_com_leveret_inspect_runtime_log_jsonlayout_jsonlayout_diagnosticcontext",
@@ -9125,18 +9173,6 @@
       "source_location": "L34"
     },
     {
-      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_insert",
-      "label": ".insert()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 31,
-      "community_name": "DbSession",
-      "file_type": "code",
-      "norm_label": ".insert()",
-      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFactStore.kt",
-      "source_location": "L245"
-    },
-    {
       "id": "inspect_persistence_src_main_kotlin_com_leveret_inspect_db_session_dbsession_dbsession_batch",
       "label": ".batch()",
       "_callable": true,
@@ -10817,16 +10853,16 @@
       "source_location": "L44"
     },
     {
-      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_parsedetail",
-      "label": ".parseDetail()",
+      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_insert",
+      "label": ".insert()",
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
-      "norm_label": ".parsedetail()",
+      "norm_label": ".insert()",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFactStore.kt",
-      "source_location": "L201"
+      "source_location": "L245"
     },
     {
       "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_publish",
@@ -10834,47 +10870,11 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": ".publish()",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFactStore.kt",
       "source_location": "L28"
-    },
-    {
-      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_query_object_iterator_l153_hasnext",
-      "label": ".hasNext()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 48,
-      "community_name": ".parseDetail",
-      "file_type": "code",
-      "norm_label": ".hasnext()",
-      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFactStore.kt",
-      "source_location": "L155"
-    },
-    {
-      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_javafactstore_query_object_iterator_l153_next",
-      "label": ".next()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 48,
-      "community_name": ".parseDetail",
-      "file_type": "code",
-      "norm_label": ".next()",
-      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFactStore.kt",
-      "source_location": "L167"
-    },
-    {
-      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javareferences_detailrecord_diagnostic",
-      "label": ".diagnostic()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 48,
-      "community_name": ".parseDetail",
-      "file_type": "code",
-      "norm_label": ".diagnostic()",
-      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
-      "source_location": "L31"
     },
     {
       "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javareferences_detailrecord_file",
@@ -10882,7 +10882,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": ".file()",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
@@ -10894,7 +10894,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": ".reference()",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
@@ -10906,7 +10906,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": ".unresolved()",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
@@ -10918,7 +10918,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": ".fixture()",
       "source_file": "inspect/java-analysis/src/test/kotlin/com/leveret/inspect/java/JavaFactStoreTest.kt",
@@ -10930,7 +10930,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": ".`cursor pages preserve each record and reject another manifest`()",
       "source_file": "inspect/java-analysis/src/test/kotlin/com/leveret/inspect/java/JavaReferencesTest.kt",
@@ -10942,7 +10942,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": ".`every page fits its byte budget across the whole budget range`()",
       "source_file": "inspect/java-analysis/src/test/kotlin/com/leveret/inspect/java/JavaReferencesTest.kt",
@@ -14543,7 +14543,7 @@
       "node_kind": "heading",
       "norm_label": "existing seams and file map",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L36"
+      "source_location": "L38"
     },
     {
       "id": "docs_superpowers_plans_2026_09_29_inspect_java_references_task_5_make_reviewer_and_verifier_consume_the_evidence",
@@ -14555,7 +14555,7 @@
       "node_kind": "heading",
       "norm_label": "task 5: make reviewer and verifier consume the evidence",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L205"
+      "source_location": "L207"
     },
     {
       "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javaanalysisidentity",
@@ -14578,38 +14578,27 @@
       "node_kind": "heading",
       "norm_label": "task 2: extract checked java method references with jdt",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L122"
+      "source_location": "L124"
     },
     {
-      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_kt_referencepage",
-      "label": "ReferencePage",
+      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javareferences",
+      "label": "JavaReferences.kt",
       "_origin": "ast",
       "community": 118,
-      "community_name": ".query",
+      "community_name": "JavaReferences.kt",
       "file_type": "code",
-      "norm_label": "referencepage",
-      "source_file": "",
-      "source_location": ""
+      "norm_label": "javareferences.kt",
+      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
+      "source_location": "L1"
     },
     {
       "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javareferences_kt_analysissummary",
       "label": "AnalysisSummary",
       "_origin": "ast",
       "community": 118,
-      "community_name": ".query",
+      "community_name": "JavaReferences.kt",
       "file_type": "code",
       "norm_label": "analysissummary",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
-      "id": "referencerequest",
-      "label": "ReferenceRequest",
-      "_origin": "ast",
-      "community": 118,
-      "community_name": ".query",
-      "file_type": "code",
-      "norm_label": "referencerequest",
       "source_file": "",
       "source_location": ""
     },
@@ -14618,12 +14607,12 @@
       "label": "Task 3: Publish immutable analyses and query outside-diff references",
       "_origin": "ast",
       "community": 118,
-      "community_name": ".query",
+      "community_name": "JavaReferences.kt",
       "file_type": "document",
       "node_kind": "heading",
       "norm_label": "task 3: publish immutable analyses and query outside-diff references",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L151"
+      "source_location": "L153"
     },
     {
       "id": "illegalargumentexception",
@@ -14655,6 +14644,28 @@
       "community_name": "JavaFactStore",
       "file_type": "code",
       "norm_label": "jsonobject",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_kt_referencepage",
+      "label": "ReferencePage",
+      "_origin": "ast",
+      "community": 119,
+      "community_name": "JavaFactStore",
+      "file_type": "code",
+      "norm_label": "referencepage",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "referencerequest",
+      "label": "ReferenceRequest",
+      "_origin": "ast",
+      "community": 119,
+      "community_name": "JavaFactStore",
+      "file_type": "code",
+      "norm_label": "referencerequest",
       "source_file": "",
       "source_location": ""
     },
@@ -14997,17 +15008,6 @@
       "file_type": "code",
       "norm_label": "logconfigtest.kt",
       "source_file": "inspect/runtime/src/test/kotlin/com/leveret/inspect/runtime/log/LogConfigTest.kt",
-      "source_location": "L1"
-    },
-    {
-      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javareferences",
-      "label": "JavaReferences.kt",
-      "_origin": "ast",
-      "community": 122,
-      "community_name": "ClasspathAnalysis",
-      "file_type": "code",
-      "norm_label": "javareferences.kt",
-      "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaReferences.kt",
       "source_location": "L1"
     },
     {
@@ -17183,17 +17183,6 @@
       "source_location": ""
     },
     {
-      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_kt_t",
-      "label": "T",
-      "_origin": "ast",
-      "community": 31,
-      "community_name": "DbSession",
-      "file_type": "code",
-      "norm_label": "t",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
       "id": "inspect_persistence_src_main_kotlin_com_leveret_inspect_db_session_dbsession",
       "label": "DbSession.kt",
       "_origin": "ast",
@@ -18212,7 +18201,7 @@
       "node_kind": "heading",
       "norm_label": "execution handoff",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L284"
+      "source_location": "L286"
     },
     {
       "id": "docs_superpowers_plans_2026_09_29_inspect_java_references_global_constraints",
@@ -18224,7 +18213,7 @@
       "node_kind": "heading",
       "norm_label": "global constraints",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L15"
+      "source_location": "L17"
     },
     {
       "id": "docs_superpowers_plans_2026_09_29_inspect_java_references_java_reference_evidence_implementation_plan",
@@ -18248,7 +18237,7 @@
       "node_kind": "heading",
       "norm_label": "review focus",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L28"
+      "source_location": "L30"
     },
     {
       "id": "docs_superpowers_plans_2026_09_29_inspect_java_references_shared_interface_decisions",
@@ -18260,7 +18249,7 @@
       "node_kind": "heading",
       "norm_label": "shared interface decisions",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L70"
+      "source_location": "L72"
     },
     {
       "id": "docs_superpowers_plans_2026_09_29_inspect_java_references_sources_and_planning_verification",
@@ -18272,7 +18261,7 @@
       "node_kind": "heading",
       "norm_label": "sources and planning verification",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L269"
+      "source_location": "L271"
     },
     {
       "id": "docs_superpowers_plans_2026_09_29_inspect_java_references_task_1_preserve_usable_classpaths_when_dependencies_are_missing",
@@ -18284,7 +18273,7 @@
       "node_kind": "heading",
       "norm_label": "task 1: preserve usable classpaths when dependencies are missing",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L92"
+      "source_location": "L94"
     },
     {
       "id": "docs_superpowers_plans_2026_09_29_inspect_java_references_task_6_demonstrate_the_complete_outcome_and_record_measured_limits",
@@ -18296,7 +18285,7 @@
       "node_kind": "heading",
       "norm_label": "task 6: demonstrate the complete outcome and record measured limits",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L235"
+      "source_location": "L237"
     },
     {
       "id": "docs_superpowers_plans_2026_09_29_inspect_java_references_verification_and_delivery_policy",
@@ -18308,7 +18297,7 @@
       "node_kind": "heading",
       "norm_label": "verification and delivery policy",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L254"
+      "source_location": "L256"
     },
     {
       "id": "docs_superpowers_specs_2026_09_29_inspect_java_references_design",
@@ -18332,7 +18321,7 @@
       "node_kind": "heading",
       "norm_label": "acceptance and evaluation",
       "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L193"
+      "source_location": "L201"
     },
     {
       "id": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_boundaries_and_ownership",
@@ -18344,7 +18333,7 @@
       "node_kind": "heading",
       "norm_label": "boundaries and ownership",
       "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L65"
+      "source_location": "L73"
     },
     {
       "id": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_coverage_and_delivery_are_independent",
@@ -18356,7 +18345,7 @@
       "node_kind": "heading",
       "norm_label": "coverage and delivery are independent",
       "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L155"
+      "source_location": "L163"
     },
     {
       "id": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_deferred_work_and_approval_gate",
@@ -18368,7 +18357,7 @@
       "node_kind": "heading",
       "norm_label": "deferred work and approval gate",
       "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L215"
+      "source_location": "L223"
     },
     {
       "id": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_failures_storage_and_execution_safety",
@@ -18380,7 +18369,7 @@
       "node_kind": "heading",
       "norm_label": "failures, storage, and execution safety",
       "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L168"
+      "source_location": "L176"
     },
     {
       "id": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_inputs_and_identity",
@@ -18392,7 +18381,7 @@
       "node_kind": "heading",
       "norm_label": "inputs and identity",
       "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L84"
+      "source_location": "L92"
     },
     {
       "id": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_java_method_references_for_leveret",
@@ -18416,7 +18405,7 @@
       "node_kind": "heading",
       "norm_label": "locations and diff filtering",
       "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L138"
+      "source_location": "L146"
     },
     {
       "id": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_purpose_and_scope",
@@ -18428,7 +18417,7 @@
       "node_kind": "heading",
       "norm_label": "purpose and scope",
       "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L9"
+      "source_location": "L17"
     },
     {
       "id": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_result_contract",
@@ -18440,7 +18429,7 @@
       "node_kind": "heading",
       "norm_label": "result contract",
       "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L111"
+      "source_location": "L119"
     },
     {
       "id": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_worked_example",
@@ -18452,14 +18441,14 @@
       "node_kind": "heading",
       "norm_label": "worked example",
       "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L30"
+      "source_location": "L38"
     },
     {
       "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafacts",
       "label": "JavaFacts.kt",
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": "javafacts.kt",
       "source_file": "inspect/java-analysis/src/main/kotlin/com/leveret/inspect/java/JavaFacts.kt",
@@ -18470,9 +18459,20 @@
       "label": "AnalysisSummary",
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": "analysissummary",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "inspect_java_analysis_src_main_kotlin_com_leveret_inspect_java_javafactstore_kt_t",
+      "label": "T",
+      "_origin": "ast",
+      "community": 48,
+      "community_name": ".fixture",
+      "file_type": "code",
+      "norm_label": "t",
       "source_file": "",
       "source_location": ""
     },
@@ -18481,7 +18481,7 @@
       "label": "Test",
       "_origin": "ast",
       "community": 48,
-      "community_name": ".parseDetail",
+      "community_name": ".fixture",
       "file_type": "code",
       "norm_label": "test",
       "source_file": "",
@@ -20413,7 +20413,7 @@
       "node_kind": "heading",
       "norm_label": "task 4: connect verified snapshots to the bounded jvm command",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L177"
+      "source_location": "L179"
     },
     {
       "id": "src_runner_discovery_legs_specialized_leg_definitions",
@@ -22085,492 +22085,18 @@
       "source_url": null
     },
     {
-      "id": "docs_research_coderabbit_speed_effectiveness_pfblockerng_pr_2444",
-      "label": "pfBlockerNG PR #2444",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 114,
-      "community_name": "Why CodeRabbit can look fast and effective",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "pfblockerng pr #2444",
-      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
-      "source_location": "L149",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_coderabbit_speed_effectiveness_pfblockerng_pr_2521",
-      "label": "pfBlockerNG PR #2521",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 114,
-      "community_name": "Why CodeRabbit can look fast and effective",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "pfblockerng pr #2521",
-      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
-      "source_location": "L150",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_coderabbit_speed_effectiveness_tar_rejection",
-      "label": "Rejected #2521 tar suggestion (regression case)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 114,
-      "community_name": "Why CodeRabbit can look fast and effective",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "rejected #2521 tar suggestion (regression case)",
-      "rationale": "A plausible bot suggestion would have made an assertion tautological; counterevidence against treating every plausible comment as correct.",
-      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
-      "source_location": "L152",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_coderabbit_speed_effectiveness_verification_agents",
-      "label": "CodeRabbit post-generation verification agents/scripts",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 114,
-      "community_name": "Why CodeRabbit can look fast and effective",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "coderabbit post-generation verification agents/scripts",
-      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
-      "source_location": "L133",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_four_defect_classes",
-      "label": "Four defect classes (output invariants, test fidelity, runner sequencing, framework env)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 114,
-      "community_name": "Why CodeRabbit can look fast and effective",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "four defect classes (output invariants, test fidelity, runner sequencing, framework env)",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L27",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_twelve_missed_mechanisms",
-      "label": "Twelve missed CodeRabbit recall mechanisms",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 114,
-      "community_name": "Why CodeRabbit can look fast and effective",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "twelve missed coderabbit recall mechanisms",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L8",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_coderabbit_speed_effectiveness_doc",
-      "label": "Why CodeRabbit can look fast and effective",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 114,
-      "community_name": "Why CodeRabbit can look fast and effective",
-      "contributor": null,
-      "file_type": "document",
-      "norm_label": "why coderabbit can look fast and effective",
-      "rationale": "Explains CodeRabbit's public speed/effectiveness as mechanical staging (scoping, deterministic preprocessing, verification) rather than an undisclosed fast model.",
-      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
-      "source_location": "L1",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_doc",
-      "label": "Tool-assisted review guidance for the CodeRabbit recall gaps",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 114,
-      "community_name": "Why CodeRabbit can look fast and effective",
-      "contributor": null,
-      "file_type": "document",
-      "norm_label": "tool-assisted review guidance for the coderabbit recall gaps",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L1",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_coderabbit_speed_effectiveness_candidate_verifier",
-      "label": "Candidate then independent verifier",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 114,
-      "community_name": "Why CodeRabbit can look fast and effective",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "candidate then independent verifier",
-      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
-      "source_location": "L296",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_coderabbit_speed_effectiveness_evidence_labels",
-      "label": "D/O/I evidence labels with confidence",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 114,
-      "community_name": "Why CodeRabbit can look fast and effective",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "d/o/i evidence labels with confidence",
-      "rationale": "Separates vendor-documented, publicly observed, and inferred claims so vendor statements are not treated as independent proof.",
-      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
-      "source_location": "L7",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_serena_lsp_bundling_tier_c_compliance_gated_layer",
-      "label": "Tier C: copyleft compliance-gated layer",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 115,
-      "community_name": "Existing Leveret deterministic analyzer belt",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "tier c: copyleft compliance-gated layer",
-      "source_file": "docs/research/serena-lsp-bundling.md",
-      "source_location": "L195",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_actionlint",
-      "label": "actionlint",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 115,
-      "community_name": "Existing Leveret deterministic analyzer belt",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "actionlint",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L121",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_ast_grep",
-      "label": "ast-grep",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 115,
-      "community_name": "Existing Leveret deterministic analyzer belt",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "ast-grep",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L149",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_existing_deterministic_belt",
-      "label": "Existing Leveret deterministic analyzer belt",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 115,
-      "community_name": "Existing Leveret deterministic analyzer belt",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "existing leveret deterministic analyzer belt",
-      "rationale": "Removes syntax/security/type noise before model review but must not be scored as recall for project invariants.",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L211",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_sc2259",
-      "label": "ShellCheck SC2259 (redirection overrides piped input)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 115,
-      "community_name": "Existing Leveret deterministic analyzer belt",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "shellcheck sc2259 (redirection overrides piped input)",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L116",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_semgrep",
-      "label": "Semgrep",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 115,
-      "community_name": "Existing Leveret deterministic analyzer belt",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "semgrep",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L147",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_shellcheck",
-      "label": "ShellCheck 0.11.0",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 115,
-      "community_name": "Existing Leveret deterministic analyzer belt",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "shellcheck 0.11.0",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L111",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_zizmor",
-      "label": "zizmor",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 115,
-      "community_name": "Existing Leveret deterministic analyzer belt",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "zizmor",
-      "rationale": "Pedantic mode emitted 262 findings on #2521, none covering the missed contracts; adds priced noise without recall.",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L130",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_coderabbit_speed_effectiveness_deterministic_evidence_belt",
-      "label": "Parallel deterministic evidence belt",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 115,
-      "community_name": "Existing Leveret deterministic analyzer belt",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "parallel deterministic evidence belt",
-      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
-      "source_location": "L286",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_workflow_prerequisite_same_job",
-      "label": "Rule: workflow-prerequisite-same-job",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 115,
-      "community_name": "Existing Leveret deterministic analyzer belt",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "rule: workflow-prerequisite-same-job",
-      "rationale": "Flattening a workflow into a bag of strings recreates mechanism 11; keep job IDs and hierarchy.",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L235",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_coderabbit_speed_effectiveness_context_packs",
-      "label": "Bounded contract-oriented context packs",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 117,
-      "community_name": "Conjunctive card selection with hard guidance budget",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "bounded contract-oriented context packs",
-      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
-      "source_location": "L291",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_snyk_aikido_review_inspiration_deterministic_first_triage",
-      "label": "Deterministic-first residual triage (Aikido AutoTriage order)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 117,
-      "community_name": "Conjunctive card selection with hard guidance budget",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "deterministic-first residual triage (aikido autotriage order)",
-      "source_file": "docs/research/snyk-aikido-review-inspiration.md",
-      "source_location": "L245",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_caveat_cards",
-      "label": "Trusted pinned caveat cards index",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 117,
-      "community_name": "Conjunctive card selection with hard guidance budget",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "trusted pinned caveat cards index",
-      "rationale": "Cards come only from official docs/upstream catalogs/specs; repository prose may hint but never becomes a trusted source or instruction.",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L297",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_conjunctive_selection_budget",
-      "label": "Conjunctive card selection with hard guidance budget",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 117,
-      "community_name": "Conjunctive card selection with hard guidance budget",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "conjunctive card selection with hard guidance budget",
-      "rationale": "At most six cards, 1 KiB each, 8 KiB total, so irrelevant language guidance does not occupy the prompt.",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L327",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_project_fact_record",
-      "label": "Versioned project fact record (model-free extraction)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 117,
-      "community_name": "Conjunctive card selection with hard guidance budget",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "versioned project fact record (model-free extraction)",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L275",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_three_channel_review_packet",
-      "label": "Three-channel review packet (facts, rules, judgment)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 117,
-      "community_name": "Conjunctive card selection with hard guidance budget",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "three-channel review packet (facts, rules, judgment)",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L351",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_udev_trigger_before_consumer",
-      "label": "Rule: udev-trigger-before-consumer",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 117,
-      "community_name": "Conjunctive card selection with hard guidance budget",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "rule: udev-trigger-before-consumer",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L231",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_uv_sync_then_bare_project_command",
-      "label": "Rule: uv-sync-then-bare-project-command",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 117,
-      "community_name": "Conjunctive card selection with hard guidance budget",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "rule: uv-sync-then-bare-project-command",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L237",
-      "source_url": null
-    },
-    {
       "id": "docs_research_serena_lsp_bundling_assessment_labels",
       "label": "Redistribution assessment labels (BUNDLE/PREINSTALL/DO NOT REDISTRIBUTE/LEGAL REVIEW)",
       "_origin": "semantic",
       "author": null,
       "captured_at": null,
-      "community": 124,
-      "community_name": "PHPantom (php_phpantom) MIT PHP server",
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "redistribution assessment labels (bundle/preinstall/do not redistribute/legal review)",
       "source_file": "docs/research/serena-lsp-bundling.md",
       "source_location": "L57",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_serena_lsp_bundling_phpactor",
-      "label": "Phpactor (php_phpactor)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 124,
-      "community_name": "PHPantom (php_phpantom) MIT PHP server",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "phpactor (php_phpactor)",
-      "source_file": "docs/research/serena-lsp-bundling.md",
-      "source_location": "L54",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_serena_lsp_bundling_phpantom",
-      "label": "PHPantom (php_phpantom) MIT PHP server",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 124,
-      "community_name": "PHPantom (php_phpantom) MIT PHP server",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "phpantom (php_phpantom) mit php server",
-      "rationale": "Closest bundle-safe self-contained replacement for Intelephense.",
-      "source_file": "docs/research/serena-lsp-bundling.md",
-      "source_location": "L53",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_serena_lsp_bundling_tier_a_default_offline_bundle",
-      "label": "Tier A: default offline bundle",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 124,
-      "community_name": "PHPantom (php_phpantom) MIT PHP server",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "tier a: default offline bundle",
-      "source_file": "docs/research/serena-lsp-bundling.md",
-      "source_location": "L164",
       "source_url": null
     },
     {
@@ -22580,7 +22106,7 @@
       "author": null,
       "captured_at": null,
       "community": 41,
-      "community_name": "Serena packaging gates (pin, cold prefetch, offline fixtures, SBOM)",
+      "community_name": "Existing Leveret deterministic analyzer belt",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "intelephense 1.14.4 (do not redistribute)",
@@ -22596,7 +22122,7 @@
       "author": null,
       "captured_at": null,
       "community": 41,
-      "community_name": "Serena packaging gates (pin, cold prefetch, offline fixtures, SBOM)",
+      "community_name": "Existing Leveret deterministic analyzer belt",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "solidlsp languageserverid enum (73 ids, ls_config.py)",
@@ -22612,7 +22138,7 @@
       "author": null,
       "captured_at": null,
       "community": 41,
-      "community_name": "Serena packaging gates (pin, cold prefetch, offline fixtures, SBOM)",
+      "community_name": "Existing Leveret deterministic analyzer belt",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "leveret_serena_bundle host-owned bundle",
@@ -22622,18 +22148,79 @@
       "source_url": null
     },
     {
+      "id": "docs_research_serena_lsp_bundling_phpactor",
+      "label": "Phpactor (php_phpactor)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "phpactor (php_phpactor)",
+      "source_file": "docs/research/serena-lsp-bundling.md",
+      "source_location": "L54",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_serena_lsp_bundling_phpantom",
+      "label": "PHPantom (php_phpantom) MIT PHP server",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "phpantom (php_phpantom) mit php server",
+      "rationale": "Closest bundle-safe self-contained replacement for Intelephense.",
+      "source_file": "docs/research/serena-lsp-bundling.md",
+      "source_location": "L53",
+      "source_url": null
+    },
+    {
       "id": "docs_research_serena_lsp_bundling_serena",
       "label": "Serena v1.7.0",
       "_origin": "semantic",
       "author": null,
       "captured_at": null,
       "community": 41,
-      "community_name": "Serena packaging gates (pin, cold prefetch, offline fixtures, SBOM)",
+      "community_name": "Existing Leveret deterministic analyzer belt",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "serena v1.7.0",
       "source_file": "docs/research/serena-lsp-bundling.md",
       "source_location": "L8",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_serena_lsp_bundling_tier_a_default_offline_bundle",
+      "label": "Tier A: default offline bundle",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "tier a: default offline bundle",
+      "source_file": "docs/research/serena-lsp-bundling.md",
+      "source_location": "L164",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_serena_lsp_bundling_tier_c_compliance_gated_layer",
+      "label": "Tier C: copyleft compliance-gated layer",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "tier c: copyleft compliance-gated layer",
+      "source_file": "docs/research/serena-lsp-bundling.md",
+      "source_location": "L195",
       "source_url": null
     },
     {
@@ -22643,12 +22230,132 @@
       "author": null,
       "captured_at": null,
       "community": 41,
-      "community_name": "Serena packaging gates (pin, cold prefetch, offline fixtures, SBOM)",
+      "community_name": "Existing Leveret deterministic analyzer belt",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "tier d: user-provided or dynamically downloaded",
       "source_file": "docs/research/serena-lsp-bundling.md",
       "source_location": "L201",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_sonar_oss_licensing_aup",
+      "label": "Sonar Acceptable Use Policy / Results Data restrictions",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "sonar acceptable use policy / results data restrictions",
+      "source_file": "docs/research/sonar-oss-licensing.md",
+      "source_location": "L203",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_sonar_oss_licensing_community_build",
+      "label": "SonarQube Community Build 26.8",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "sonarqube community build 26.8",
+      "source_file": "docs/research/sonar-oss-licensing.md",
+      "source_location": "L53",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_sonar_oss_licensing_integration_mode_table",
+      "label": "Sonar integration-mode decision table",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "sonar integration-mode decision table",
+      "source_file": "docs/research/sonar-oss-licensing.md",
+      "source_location": "L282",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_sonar_oss_licensing_leveret_agpl",
+      "label": "Leveret AGPL-3.0-or-later license",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "leveret agpl-3.0-or-later license",
+      "source_file": "docs/research/sonar-oss-licensing.md",
+      "source_location": "L30",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_sonar_oss_licensing_lgpl",
+      "label": "LGPL-3.0-or-later",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "lgpl-3.0-or-later",
+      "source_file": "docs/research/sonar-oss-licensing.md",
+      "source_location": "L128",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_sonar_oss_licensing_sonarqube_cloud",
+      "label": "SonarQube Cloud (incl. Free and OSS plans)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "sonarqube cloud (incl. free and oss plans)",
+      "source_file": "docs/research/sonar-oss-licensing.md",
+      "source_location": "L63",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_sonar_oss_licensing_sonarscanner_cli",
+      "label": "SonarScanner CLI 8.1 (LGPL client)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "sonarscanner cli 8.1 (lgpl client)",
+      "source_file": "docs/research/sonar-oss-licensing.md",
+      "source_location": "L69",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_sonar_oss_licensing_ssal",
+      "label": "Sonar Source-Available License (SSAL v1.0/v1.0.1)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "sonar source-available license (ssal v1.0/v1.0.1)",
+      "source_file": "docs/research/sonar-oss-licensing.md",
+      "source_location": "L160",
       "source_url": null
     },
     {
@@ -22658,12 +22365,119 @@
       "author": null,
       "captured_at": null,
       "community": 41,
-      "community_name": "Serena packaging gates (pin, cold prefetch, offline fixtures, SBOM)",
+      "community_name": "Existing Leveret deterministic analyzer belt",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "sonar trademark guidelines",
       "source_file": "docs/research/sonar-oss-licensing.md",
       "source_location": "L270",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_actionlint",
+      "label": "actionlint",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "actionlint",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L121",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_ast_grep",
+      "label": "ast-grep",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "ast-grep",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L149",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_existing_deterministic_belt",
+      "label": "Existing Leveret deterministic analyzer belt",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "existing leveret deterministic analyzer belt",
+      "rationale": "Removes syntax/security/type noise before model review but must not be scored as recall for project invariants.",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L211",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_sc2259",
+      "label": "ShellCheck SC2259 (redirection overrides piped input)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "shellcheck sc2259 (redirection overrides piped input)",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L116",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_semgrep",
+      "label": "Semgrep",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "semgrep",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L147",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_shellcheck",
+      "label": "ShellCheck 0.11.0",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "shellcheck 0.11.0",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L111",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_zizmor",
+      "label": "zizmor",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "zizmor",
+      "rationale": "Pedantic mode emitted 262 findings on #2521, none covering the missed contracts; adds priced noise without recall.",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L130",
       "source_url": null
     },
     {
@@ -22673,12 +22487,42 @@
       "author": null,
       "captured_at": null,
       "community": 41,
-      "community_name": "Serena packaging gates (pin, cold prefetch, offline fixtures, SBOM)",
+      "community_name": "Existing Leveret deterministic analyzer belt",
       "contributor": null,
       "file_type": "document",
       "norm_label": "serena 1.7.0 language-server bundling audit",
       "source_file": "docs/research/serena-lsp-bundling.md",
       "source_location": "L1",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_sonar_oss_licensing_doc",
+      "label": "Sonar open-source licensing assessment for Leveret",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "document",
+      "norm_label": "sonar open-source licensing assessment for leveret",
+      "source_file": "docs/research/sonar-oss-licensing.md",
+      "source_location": "L1",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_coderabbit_speed_effectiveness_deterministic_evidence_belt",
+      "label": "Parallel deterministic evidence belt",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "parallel deterministic evidence belt",
+      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
+      "source_location": "L286",
       "source_url": null
     },
     {
@@ -22688,7 +22532,7 @@
       "author": null,
       "captured_at": null,
       "community": 41,
-      "community_name": "Serena packaging gates (pin, cold prefetch, offline fixtures, SBOM)",
+      "community_name": "Existing Leveret deterministic analyzer belt",
       "contributor": null,
       "file_type": "rationale",
       "norm_label": "serena packaging gates (pin, cold prefetch, offline fixtures, sbom)",
@@ -22703,7 +22547,7 @@
       "author": null,
       "captured_at": null,
       "community": 41,
-      "community_name": "Serena packaging gates (pin, cold prefetch, offline fixtures, SBOM)",
+      "community_name": "Existing Leveret deterministic analyzer belt",
       "contributor": null,
       "file_type": "rationale",
       "norm_label": "pr checkout and derived content are untrusted input",
@@ -22719,7 +22563,7 @@
       "author": null,
       "captured_at": null,
       "community": 41,
-      "community_name": "Serena packaging gates (pin, cold prefetch, offline fixtures, SBOM)",
+      "community_name": "Existing Leveret deterministic analyzer belt",
       "contributor": null,
       "file_type": "rationale",
       "norm_label": "automated due-diligence gates before promotion",
@@ -22734,7 +22578,7 @@
       "author": null,
       "captured_at": null,
       "community": 41,
-      "community_name": "Serena packaging gates (pin, cold prefetch, offline fixtures, SBOM)",
+      "community_name": "Existing Leveret deterministic analyzer belt",
       "contributor": null,
       "file_type": "rationale",
       "norm_label": "recommended permissioned sonar adapter design",
@@ -22744,8 +22588,87 @@
       "source_url": null
     },
     {
-      "id": "_leveret_typos_suppressions",
-      "label": "typos/typo suppressions (test/**, bench/results/**)",
+      "id": "docs_research_sonar_oss_licensing_ssal_ai_competition_exclusion",
+      "label": "SSAL Non-competitive Purpose and outside-AI exclusion",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "ssal non-competitive purpose and outside-ai exclusion",
+      "rationale": "Excludes competing functionality even when free and any outside AI ingesting program data; process/sidecar boundaries and nonprofit status do not change the purpose.",
+      "source_file": "docs/research/sonar-oss-licensing.md",
+      "source_location": "L167",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_sonar_oss_licensing_written_permission_decision",
+      "label": "Decision: no Sonar analysis without written permission",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "decision: no sonar analysis without written permission",
+      "rationale": "Public terms give no low-risk path to feed Sonar analyzers/results to an AI code-review toolbelt; another OSI-licensed analyzer is shorter and safer.",
+      "source_file": "docs/research/sonar-oss-licensing.md",
+      "source_location": "L7",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_caveat_cards",
+      "label": "Trusted pinned caveat cards index",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "trusted pinned caveat cards index",
+      "rationale": "Cards come only from official docs/upstream catalogs/specs; repository prose may hint but never becomes a trusted source or instruction.",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L297",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_udev_trigger_before_consumer",
+      "label": "Rule: udev-trigger-before-consumer",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "rule: udev-trigger-before-consumer",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L231",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_workflow_prerequisite_same_job",
+      "label": "Rule: workflow-prerequisite-same-job",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "rule: workflow-prerequisite-same-job",
+      "rationale": "Flattening a workflow into a bag of strings recreates mechanism 11; keep job IDs and hierarchy.",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L235",
+      "source_url": null
+    },
+    {
+      "id": "design_ast_search_tool",
+      "label": "ast_search MCP tool",
       "_origin": "semantic",
       "author": null,
       "captured_at": null,
@@ -22753,9 +22676,8 @@
       "community_name": "Repo Memory Store (.leveret/memory.jsonl)",
       "contributor": null,
       "file_type": "concept",
-      "norm_label": "typos/typo suppressions (test/**, bench/results/**)",
-      "rationale": "Test fixtures plant misspellings; benchmark reports quote scanned material verbatim",
-      "source_file": ".leveret.yml",
+      "norm_label": "ast_search mcp tool",
+      "source_file": "DESIGN.md",
       "source_location": null,
       "source_url": null
     },
@@ -22787,6 +22709,22 @@
       "file_type": "concept",
       "norm_label": "fingerprint + anchor",
       "rationale": "engine/rule/path-or-glob fingerprint; anchor hash of matched line makes memory die with the code it priced",
+      "source_file": "DESIGN.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "design_mcp_surface",
+      "label": "MCP Tool Surface",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 43,
+      "community_name": "Repo Memory Store (.leveret/memory.jsonl)",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "mcp tool surface",
+      "rationale": "Code-graph queries, LSP diagnostics, and shell probes deliberately not wrapped: the driving agent is the sandbox",
       "source_file": "DESIGN.md",
       "source_location": null,
       "source_url": null
@@ -22824,8 +22762,8 @@
       "source_url": null
     },
     {
-      "id": "design_profile_layer",
-      "label": "Profile Layer (.leveret.yml)",
+      "id": "design_memory_tool",
+      "label": "memory MCP tool",
       "_origin": "semantic",
       "author": null,
       "captured_at": null,
@@ -22833,8 +22771,22 @@
       "community_name": "Repo Memory Store (.leveret/memory.jsonl)",
       "contributor": null,
       "file_type": "concept",
-      "norm_label": "profile layer (.leveret.yml)",
-      "rationale": "Cheapest deterministic layer; per-engine path scopes, severity floors, suppressions each with a reason; suppressions reported, never silent",
+      "norm_label": "memory mcp tool",
+      "source_file": "DESIGN.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "design_remember_tool",
+      "label": "remember MCP tool",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 43,
+      "community_name": "Repo Memory Store (.leveret/memory.jsonl)",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "remember mcp tool",
       "source_file": "DESIGN.md",
       "source_location": null,
       "source_url": null
@@ -22871,18 +22823,47 @@
       "source_url": null
     },
     {
-      "id": "_leveret_self_profile",
-      "label": "Leveret Self-Review Profile",
+      "id": "readme_interactive_mcp_mode",
+      "label": "Interactive MCP Mode",
       "_origin": "semantic",
       "author": null,
       "captured_at": null,
       "community": 43,
       "community_name": "Repo Memory Store (.leveret/memory.jsonl)",
       "contributor": null,
-      "file_type": "document",
-      "norm_label": "leveret self-review profile",
-      "rationale": "leveret reviewed by leveret",
-      "source_file": ".leveret.yml",
+      "file_type": "concept",
+      "norm_label": "interactive mcp mode",
+      "source_file": "README.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "agents_review_blast_radius",
+      "label": "Mandatory Blast Radius Tracing",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 43,
+      "community_name": "Repo Memory Store (.leveret/memory.jsonl)",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "mandatory blast radius tracing",
+      "source_file": "agents/review.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "agents_verify_refute_or_evidence",
+      "label": "Refute-or-Evidence Procedure",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 43,
+      "community_name": "Repo Memory Store (.leveret/memory.jsonl)",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "refute-or-evidence procedure",
+      "source_file": "agents/verify.md",
       "source_location": null,
       "source_url": null
     },
@@ -23273,8 +23254,8 @@
       "source_url": null
     },
     {
-      "id": "docs_research_snyk_aikido_review_inspiration_analyzer_cache_invalidation",
-      "label": "Analyzer cache and invalidation contracts",
+      "id": "docs_research_coderabbit_speed_effectiveness_context_packs",
+      "label": "Bounded contract-oriented context packs",
       "_origin": "semantic",
       "author": null,
       "captured_at": null,
@@ -23282,10 +23263,24 @@
       "community_name": "Aikido",
       "contributor": null,
       "file_type": "rationale",
-      "norm_label": "analyzer cache and invalidation contracts",
-      "rationale": "Rule/knowledge change invalidation differs from source invalidation; cached inventory is not a cached verdict.",
+      "norm_label": "bounded contract-oriented context packs",
+      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
+      "source_location": "L291",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_snyk_aikido_review_inspiration_deterministic_first_triage",
+      "label": "Deterministic-first residual triage (Aikido AutoTriage order)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 47,
+      "community_name": "Aikido",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "deterministic-first residual triage (aikido autotriage order)",
       "source_file": "docs/research/snyk-aikido-review-inspiration.md",
-      "source_location": "L416",
+      "source_location": "L245",
       "source_url": null
     },
     {
@@ -23349,6 +23344,67 @@
       "rationale": "Both vendors warn static no-path is not proof of safety; reachability should change ranking, never silently produce clean.",
       "source_file": "docs/research/snyk-aikido-review-inspiration.md",
       "source_location": "L90",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_conjunctive_selection_budget",
+      "label": "Conjunctive card selection with hard guidance budget",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 47,
+      "community_name": "Aikido",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "conjunctive card selection with hard guidance budget",
+      "rationale": "At most six cards, 1 KiB each, 8 KiB total, so irrelevant language guidance does not occupy the prompt.",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L327",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_project_fact_record",
+      "label": "Versioned project fact record (model-free extraction)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 47,
+      "community_name": "Aikido",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "versioned project fact record (model-free extraction)",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L275",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_three_channel_review_packet",
+      "label": "Three-channel review packet (facts, rules, judgment)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 47,
+      "community_name": "Aikido",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "three-channel review packet (facts, rules, judgment)",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L351",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_uv_sync_then_bare_project_command",
+      "label": "Rule: uv-sync-then-bare-project-command",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 47,
+      "community_name": "Aikido",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "rule: uv-sync-then-bare-project-command",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L237",
       "source_url": null
     },
     {
@@ -23661,6 +23717,51 @@
       "source_url": null
     },
     {
+      "id": "design_ast_grounding",
+      "label": "AST Grounding (ast-grep + rule packs)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 55,
+      "community_name": "leveret-runner-pi (Pi harness)",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "ast grounding (ast-grep + rule packs)",
+      "source_file": "DESIGN.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "design_bench_corpus_v1",
+      "label": "bench/corpus.v1.json",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 55,
+      "community_name": "leveret-runner-pi (Pi harness)",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "bench/corpus.v1.json",
+      "source_file": "DESIGN.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "design_bench_replay",
+      "label": "bench:replay paid boundary",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 55,
+      "community_name": "leveret-runner-pi (Pi harness)",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "bench:replay paid boundary",
+      "source_file": "DESIGN.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
       "id": "design_byom_providers",
       "label": "BYOM Providers (Anthropic, OpenAI, local)",
       "_origin": "semantic",
@@ -23725,6 +23826,21 @@
       "source_url": null
     },
     {
+      "id": "design_parity_gate_v1",
+      "label": "bench/parity-gate.v1.json",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 55,
+      "community_name": "leveret-runner-pi (Pi harness)",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "bench/parity-gate.v1.json",
+      "source_file": "DESIGN.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
       "id": "design_serena_bundle",
       "label": "Serena Staged Bundle (LEVERET_SERENA_BUNDLE)",
       "_origin": "semantic",
@@ -23736,6 +23852,22 @@
       "file_type": "concept",
       "norm_label": "serena staged bundle (leveret_serena_bundle)",
       "rationale": "Runtime LSP downloads refused; warm one symbol query per packaged language before model phases",
+      "source_file": "DESIGN.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "design_validation_gate",
+      "label": "Validation Gate (Parity Benchmark)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 55,
+      "community_name": "leveret-runner-pi (Pi harness)",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "validation gate (parity benchmark)",
+      "rationale": "Leveret changes nothing in reviewed repos until the benchmark passes; CodeRabbit retirement blocked unless every gate passes",
       "source_file": "DESIGN.md",
       "source_location": null,
       "source_url": null
@@ -23788,6 +23920,21 @@
       "source_url": null
     },
     {
+      "id": "_coderabbit_config",
+      "label": "CodeRabbit Config (auto review disabled)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 55,
+      "community_name": "leveret-runner-pi (Pi harness)",
+      "contributor": null,
+      "file_type": "document",
+      "norm_label": "coderabbit config (auto review disabled)",
+      "source_file": ".coderabbit.yaml",
+      "source_location": null,
+      "source_url": null
+    },
+    {
       "id": "_serena_project_config",
       "label": "Serena Project Config (typescript LS)",
       "_origin": "semantic",
@@ -23799,21 +23946,6 @@
       "file_type": "document",
       "norm_label": "serena project config (typescript ls)",
       "source_file": ".serena/project.yml",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "agents_review_blast_radius",
-      "label": "Mandatory Blast Radius Tracing",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 55,
-      "community_name": "leveret-runner-pi (Pi harness)",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "mandatory blast radius tracing",
-      "source_file": "agents/review.md",
       "source_location": null,
       "source_url": null
     },
@@ -24385,6 +24517,21 @@
       "source_url": null
     },
     {
+      "id": "docs_research_tool_assisted_review_guidance_doc",
+      "label": "Tool-assisted review guidance for the CodeRabbit recall gaps",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 65,
+      "community_name": "Leveret Design Doc",
+      "contributor": null,
+      "file_type": "document",
+      "norm_label": "tool-assisted review guidance for the coderabbit recall gaps",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L1",
+      "source_url": null
+    },
+    {
       "id": "inspect_readme_leveret_inspect",
       "label": "Leveret Inspect (Kotlin/JVM)",
       "_origin": "semantic",
@@ -24679,6 +24826,22 @@
       "source_url": null
     },
     {
+      "id": "_leveret_typos_suppressions",
+      "label": "typos/typo suppressions (test/**, bench/results/**)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 79,
+      "community_name": "Three-Grade Filter",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "typos/typo suppressions (test/**, bench/results/**)",
+      "rationale": "Test fixtures plant misspellings; benchmark reports quote scanned material verbatim",
+      "source_file": ".leveret.yml",
+      "source_location": null,
+      "source_url": null
+    },
+    {
       "id": "design_grade_actionable",
       "label": "Grade: actionable",
       "_origin": "semantic",
@@ -24725,6 +24888,22 @@
       "source_url": null
     },
     {
+      "id": "design_profile_layer",
+      "label": "Profile Layer (.leveret.yml)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 79,
+      "community_name": "Three-Grade Filter",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "profile layer (.leveret.yml)",
+      "rationale": "Cheapest deterministic layer; per-engine path scopes, severity floors, suppressions each with a reason; suppressions reported, never silent",
+      "source_file": "DESIGN.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
       "id": "design_v0_1_probe_evidence",
       "label": "v0.1 pfBlockerNG Probe Evidence",
       "_origin": "semantic",
@@ -24756,6 +24935,22 @@
       "source_url": null
     },
     {
+      "id": "_leveret_self_profile",
+      "label": "Leveret Self-Review Profile",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 79,
+      "community_name": "Three-Grade Filter",
+      "contributor": null,
+      "file_type": "document",
+      "norm_label": "leveret self-review profile",
+      "rationale": "leveret reviewed by leveret",
+      "source_file": ".leveret.yml",
+      "source_location": null,
+      "source_url": null
+    },
+    {
       "id": "design_three_grade_filter",
       "label": "Three-Grade Filter",
       "_origin": "semantic",
@@ -24768,112 +24963,6 @@
       "norm_label": "three-grade filter",
       "rationale": "v0.1 probe showed true-but-inert findings (SC2162) must not post, so a binary real/false-positive filter is insufficient",
       "source_file": "DESIGN.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "design_ast_grounding",
-      "label": "AST Grounding (ast-grep + rule packs)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 83,
-      "community_name": "MCP Tool Surface",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "ast grounding (ast-grep + rule packs)",
-      "source_file": "DESIGN.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "design_ast_search_tool",
-      "label": "ast_search MCP tool",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 83,
-      "community_name": "MCP Tool Surface",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "ast_search mcp tool",
-      "source_file": "DESIGN.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "design_mcp_surface",
-      "label": "MCP Tool Surface",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 83,
-      "community_name": "MCP Tool Surface",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "mcp tool surface",
-      "rationale": "Code-graph queries, LSP diagnostics, and shell probes deliberately not wrapped: the driving agent is the sandbox",
-      "source_file": "DESIGN.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "design_memory_tool",
-      "label": "memory MCP tool",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 83,
-      "community_name": "MCP Tool Surface",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "memory mcp tool",
-      "source_file": "DESIGN.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "design_remember_tool",
-      "label": "remember MCP tool",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 83,
-      "community_name": "MCP Tool Surface",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "remember mcp tool",
-      "source_file": "DESIGN.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "readme_interactive_mcp_mode",
-      "label": "Interactive MCP Mode",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 83,
-      "community_name": "MCP Tool Surface",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "interactive mcp mode",
-      "source_file": "README.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "agents_verify_refute_or_evidence",
-      "label": "Refute-or-Evidence Procedure",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 83,
-      "community_name": "MCP Tool Surface",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "refute-or-evidence procedure",
-      "source_file": "agents/verify.md",
       "source_location": null,
       "source_url": null
     },
@@ -24938,6 +25027,36 @@
       "source_url": null
     },
     {
+      "id": "docs_research_coderabbit_speed_effectiveness_pfblockerng_pr_2444",
+      "label": "pfBlockerNG PR #2444",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 84,
+      "community_name": "CodeRabbit",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "pfblockerng pr #2444",
+      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
+      "source_location": "L149",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_coderabbit_speed_effectiveness_pfblockerng_pr_2521",
+      "label": "pfBlockerNG PR #2521",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 84,
+      "community_name": "CodeRabbit",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "pfblockerng pr #2521",
+      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
+      "source_location": "L150",
+      "source_url": null
+    },
+    {
       "id": "docs_research_coderabbit_speed_effectiveness_sandbox_cache",
       "label": "CodeRabbit reusable sandbox cache",
       "_origin": "semantic",
@@ -24950,6 +25069,98 @@
       "norm_label": "coderabbit reusable sandbox cache",
       "source_file": "docs/research/coderabbit-speed-effectiveness.md",
       "source_location": "L114",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_coderabbit_speed_effectiveness_tar_rejection",
+      "label": "Rejected #2521 tar suggestion (regression case)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 84,
+      "community_name": "CodeRabbit",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "rejected #2521 tar suggestion (regression case)",
+      "rationale": "A plausible bot suggestion would have made an assertion tautological; counterevidence against treating every plausible comment as correct.",
+      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
+      "source_location": "L152",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_coderabbit_speed_effectiveness_verification_agents",
+      "label": "CodeRabbit post-generation verification agents/scripts",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 84,
+      "community_name": "CodeRabbit",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "coderabbit post-generation verification agents/scripts",
+      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
+      "source_location": "L133",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_four_defect_classes",
+      "label": "Four defect classes (output invariants, test fidelity, runner sequencing, framework env)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 84,
+      "community_name": "CodeRabbit",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "four defect classes (output invariants, test fidelity, runner sequencing, framework env)",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L27",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_twelve_missed_mechanisms",
+      "label": "Twelve missed CodeRabbit recall mechanisms",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 84,
+      "community_name": "CodeRabbit",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "twelve missed coderabbit recall mechanisms",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L8",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_coderabbit_speed_effectiveness_doc",
+      "label": "Why CodeRabbit can look fast and effective",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 84,
+      "community_name": "CodeRabbit",
+      "contributor": null,
+      "file_type": "document",
+      "norm_label": "why coderabbit can look fast and effective",
+      "rationale": "Explains CodeRabbit's public speed/effectiveness as mechanical staging (scoping, deterministic preprocessing, verification) rather than an undisclosed fast model.",
+      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
+      "source_location": "L1",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_coderabbit_speed_effectiveness_candidate_verifier",
+      "label": "Candidate then independent verifier",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 84,
+      "community_name": "CodeRabbit",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "candidate then independent verifier",
+      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
+      "source_location": "L296",
       "source_url": null
     },
     {
@@ -24966,6 +25177,22 @@
       "rationale": "Run only after scoping/verification stages; parallelizing unbounded prompts spends the same mistakes faster.",
       "source_file": "docs/research/coderabbit-speed-effectiveness.md",
       "source_location": "L306",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_coderabbit_speed_effectiveness_evidence_labels",
+      "label": "D/O/I evidence labels with confidence",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 84,
+      "community_name": "CodeRabbit",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "d/o/i evidence labels with confidence",
+      "rationale": "Separates vendor-documented, publicly observed, and inferred claims so vendor statements are not treated as independent proof.",
+      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
+      "source_location": "L7",
       "source_url": null
     },
     {
@@ -25014,6 +25241,22 @@
       "source_url": null
     },
     {
+      "id": "docs_research_snyk_aikido_review_inspiration_analyzer_cache_invalidation",
+      "label": "Analyzer cache and invalidation contracts",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 84,
+      "community_name": "CodeRabbit",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "analyzer cache and invalidation contracts",
+      "rationale": "Rule/knowledge change invalidation differs from source invalidation; cached inventory is not a cached verdict.",
+      "source_file": "docs/research/snyk-aikido-review-inspiration.md",
+      "source_location": "L416",
+      "source_url": null
+    },
+    {
       "id": "docs_research_snyk_aikido_review_inspiration_capability_registry",
       "label": "Analyzer capability registry / applicability manifest",
       "_origin": "semantic",
@@ -25042,249 +25285,6 @@
       "norm_label": "finding lifecycle reconciliation (new/persisting/fixed/reopened)",
       "source_file": "docs/research/snyk-aikido-review-inspiration.md",
       "source_location": "L431",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_sonar_oss_licensing_aup",
-      "label": "Sonar Acceptable Use Policy / Results Data restrictions",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 85,
-      "community_name": "SonarQube Community Build 26.8",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "sonar acceptable use policy / results data restrictions",
-      "source_file": "docs/research/sonar-oss-licensing.md",
-      "source_location": "L203",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_sonar_oss_licensing_community_build",
-      "label": "SonarQube Community Build 26.8",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 85,
-      "community_name": "SonarQube Community Build 26.8",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "sonarqube community build 26.8",
-      "source_file": "docs/research/sonar-oss-licensing.md",
-      "source_location": "L53",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_sonar_oss_licensing_integration_mode_table",
-      "label": "Sonar integration-mode decision table",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 85,
-      "community_name": "SonarQube Community Build 26.8",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "sonar integration-mode decision table",
-      "source_file": "docs/research/sonar-oss-licensing.md",
-      "source_location": "L282",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_sonar_oss_licensing_leveret_agpl",
-      "label": "Leveret AGPL-3.0-or-later license",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 85,
-      "community_name": "SonarQube Community Build 26.8",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "leveret agpl-3.0-or-later license",
-      "source_file": "docs/research/sonar-oss-licensing.md",
-      "source_location": "L30",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_sonar_oss_licensing_lgpl",
-      "label": "LGPL-3.0-or-later",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 85,
-      "community_name": "SonarQube Community Build 26.8",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "lgpl-3.0-or-later",
-      "source_file": "docs/research/sonar-oss-licensing.md",
-      "source_location": "L128",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_sonar_oss_licensing_sonarqube_cloud",
-      "label": "SonarQube Cloud (incl. Free and OSS plans)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 85,
-      "community_name": "SonarQube Community Build 26.8",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "sonarqube cloud (incl. free and oss plans)",
-      "source_file": "docs/research/sonar-oss-licensing.md",
-      "source_location": "L63",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_sonar_oss_licensing_sonarscanner_cli",
-      "label": "SonarScanner CLI 8.1 (LGPL client)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 85,
-      "community_name": "SonarQube Community Build 26.8",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "sonarscanner cli 8.1 (lgpl client)",
-      "source_file": "docs/research/sonar-oss-licensing.md",
-      "source_location": "L69",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_sonar_oss_licensing_ssal",
-      "label": "Sonar Source-Available License (SSAL v1.0/v1.0.1)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 85,
-      "community_name": "SonarQube Community Build 26.8",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "sonar source-available license (ssal v1.0/v1.0.1)",
-      "source_file": "docs/research/sonar-oss-licensing.md",
-      "source_location": "L160",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_sonar_oss_licensing_doc",
-      "label": "Sonar open-source licensing assessment for Leveret",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 85,
-      "community_name": "SonarQube Community Build 26.8",
-      "contributor": null,
-      "file_type": "document",
-      "norm_label": "sonar open-source licensing assessment for leveret",
-      "source_file": "docs/research/sonar-oss-licensing.md",
-      "source_location": "L1",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_sonar_oss_licensing_ssal_ai_competition_exclusion",
-      "label": "SSAL Non-competitive Purpose and outside-AI exclusion",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 85,
-      "community_name": "SonarQube Community Build 26.8",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "ssal non-competitive purpose and outside-ai exclusion",
-      "rationale": "Excludes competing functionality even when free and any outside AI ingesting program data; process/sidecar boundaries and nonprofit status do not change the purpose.",
-      "source_file": "docs/research/sonar-oss-licensing.md",
-      "source_location": "L167",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_sonar_oss_licensing_written_permission_decision",
-      "label": "Decision: no Sonar analysis without written permission",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 85,
-      "community_name": "SonarQube Community Build 26.8",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "decision: no sonar analysis without written permission",
-      "rationale": "Public terms give no low-risk path to feed Sonar analyzers/results to an AI code-review toolbelt; another OSI-licensed analyzer is shorter and safer.",
-      "source_file": "docs/research/sonar-oss-licensing.md",
-      "source_location": "L7",
-      "source_url": null
-    },
-    {
-      "id": "design_bench_corpus_v1",
-      "label": "bench/corpus.v1.json",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 98,
-      "community_name": "Validation Gate (Parity Benchmark)",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "bench/corpus.v1.json",
-      "source_file": "DESIGN.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "design_bench_replay",
-      "label": "bench:replay paid boundary",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 98,
-      "community_name": "Validation Gate (Parity Benchmark)",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "bench:replay paid boundary",
-      "source_file": "DESIGN.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "design_parity_gate_v1",
-      "label": "bench/parity-gate.v1.json",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 98,
-      "community_name": "Validation Gate (Parity Benchmark)",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "bench/parity-gate.v1.json",
-      "source_file": "DESIGN.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "design_validation_gate",
-      "label": "Validation Gate (Parity Benchmark)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 98,
-      "community_name": "Validation Gate (Parity Benchmark)",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "validation gate (parity benchmark)",
-      "rationale": "Leveret changes nothing in reviewed repos until the benchmark passes; CodeRabbit retirement blocked unless every gate passes",
-      "source_file": "DESIGN.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "_coderabbit_config",
-      "label": "CodeRabbit Config (auto review disabled)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 98,
-      "community_name": "Validation Gate (Parity Benchmark)",
-      "contributor": null,
-      "file_type": "document",
-      "norm_label": "coderabbit config (auto review disabled)",
-      "source_file": ".coderabbit.yaml",
-      "source_location": null,
       "source_url": null
     },
     {
@@ -25657,6 +25657,18 @@
       "type": "external"
     },
     {
+      "id": "base64",
+      "label": "base64",
+      "_origin": "semantic",
+      "community": 118,
+      "community_name": "JavaReferences.kt",
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "base64",
+      "source_file": "",
+      "type": "external"
+    },
+    {
       "id": "instant",
       "label": "instant",
       "_origin": "semantic",
@@ -25737,18 +25749,6 @@
       "external": true,
       "file_type": "concept",
       "norm_label": "tempdir",
-      "source_file": "",
-      "type": "external"
-    },
-    {
-      "id": "base64",
-      "label": "base64",
-      "_origin": "semantic",
-      "community": 122,
-      "community_name": "ClasspathAnalysis",
-      "external": true,
-      "file_type": "concept",
-      "norm_label": "base64",
       "source_file": "",
       "type": "external"
     },
@@ -64074,18 +64074,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L122",
-      "weight": 1.0
-    },
-    {
-      "source": "docs_superpowers_plans_2026_09_29_inspect_java_references_java_reference_evidence_implementation_plan",
-      "target": "docs_superpowers_plans_2026_09_29_inspect_java_references_global_constraints",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L15",
+      "source_location": "L124",
       "weight": 1.0
     },
     {
@@ -64096,7 +64085,18 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L151",
+      "source_location": "L153",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_superpowers_plans_2026_09_29_inspect_java_references_java_reference_evidence_implementation_plan",
+      "target": "docs_superpowers_plans_2026_09_29_inspect_java_references_global_constraints",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
+      "source_location": "L17",
       "weight": 1.0
     },
     {
@@ -64107,7 +64107,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L177",
+      "source_location": "L179",
       "weight": 1.0
     },
     {
@@ -64118,7 +64118,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L205",
+      "source_location": "L207",
       "weight": 1.0
     },
     {
@@ -64129,7 +64129,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L235",
+      "source_location": "L237",
       "weight": 1.0
     },
     {
@@ -64140,7 +64140,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L254",
+      "source_location": "L256",
       "weight": 1.0
     },
     {
@@ -64151,18 +64151,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L269",
-      "weight": 1.0
-    },
-    {
-      "source": "docs_superpowers_plans_2026_09_29_inspect_java_references_java_reference_evidence_implementation_plan",
-      "target": "docs_superpowers_plans_2026_09_29_inspect_java_references_review_focus",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L28",
+      "source_location": "L271",
       "weight": 1.0
     },
     {
@@ -64173,7 +64162,18 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L284",
+      "source_location": "L286",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_superpowers_plans_2026_09_29_inspect_java_references_java_reference_evidence_implementation_plan",
+      "target": "docs_superpowers_plans_2026_09_29_inspect_java_references_review_focus",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
+      "source_location": "L30",
       "weight": 1.0
     },
     {
@@ -64184,7 +64184,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L36",
+      "source_location": "L38",
       "weight": 1.0
     },
     {
@@ -64195,7 +64195,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L70",
+      "source_location": "L72",
       "weight": 1.0
     },
     {
@@ -64206,7 +64206,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L92",
+      "source_location": "L94",
       "weight": 1.0
     },
     {
@@ -64228,73 +64228,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L111",
-      "weight": 1.0
-    },
-    {
-      "source": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_java_method_references_for_leveret",
-      "target": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_failures_storage_and_execution_safety",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L168",
-      "weight": 1.0
-    },
-    {
-      "source": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_java_method_references_for_leveret",
-      "target": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_acceptance_and_evaluation",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L193",
-      "weight": 1.0
-    },
-    {
-      "source": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_java_method_references_for_leveret",
-      "target": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_deferred_work_and_approval_gate",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L215",
-      "weight": 1.0
-    },
-    {
-      "source": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_java_method_references_for_leveret",
-      "target": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_worked_example",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L30",
-      "weight": 1.0
-    },
-    {
-      "source": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_java_method_references_for_leveret",
-      "target": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_boundaries_and_ownership",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L65",
-      "weight": 1.0
-    },
-    {
-      "source": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_java_method_references_for_leveret",
-      "target": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_inputs_and_identity",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L84",
+      "source_location": "L119",
       "weight": 1.0
     },
     {
@@ -64305,7 +64239,73 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L9",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_java_method_references_for_leveret",
+      "target": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_failures_storage_and_execution_safety",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
+      "source_location": "L176",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_java_method_references_for_leveret",
+      "target": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_acceptance_and_evaluation",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
+      "source_location": "L201",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_java_method_references_for_leveret",
+      "target": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_deferred_work_and_approval_gate",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
+      "source_location": "L223",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_java_method_references_for_leveret",
+      "target": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_worked_example",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
+      "source_location": "L38",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_java_method_references_for_leveret",
+      "target": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_boundaries_and_ownership",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
+      "source_location": "L73",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_java_method_references_for_leveret",
+      "target": "docs_superpowers_specs_2026_09_29_inspect_java_references_design_inputs_and_identity",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
+      "source_location": "L92",
       "weight": 1.0
     },
     {
@@ -64316,7 +64316,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L138",
+      "source_location": "L146",
       "weight": 1.0
     },
     {
@@ -64327,7 +64327,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L155",
+      "source_location": "L163",
       "weight": 1.0
     },
     {
@@ -79041,6 +79041,39 @@
       "weight": 1.0
     },
     {
+      "source": "docs_research_coderabbit_speed_effectiveness_doc",
+      "target": "design_leveret_design",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_research_snyk_aikido_review_inspiration_doc",
+      "target": "design_leveret_design",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/research/snyk-aikido-review-inspiration.md",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_research_tool_assisted_review_guidance_doc",
+      "target": "design_leveret_design",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
       "source": "docs_research_tool_assisted_review_guidance_doc",
       "target": "readme_leveret",
       "relation": "references",
@@ -79060,6 +79093,17 @@
       "confidence_score": 1.0,
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
       "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_superpowers_plans_2026_09_29_inspect_java_references",
+      "target": "docs_reports_2026_09_29_inspect_java_references",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
+      "source_location": "L13",
       "weight": 1.0
     },
     {
@@ -81207,7 +81251,7 @@
       "confidence_score": 0.95,
       "context": "AnalysisIdentity",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L134",
+      "source_location": "L136",
       "weight": 1.0
     },
     {
@@ -81219,7 +81263,7 @@
       "confidence_score": 0.95,
       "context": "App",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L185",
+      "source_location": "L187",
       "weight": 1.0
     },
     {
@@ -81231,7 +81275,7 @@
       "confidence_score": 0.95,
       "context": "App.main",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L45",
+      "source_location": "L47",
       "weight": 1.0
     },
     {
@@ -81243,7 +81287,7 @@
       "confidence_score": 0.95,
       "context": "ClasspathAnalysis",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L40",
+      "source_location": "L42",
       "weight": 1.0
     },
     {
@@ -81255,7 +81299,7 @@
       "confidence_score": 0.95,
       "context": "ClasspathAnalysis",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L103",
+      "source_location": "L105",
       "weight": 1.0
     },
     {
@@ -81267,7 +81311,7 @@
       "confidence_score": 0.95,
       "context": "Database",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L173",
+      "source_location": "L175",
       "weight": 1.0
     },
     {
@@ -81279,7 +81323,7 @@
       "confidence_score": 0.95,
       "context": "DbSession.batch()",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L41",
+      "source_location": "L43",
       "weight": 1.0
     },
     {
@@ -81291,7 +81335,7 @@
       "confidence_score": 0.95,
       "context": "DbSession.batch()",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L173",
+      "source_location": "L175",
       "weight": 1.0
     },
     {
@@ -81303,7 +81347,7 @@
       "confidence_score": 0.95,
       "context": "DetailRecord",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L160",
+      "source_location": "L162",
       "weight": 1.0
     },
     {
@@ -81315,7 +81359,7 @@
       "confidence_score": 0.95,
       "context": "InspectError",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L188",
+      "source_location": "L190",
       "weight": 1.0
     },
     {
@@ -81327,7 +81371,7 @@
       "confidence_score": 0.95,
       "context": "InspectJavaBridge",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L188",
+      "source_location": "L190",
       "weight": 1.0
     },
     {
@@ -81339,7 +81383,7 @@
       "confidence_score": 0.95,
       "context": "JavaAnalysisInput",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L133",
+      "source_location": "L135",
       "weight": 1.0
     },
     {
@@ -81351,7 +81395,7 @@
       "confidence_score": 0.95,
       "context": "JavaExtractor.extract",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L149",
+      "source_location": "L151",
       "weight": 1.0
     },
     {
@@ -81363,7 +81407,7 @@
       "confidence_score": 0.95,
       "context": "JavaFactStore.query",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L160",
+      "source_location": "L162",
       "weight": 1.0
     },
     {
@@ -81375,7 +81419,7 @@
       "confidence_score": 0.95,
       "context": "JavaReferences",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L160",
+      "source_location": "L162",
       "weight": 1.0
     },
     {
@@ -81387,7 +81431,7 @@
       "confidence_score": 0.95,
       "context": "PageContext",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L160",
+      "source_location": "L162",
       "weight": 1.0
     },
     {
@@ -81399,7 +81443,7 @@
       "confidence_score": 0.95,
       "context": "PiToolsOptions",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L212",
+      "source_location": "L214",
       "weight": 1.0
     },
     {
@@ -81411,7 +81455,7 @@
       "confidence_score": 0.95,
       "context": "Schema.ensure",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L173",
+      "source_location": "L175",
       "weight": 1.0
     },
     {
@@ -81423,7 +81467,7 @@
       "confidence_score": 0.95,
       "context": "SessionFactory",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L173",
+      "source_location": "L175",
       "weight": 1.0
     },
     {
@@ -81435,7 +81479,7 @@
       "confidence_score": 0.95,
       "context": "WorkerMain",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L97",
+      "source_location": "L99",
       "weight": 1.0
     },
     {
@@ -81447,7 +81491,7 @@
       "confidence_score": 0.95,
       "context": "annotateEvidence",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L217",
+      "source_location": "L219",
       "weight": 1.0
     },
     {
@@ -81459,7 +81503,7 @@
       "confidence_score": 0.95,
       "context": "buildPiTools",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L233",
+      "source_location": "L235",
       "weight": 1.0
     },
     {
@@ -81471,7 +81515,7 @@
       "confidence_score": 0.95,
       "context": "buildPiTools()",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L44",
+      "source_location": "L46",
       "weight": 1.0
     },
     {
@@ -81495,7 +81539,7 @@
       "confidence_score": 0.95,
       "context": "checked",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L147",
+      "source_location": "L149",
       "weight": 1.0
     },
     {
@@ -81507,7 +81551,7 @@
       "confidence_score": 0.95,
       "context": "checked",
       "source_file": "docs/superpowers/specs/2026-09-29-inspect-java-references-design.md",
-      "source_location": "L119",
+      "source_location": "L127",
       "weight": 1.0
     },
     {
@@ -81519,7 +81563,7 @@
       "confidence_score": 0.95,
       "context": "configurationSha256",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L134",
+      "source_location": "L136",
       "weight": 1.0
     },
     {
@@ -81531,7 +81575,7 @@
       "confidence_score": 0.95,
       "context": "missClasses",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L101",
+      "source_location": "L103",
       "weight": 1.0
     },
     {
@@ -81543,7 +81587,7 @@
       "confidence_score": 0.95,
       "context": "runStreaming",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L182",
+      "source_location": "L184",
       "weight": 1.0
     },
     {
@@ -81555,7 +81599,7 @@
       "confidence_score": 0.95,
       "context": "runStreaming()",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L43",
+      "source_location": "L45",
       "weight": 1.0
     },
     {
@@ -81567,7 +81611,7 @@
       "confidence_score": 0.95,
       "context": "safeChildEnvironment()",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L43",
+      "source_location": "L45",
       "weight": 1.0
     },
     {
@@ -81579,7 +81623,7 @@
       "confidence_score": 0.95,
       "context": "validateChangeManifestCheckout()",
       "source_file": "docs/superpowers/plans/2026-09-29-inspect-java-references.md",
-      "source_location": "L42",
+      "source_location": "L44",
       "weight": 1.0
     },
     {
@@ -85004,5 +85048,5 @@
       "source_file": "docs/reports/2026-08-24-pi-quality-vs-omp-coderabbit.md"
     }
   ],
-  "built_at_commit": "1df3129ed8b18cca1cdf041ec3e7e6cb064c3538"
+  "built_at_commit": "adc1b6ae7ca1b219437393c45e65ef0e351e2c89"
 }

@@ -4,6 +4,19 @@ Status: primary-source research, 2026-08-24. This note explains public behavior;
 it does not reverse engineer CodeRabbit's private services, benchmark either
 product, or propose a Leveret implementation.
 
+**Forward-looking qualification (2026-10-02).** The historical observations,
+citations, and timings below remain the 2026-08-24 record of CodeRabbit's public
+behavior and are not rewritten. The forward-looking guidance — "Highest-value
+Leveret experiments" and the closing conclusion — is explicitly revised on
+2026-10-02. Leveret's deployment reality has since been stated: it runs on the
+client's infrastructure and provider account, with no Leveret-hosted analysis
+service ([DESIGN.md priorities](../../DESIGN.md#current-priorities-and-deployment-reality-owner-decision-2026-10-02)).
+CodeRabbit's latency, quota, plan-limit, and caching observations explain *its*
+hosted economics; they are not automatically Leveret requirements. The revised
+guidance puts evidence quality, consequential defect recall, independent
+verification, accurate and actionable reports, beyond-diff evidence, and honest
+coverage first; speed mechanisms come second.
+
 ## Evidence labels and bottom line
 
 Every pipeline or architecture statement below is labeled:
@@ -268,10 +281,22 @@ are unsupported.
 
 ## Highest-value Leveret experiments
 
-These are ordered by expected mechanical leverage, not by resemblance to an
-unknown private implementation. Each should be run on Leveret's existing replay
-corpus and stopped unless it preserves or improves useful-finding recall and
-priced-noise rate.
+Re-ranked 2026-10-02 (the list and its item text are kept; only the priority
+labels changed). **Quality tier**: items 1, 4, and 5, plus the provenance and
+normalization half of item 3 and the finding-fingerprint de-duplication half of
+item 2 — they improve what the review finds, proves, and reports, including
+beyond-diff evidence (item 4) and honest coverage (item 1). **Secondary tier**: the
+concurrency in item 3, the cost-saving invalidation in item 2, and items 6–8 —
+mechanical optimization, pursued only when a concrete measured quality or
+reliability blocker names it. Each experiment should be run on Leveret's existing
+replay corpus and stopped unless it preserves or improves useful-finding recall and
+priced-noise rate. Frozen bench and parity thresholds are not relaxed by any
+experiment.
+
+Scope classification and context packs in this list are *evidence selection*, not
+repository file eligibility caps. Default policy is no arbitrary file-count limits;
+any file Leveret does not examine is reported as not examined with a reason, never
+silently dropped or counted as clean. Clients may opt into resource limits.
 
 1. **Deterministic scope manifest first.** Compute changed commit range, apply
    path filters, classify binary/generated/lock/deletion/no-reviewable files,
@@ -308,16 +333,22 @@ priced-noise rate.
    concurrency. Route simple/local candidates to the least expensive model that
    meets the verifier gate; reserve stronger models for cross-file contracts,
    ambiguous intent, and verification failures. This is an experiment, not a
-   claim of per-file CodeRabbit workers.
+   claim of per-file CodeRabbit workers. (2026-10-02: "least expensive" applies
+   only where the verifier gate and replay recall show no quality loss; cost is the
+   client's to weigh and is not a reason to downgrade review quality.)
 8. **Stage telemetry and delayed batch publication.** Record queue, cache,
    preprocessing, retrieval, model, verification, and publication timestamps,
    plus summed worker compute. Publish comments only after ranking/deduplication.
    This does not itself improve recall, but it prevents visible latency from
    being mistaken for compute and makes the other seven experiments falsifiable.
 
-**I/high:** the first five should precede aggressive concurrency or model
-routing. They reduce the amount of uncertain work; parallelizing an unbounded
-prompt or routing noisy candidates merely spends the same mistakes faster.
+**I/high (re-ranked 2026-10-02):** the quality tier precedes everything else. It
+reduces uncertain work and raises evidence quality; parallelizing an unbounded
+prompt or routing noisy candidates merely spends the same mistakes faster. The
+secondary tier is adopted only if a measured defect-recall, precision, or
+reliability failure is traced to the problem it solves. Model routing is chosen by
+measured review quality, not by the lowest price — Leveret has no hosted-service
+economics to protect, and the client's model spend is the client's decision.
 
 ## Boundaries of the conclusion
 
@@ -334,6 +365,10 @@ prompt or routing noisy candidates merely spends the same mistakes faster.
   one was correctly rejected. Nitpick sections and pre-merge checks are not
   included in that ratio.
 - **I/high:** Leveret can reproduce much of the visible advantage without
-  proprietary assumptions by prioritizing deterministic preprocessing, bounded
-  retrieval, incrementality, cacheable preparation, independent verification,
-  and only then bounded parallelism and evidence-based model routing.
+  proprietary assumptions by prioritizing, in order: independent verification and
+  evidence-grounded reports, deterministic preprocessing, bounded context packs
+  (a retrieval-safety mechanic, not a file cap), beyond-diff evidence, and honest
+  coverage reporting. Incrementality, cacheable preparation, bounded parallelism,
+  and evidence-based model routing are secondary and need a measured quality or
+  reliability blocker (re-ranked 2026-10-02; the 2026-08-24 wording listed them as
+  later steps of the same sequence).
