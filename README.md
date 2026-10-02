@@ -7,12 +7,27 @@
 A leveret is a young hare — small, fast, and born with its eyes open.
 
 Leveret is a self-hosted, hybrid engine for private code reviews: the successor to
-hosted AI review bots for teams whose code stays home. It combines a deterministic
-static-analysis layer, a code graph built into every checkout, a graded noise filter
-with durable memory, and adversarial agent contracts — driven by the AI you bring
-(BYOAI: your provider and model — Anthropic or OpenAI by API key or subscription, or
-a local OpenAI-compatible endpoint). The engine layer itself never calls an LLM, and
-nothing leaves your infrastructure.
+hosted AI review bots for teams that want reviews to run on their own infrastructure.
+It combines a deterministic static-analysis layer, a code graph built into every
+checkout, a graded noise filter with durable memory, and adversarial agent
+contracts — driven by the AI you bring (BYOAI: your provider and model — Anthropic
+or OpenAI by API key or subscription, or a local OpenAI-compatible endpoint). The
+engine layer itself never calls an LLM, and Leveret operates no hosted analysis
+service: reviewed-checkout analysis and provider credentials are never routed
+through Leveret-operated infrastructure. The model provider you configure does
+receive the prompts and source excerpts the runner sends it; use a local endpoint to
+keep even that on your network. An optional webhook relay, if you choose one, sees
+webhook payloads and a scoped token (see [DESIGN.md](DESIGN.md)); self-hosting
+without it involves no relay.
+
+Priorities are working end-to-end reviews, accurate and actionable reports,
+consequential defect recall with independent verification and beyond-diff evidence,
+and honest coverage reporting. The target policy is no arbitrary file-count limits
+by default, with optional client limits. Today the Java path on `main` still rejects
+more than 2,000 files outside its configured roots; [#80](https://github.com/leveret-dev/leveret/pull/80)
+removes that default and is not yet merged. Evidence-pack file-detail caps also
+remain and must be evaluated against coverage quality, not service economics. See
+[DESIGN.md](DESIGN.md#current-priorities-and-deployment-reality-owner-decision-2026-10-02).
 
 ## How a review works
 

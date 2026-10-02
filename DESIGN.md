@@ -205,8 +205,9 @@ each presentation surface.
 
 leveret ships as a **GitHub App** — install on a repo, PRs get reviewed, findings
 arrive as review comments with an interactive thread — while staying **BYOAI**: the
-model, its credentials, and the code never route through infrastructure the user
-does not control. The two requirements compose by splitting the app in half:
+model and its credentials are the user's, and every review runs on infrastructure
+the user controls. Leveret operates no hosted analysis service. The two
+requirements compose by splitting the app in half:
 
 - **The App layer** owns GitHub plumbing only: webhook receipt, check runs, posting
   review comments, reading thread replies (the `learn` feed). It holds a GitHub App
@@ -216,17 +217,36 @@ does not control. The two requirements compose by splitting the app in half:
   OpenAI key, subscription OAuth, or an OpenAI-compatible local endpoint). It runs on
   the user's hardware — their CI runner, a container, a box in the closet.
 
+**What leaves the client's infrastructure is the client's choice.** The engine layer
+never calls an LLM. The runner sends the prompts, tool results, and source excerpts
+it selects to whichever provider endpoint the client configured: a hosted provider
+(Anthropic, OpenAI) receives that material under the client's own account and terms,
+while a local OpenAI-compatible endpoint keeps it on the client's network. Leveret
+operates no service that receives that provider traffic, the reviewed checkout, or
+the provider credentials. "Perimeter" below means that Leveret-side boundary, not
+that provider calls never leave the client's network and not that no GitHub webhook
+content ever transits a relay (see mode 2).
+
 Deployment modes, same code:
 
 1. **Fully self-hosted** (default, the privacy pitch): the user deploys both halves
    from this repo — App via GitHub's app-manifest one-click flow, runner wherever
-   they like. Nothing leaves their perimeter.
-2. **Hosted App, customer runner**: the shared App proxy verifies GitHub, reads a
-   client-encrypted endpoint from trusted default-branch configuration, mints a
-   repository-scoped installation token, and signs the raw delivery to the user's
-   box. The box verifies the proxy key and its own `serves:` allowlist before it
-   reviews or posts directly with that token. The hosted half sees webhook metadata
-   and the transient destination, never source checkouts or model credentials.
+   they like. No relay is involved: GitHub delivers webhooks directly to the user's
+   App, the reviewed checkout and provider credentials stay on the user's
+   infrastructure, and the only external egress for review content is the provider
+   endpoint the client chose.
+2. **Optional relay (webhook plumbing, never hosted analysis)**: a shared App proxy
+   verifies GitHub, reads a client-encrypted endpoint from trusted default-branch
+   configuration, mints a repository-scoped installation token, and signs the raw
+   delivery to the user's box. The box verifies the proxy key and its own `serves:`
+   allowlist before it reviews or posts directly with that token. The relay handles
+   the webhook delivery itself — event metadata and whatever PR text GitHub puts in
+   the payload (titles, bodies, branch names) — plus the transient destination, and
+   it mints a scoped installation token, so trusting a relay means trusting its
+   operator with those. Reviewed-checkout analysis and provider credentials are not
+   routed through it, and it performs no analysis. Clients who do not want a shared
+   relay use mode 1. This relay is implemented optional delivery plumbing, not a
+   hosted-analysis service or a product-service priority.
 
 Either way the MCP surface stays the local/interactive interface; the App is a
 second consumer of the same engine + agent-contract code, not a fork of it.
@@ -250,8 +270,11 @@ So the brand rides on three surfaces instead of on owning the name:
 - **The comments themselves**, which are ours entirely: the walkthrough heading, the
   hare, and the acknowledgement copy carry the product regardless of the App's name.
 
-Mode 2 would restore a single branded App, at the cost of the perimeter — which is
-the trade that mode 2 already is.
+Mode 2 would restore a single branded App, at the cost of a shared webhook relay
+sitting between GitHub and the user's box — which is the trade that mode 2 already
+is. It adds no hosted analysis: the relay sees webhook payloads and mints a scoped
+token, but reviewed-checkout analysis and provider credentials are not routed
+through it.
 
 ### Runner standardization (owner decision, updated 2026-08-26)
 
@@ -383,6 +406,82 @@ treats subscription OAuth as a peer of the API key, never an afterthought.
 - [x] **P5** — review + verification agent prompt contracts
 - [ ] **P6** — benchmark, then the adoption decision
 
+### Current priorities and deployment reality (owner decision, 2026-10-02)
+
+**Deployment reality.** Leveret runs on the client's infrastructure with the client's
+provider account (see "Distribution"). There is no Leveret-hosted analysis service,
+so hosted-service cost, quota, and fairness limits are not product requirements.
+Model spend, runtime, and resource ceilings belong to the client; clients may opt
+into resource limits, and Leveret does not impose speculative ones.
+
+**Priority order for further work** — every roadmap item is judged against these, in
+this order:
+
+1. **Working end-to-end reviews** on real PRs: trusted-base policy, runner,
+   verification, and publication completing without operator repair.
+2. **Report quality**: actionable, accurate findings with importance tiers and a
+   walkthrough that shows what was checked.
+3. **Consequential defect recall and precision**, measured on the frozen corpus and
+   independently adjudicated; not finding count.
+4. **Independent verification and beyond-diff evidence**: each published claim
+   survives an adversarial refute-or-evidence pass, and out-of-diff consumers and
+   contracts are traced with checked evidence rather than text guesses.
+5. **Honest coverage**: unavailable, skipped, unresolved, overflowed, and failed
+   scope stay distinct from "examined and clean" (`null`/`unknown`, never zero).
+
+**Secondary** unless a concrete measured quality or reliability blocker exists:
+cache reuse, concurrency, model routing, prompt/context compression, and latency
+tuning. Model choice follows measured review quality; a cheaper model is not
+promoted to protect service economics Leveret does not have. The frozen warm-cache
+median gate below is retained as written; it does not make speed the next goal.
+
+**File eligibility.** The owner policy is *no arbitrary file-count limits by
+default*: a review examines the files the change and its evidence require, and
+anything it cannot examine is reported as unexamined rather than silently trimmed.
+Current exception on `main`: the Java bridge rejects repositories with more than
+2,000 Java files outside the configured roots. The removal is not yet shipped.
+An opt-in, client-configured Java file limit is proposed in
+[leveret-dev/leveret#80](https://github.com/leveret-dev/leveret/pull/80), which is
+open and **not merged**; this document does not treat it as shipped. That proposal
+rejects a review above the configured client limit rather than publishing a clean
+or partial success. Any unexamined coverage or failed review must be explicit.
+
+**Bounded mechanics are not eligibility caps.** Tool-output transport bounds,
+per-phase context budgets, the bounded post-walk lead stream (overflow IDs and bytes
+recorded), and the guidance-card packet budget control evidence delivery and
+attention; they are not a rule excluding repositories by file count. Deadlines and
+cancellation bound execution. These limits can leave work incomplete, so retrieval
+must expose omissions and the report must retain unresolved or unexamined scope.
+
+The current evidence pack also has `MAX_SELECTED_FILES=200` and
+`MAX_WORKFLOW_FILES=20` detail caps, with omission counts and at most 100 omitted
+IDs (`MAX_OMITTED_IDS`). These are current implementation limits, not endorsed
+repository eligibility policy or proof of exhaustive coverage. Quality work must
+test whether pagination/targeted retrieval retains decisive evidence and preserves
+honest unexamined scope; do not justify these limits using hosted-service costs.
+
+**Unchanged requirements.** Checkout and PR-derived content stay untrusted;
+isolation, credential handling, trusted-base policy, provenance, bounded transport,
+cancellation, and honest incomplete coverage remain required. The frozen bench and
+parity thresholds are not weakened by this reprioritization.
+
+**Shipped implementation versus next quality proof.**
+
+- Shipped (implemented on `main`): the standardized Pi runner and fixed index/tool
+  adapters, the accounted post-walk lead stream, private audit traces, replay /
+  report / parity tooling, and optional Java reference evidence through Inspect
+  (leveret-dev/leveret#78, merged; real model consumption of that evidence was
+  verified). That verification is a mechanism check, **not** general parity proof.
+- Not yet shipped: removal of the hard-coded 2,000 excluded-Java-file rejection
+  and client-configurable replacement (#80, open).
+- Next quality work (P6): classify remaining discovery, evidence, verification and
+  reporting failures from current traces; fix the highest-leverage cause and prove
+  the resulting end-to-end review with controls. Add held-out and organic reviews
+  separately from the frozen corpus. Resume the formal five-trial experiment when
+  candidate quality/reliability is credible, independently adjudicate it, and read
+  the `bench:parity` decision. Until that decision passes, no parity or
+  CodeRabbit-retirement claim is made.
+
 ## Validation gate (the benchmark)
 
 Corpus data lives in `bench/corpus.v1.json`: one strict, hashed row per root
@@ -441,3 +540,9 @@ GNU-tar publication, and a warm-cache median no greater than ten minutes on the
 declared hardware. Cold time and summed worker compute are separate evidence.
 Missing, mixed, invalid, or under-five data blocks. CodeRabbit retirement remains
 blocked unless every candidate gate passes.
+
+**Qualification (2026-10-02).** The thresholds above are frozen and unchanged,
+including the warm-cache median bound; they are acceptance evidence, not a license
+to trade review quality for speed. Historical trial results stay as recorded. New
+optimization work is secondary to the quality priorities under "Roadmap" unless a
+gate or measured reliability failure names it as the blocker.

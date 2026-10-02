@@ -4,6 +4,18 @@ Status: primary-source research, 2026-08-24. This note extracts transferable
 architecture and product ideas; it does not compare pricing, reverse engineer
 private systems, benchmark either vendor, or propose a vendor integration.
 
+**Forward-looking qualification (2026-10-02).** Vendor observations and citations
+below are the 2026-08-24 record and are unchanged; the experiment ordering below is
+explicitly re-prioritized. Vendor plan, quota, billing, and scan-time evidence
+describes those vendors' offerings (this note covers hosted and local/self-managed
+scanners alike) and is not automatically a Leveret requirement. Leveret runs on the
+client's infrastructure and provider account
+([DESIGN.md priorities](../../DESIGN.md#current-priorities-and-deployment-reality-owner-decision-2026-10-02)).
+What transfers is evidence quality: typed reachability, honest applicability and
+coverage, verified fixability, governed exceptions, and structured per-analyzer
+status. Speed, cache, and scan-scope tuning from these vendors is secondary unless
+a measured quality or reliability blocker names it.
+
 ## Evidence rules and scope
 
 This note uses the dimensions and existing work tracked by [Leveret issue
@@ -386,6 +398,14 @@ six materially different design pressures:
 
 ## Ordered Leveret experiments / issue additions
 
+Priority (2026-10-02): items 1–4, 6, 7, and 8 are quality work (honest
+applicability, typed beyond-diff evidence, accurate triage, verified remedies,
+governed exceptions, lifecycle, and per-analyzer status). Item 5 (analyzer cache
+and invalidation) is secondary and starts only if measured warm/cold time or a
+stale-result failure is a concrete blocker. "Applicability" and "routing" in this
+list mean declaring which analyzers and evidence apply and why — they are not file
+eligibility caps, and unexamined scope must be reported, not dropped.
+
 1. **Extend #58/#60 with an applicability manifest experiment.** Before any model
    call, emit target kind, language/ecosystem, changed artifacts, candidate
    analyzers, analysis depth, expected schema, gate eligibility, and explicit
@@ -402,8 +422,10 @@ six materially different design pressures:
    [Aikido](https://help.aikido.dev/getting-started/reachability-analysis/introduction-to-reachability-analysis.md)).
 3. **Extend #50/#58 with deterministic-first residual triage.** Apply exact
    applicability, trusted suppression, reachability, and contextual facts before
-   the cap; reserve model reasoning for ambiguous residual leads. Record every
-   stage's disposition so noise reduction cannot masquerade as coverage. Aikido
+   the bounded post-walk lead cap (a transport/context bound, not a repository
+   file-eligibility cap); reserve model reasoning for ambiguous residual leads.
+   Record every stage's disposition so noise reduction cannot masquerade as
+   coverage. Aikido
    explicitly documents this order
    ([AutoTriage](https://help.aikido.dev/aikido-agent/sast-autotriage.md)).
 4. **Extend #48/#61 with fixability and detector-oracle fields.** Classify findings
@@ -474,3 +496,6 @@ six materially different design pressures:
 - Neither vendor's public docs provide the warm-cache p50/p95 stage timing,
   reference hardware, model cost, or completed-run reliability needed by #64's
   parity gate. Those remain Leveret benchmark obligations, not vendor facts.
+- (2026-10-02) The vendor-timing, cost, and warm-cache absences above remain true.
+  #64's warm-cache gate stays frozen as written; it is acceptance evidence, not a
+  mandate to prioritize speed or model cost over review quality.

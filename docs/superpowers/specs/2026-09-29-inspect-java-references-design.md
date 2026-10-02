@@ -2,9 +2,17 @@
 
 Date: 2026-09-29
 
-Status: Approved by the maintainer on 2026-09-29. Implementation planning is
-authorized. Implementation awaits review of the written plan and selection of
-an execution method.
+Status (2026-10-02): Approved and delivered in
+[Java reference evidence for reviews](https://github.com/leveret-dev/leveret/pull/78).
+The [evaluation report](../../reports/2026-09-29-inspect-java-references.md)
+records actual reviewer consumption; this is not a general parity claim.
+The original acceptance contract below remains historical evidence.
+
+Current direction: review execution is client-hosted. Prioritize evidence quality,
+review effectiveness and actionable reports, not default repository-size quotas.
+Capacity policy is client-configurable; isolation, provenance and honest unresolved
+coverage remain required. Own-tool model evaluation is pre-authorized, superseding
+the original separate paid-run approval language.
 
 ## Purpose and scope
 
