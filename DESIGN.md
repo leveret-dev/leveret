@@ -232,9 +232,11 @@ Deployment modes, same code:
 1. **Fully self-hosted** (default, the privacy pitch): the user deploys both halves
    from this repo — App via GitHub's app-manifest one-click flow, runner wherever
    they like. No relay is involved: GitHub delivers webhooks directly to the user's
-   App, the reviewed checkout and provider credentials stay on the user's
-   infrastructure, and the only external egress for review content is the provider
-   endpoint the client chose.
+   App. The runner sends selected review inputs for model analysis to the provider
+   endpoint the client chose; the reviewed checkout and credential storage remain
+   client-owned. The App also publishes findings and walkthroughs to GitHub, which
+   can include cited source excerpts. A local model does not make published reviews
+   or GitHub API traffic stay inside the client's network.
 2. **Optional relay (webhook plumbing, never hosted analysis)**: a shared App proxy
    verifies GitHub, reads a client-encrypted endpoint from trusted default-branch
    configuration, mints a repository-scoped installation token, and signs the raw
