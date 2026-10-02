@@ -80,6 +80,63 @@ describe("Inspect Java boundary", () => {
     } finally { await bridge.close(); }
   }, 240_000);
 
+  it("reviews repositories above 2000 Java files unless the client opts into a limit", async () => {
+    const sibling = join(repo, "other/src/main/java");
+    mkdirSync(sibling, { recursive: true });
+    for (let n = 0; n < 2001; n++) writeFileSync(join(sibling, `Other${n}.java`), `class Other${n} {}`);
+    git(["add", "other"]);
+    git(["-c", "commit.gpgsign=false", "commit", "-m", "sibling module"]);
+    const change = await buildChangeManifest(repo, manifest.base);
+    try {
+      const config = await loadInspectJavaConfig(repo, configPath, digest);
+      const bridge = await openInspectJava(repo, change, config, join(home, "large-repo-runs"));
+      try {
+        const page = await bridge.references({
+          analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
+          manifest: change, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 } },
+        });
+        expect(page.items.filter((item) => item.kind === "reference").map((item) => item.reference?.location.path))
+          .toEqual(["src/test/java/example/PricingTest.java"]);
+        expect(page.summary.coverage).toMatchObject({ complete: false, mainExamined: 1, testExamined: 1, mainSkipped: 2001 });
+        const paths: string[] = [];
+        let part = page;
+        while (true) {
+          paths.push(...part.items.filter((item) => item.kind === "file" && !item.file?.examined).map((item) => item.file!.path));
+          if (!part.delivery.nextCursor) break;
+          part = await bridge.references({
+            analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
+            manifest: change, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 } },
+            cursor: part.delivery.nextCursor,
+          });
+        }
+        expect(new Set(paths)).toEqual(new Set(Array.from({ length: 2001 }, (_, n) => `other/src/main/java/Other${n}.java`)));
+      } finally { await bridge.close(); }
+      const path = join(home, "limited-config.json");
+      writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(configPath, "utf8")), maxJavaFiles: 2002 }));
+      const limited = await loadInspectJavaConfig(repo, path, createHash("sha256").update(readFileSync(path)).digest("hex"));
+      await expect(openInspectJava(repo, change, limited, join(home, "limited-runs")))
+        .rejects.toMatchObject({ code: "resource-exhausted" });
+      writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(configPath, "utf8")), maxJavaFiles: 2003 }));
+      const boundary = await loadInspectJavaConfig(repo, path, createHash("sha256").update(readFileSync(path)).digest("hex"));
+      const allowed = await openInspectJava(repo, change, boundary, join(home, "boundary-runs"));
+      await allowed.close();
+      git(["rm", "-r", "other"]);
+      git(["-c", "commit.gpgsign=false", "commit", "-m", "remove sibling module"]);
+      const removal = await buildChangeManifest(repo, change.head);
+      await expect(openInspectJava(repo, removal, limited, join(home, "limited-base-runs")))
+        .rejects.toMatchObject({ code: "resource-exhausted" });
+    } finally { git(["reset", "--hard", manifest.head]); }
+  }, 240_000);
+
+  it("rejects invalid client file limits rather than treating them as unlimited", async () => {
+    const path = join(home, "invalid-limit-config.json");
+    for (const maxJavaFiles of [0, -1, 1.5, "2000", null, Number.MAX_SAFE_INTEGER + 1]) {
+      writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(configPath, "utf8")), maxJavaFiles }));
+      await expect(loadInspectJavaConfig(repo, path, createHash("sha256").update(readFileSync(path)).digest("hex")))
+        .rejects.toMatchObject({ code: "invalid-input" });
+    }
+  });
+
   it("resolves explicit Maven-style Java 8 language settings", async () => {
     const path = join(home, "java8-config.json");
     writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(configPath, "utf8")), javaLevel: "1.8" }));

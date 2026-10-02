@@ -135,14 +135,21 @@ and `super(...)` constructor calls, and `X::new` are not tracked. Implicit enum
 either, and their call sites are not reported as coverage gaps. A site inside a
 lambda has no enclosing callable (`enclosing` is `null`).
 
+Leveret runs on the client's infrastructure. There is no Java file-count limit
+by default. Clients can optionally set `maxJavaFiles` in their trusted Java
+configuration to a positive integer. It counts tracked `.java` files across
+the repository (including files outside the configured roots) separately for
+base and head; exceeding it stops the review with `resource-exhausted`.
+For example, `"maxJavaFiles": 50000` allows at most 50,000 files per revision.
+Omit the field for no file-count limit. This option does not change extraction
+scope: excluded files remain individually reported as unexamined, and coverage
+remains incomplete. The sandbox's time, memory, and output limits still apply.
+
 Known limits: Java sources must be valid UTF-8; other bytes are rejected as
-`invalid-input`, and JDT reads sources as UTF-8. If the repository holds more
-than 2,000 Java files outside the configured module's roots, the review is
-rejected as `resource-exhausted`. This count covers the whole repository,
-including sibling modules, so large multi-module repositories cannot be
-configured today. Maven `system`-scope dependencies have no dedicated handling
-or test. Because configured initialization fails closed, a broken trusted
-configuration blocks the review until the operator fixes or removes it.
+`invalid-input`, and JDT reads sources as UTF-8. Maven `system`-scope dependencies
+have no dedicated handling or test. Because configured initialization fails
+closed, a broken trusted configuration blocks the review until the operator
+fixes or removes it.
 
 ## License
 
