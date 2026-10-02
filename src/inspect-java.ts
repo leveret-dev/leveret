@@ -17,6 +17,7 @@ const configSchema = z.object({
   jdkFiles: z.record(z.string(), hex),
   cache: z.string().min(1), module: z.string(), build: z.enum(["maven", "gradle"]),
   mainRoots: z.array(z.string()).length(1), testRoots: z.array(z.string()).length(1), javaLevel: z.string().regex(/^(?:1\.[1-9]|[1-9]\d*)$/),
+  maxJavaFiles: positive.optional(),
   limits: z.object({ heapBytes: positive, addressSpaceBytes: positive, deadlineMs: positive, maxOutputBytes: positive }).strict(),
 }).strict();
 const preparedSchema = z.object({ summary: analysisSummarySchema, artifacts: z.record(z.string(), hex) }).strict();
@@ -196,7 +197,12 @@ async function snapshot(repo: string, revision: string, destination: string, con
   const treeEntries = await tree(repo, revision);
   const entries = treeEntries.filter((item) => selected(item.path, config));
   const skipped = treeEntries.filter((item) => item.path.endsWith(".java") && !selected(item.path, config));
-  if (skipped.length > 2000) throw new InspectJavaError("resource-exhausted", "More than 2000 unsupported Java files");
+  if (config.maxJavaFiles !== undefined) {
+    const count = treeEntries.reduce((total, item) => total + Number(item.path.endsWith(".java")), 0);
+    if (count > config.maxJavaFiles) {
+      throw new InspectJavaError("resource-exhausted", `Repository contains ${count} Java files; configured maxJavaFiles is ${config.maxJavaFiles}`);
+    }
+  }
   if (!entries.some((item) => item.path.endsWith(".java"))) throw new InspectJavaError("invalid-input", "No Java sources in configured module");
   if (entries.some((item) => !["100644", "100755"].includes(item.mode))) {
     throw new InspectJavaError("snapshot-mismatch", "Analyzed inputs include a symlink or nonregular file");
