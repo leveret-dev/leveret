@@ -1,10 +1,10 @@
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
 import { validateChangeManifestCheckout, type ChangeManifest } from "./change-evidence.js";
+import { GitObjectError, gitBytes, isSafeRelativePath, readGitBlobs, readGitTree } from "./git-objects.js";
 import { runStreaming } from "./exec.js";
 import { pathIsInside } from "./path.js";
 import { analysisSummarySchema, inspectErrorSchema, referenceReplySchema, type AnalysisSummary, type InspectError, type ReferencePage, type ReferenceRequest } from "./inspect-java-contract.js";
@@ -32,9 +32,7 @@ export interface InspectJavaBridge {
   close(): Promise<void>;
 }
 
-const gitEnv = { PATH: "/usr/bin:/bin", HOME: "/nonexistent", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_NO_REPLACE_OBJECTS: "1", GIT_OPTIONAL_LOCKS: "0" };
 const decoder = new TextDecoder("utf-8", { fatal: true });
-const MAX_GIT_BYTES = 64 * 1024 * 1024;
 
 async function digestFile(path: string): Promise<string> {
   const hash = createHash("sha256");
@@ -42,10 +40,14 @@ async function digestFile(path: string): Promise<string> {
   return hash.digest("hex");
 }
 
+/** Git readers throw GitObjectError; the bridge keeps exposing the same code and message as InspectJavaError. */
+async function fromGit<T>(read: Promise<T>): Promise<T> {
+  try { return await read; }
+  catch (error) { throw error instanceof GitObjectError ? new InspectJavaError(error.code, error.message) : error; }
+}
+
 function safeRelative(path: string): string {
-  if (!path || isAbsolute(path) || path.includes("\\") || path.includes("\0") || path.split("/").some((part) => part === ".." || part === "")) {
-    throw new InspectJavaError("invalid-input", `Unsafe snapshot path: ${path}`);
-  }
+  if (!isSafeRelativePath(path)) throw new InspectJavaError("invalid-input", `Unsafe snapshot path: ${path}`);
   return path;
 }
 
@@ -121,66 +123,6 @@ async function verifyFrozenArtifacts(config: InspectJavaConfig, artifacts: Recor
   }
 }
 
-async function gitBytes(repo: string, args: string[], input?: Buffer): Promise<Buffer> {
-  // This project targets ES2023, before Promise.withResolvers is available.
-  return new Promise<Buffer>((done, fail) => {
-    const child = spawn("git", args, { cwd: repo, env: gitEnv, stdio: ["pipe", "pipe", "pipe"] });
-    const chunks: Buffer[] = [];
-    let size = 0;
-    let stderr = "";
-    const timer = setTimeout(() => child.kill("SIGKILL"), 30_000);
-    child.stdout.on("data", (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > MAX_GIT_BYTES) { child.kill("SIGKILL"); return; }
-      chunks.push(chunk);
-    });
-    child.stderr.on("data", (chunk: Buffer) => { stderr = (stderr + chunk.toString("utf8")).slice(0, 4096); });
-    child.once("error", fail);
-    child.once("close", (code) => {
-      clearTimeout(timer);
-      if (code !== 0 || size > MAX_GIT_BYTES) fail(new InspectJavaError("worker-failed", `Git object read failed: ${stderr || code}`));
-      else done(Buffer.concat(chunks));
-    });
-    child.stdin.end(input);
-  });
-}
-
-interface TreeEntry { path: string; oid: string; mode: string }
-async function tree(repo: string, revision: string): Promise<TreeEntry[]> {
-  const bytes = await gitBytes(repo, ["ls-tree", "-r", "-z", revision]);
-  const result: TreeEntry[] = [];
-  for (const chunk of bytes.toString("binary").split("\0")) {
-    if (!chunk) continue;
-    const item = decoder.decode(Buffer.from(chunk, "binary"));
-    const match = /^(\d{6}) (blob|commit) ([a-f0-9]{40,64})\t(.+)$/s.exec(item);
-    if (!match) throw new InspectJavaError("snapshot-mismatch", "Unsupported Git tree entry");
-    result.push({ mode: match[1]!, oid: match[3]!, path: safeRelative(match[4]!) });
-  }
-  return result;
-}
-
-async function blobs(repo: string, entries: TreeEntry[]): Promise<Map<string, Buffer>> {
-  const bytes = await gitBytes(repo, ["cat-file", "--batch"], Buffer.from(`${entries.map((item) => item.oid).join("\n")}\n`));
-  let offset = 0;
-  const result = new Map<string, Buffer>();
-  for (const item of entries) {
-    const end = bytes.indexOf(10, offset);
-    if (end < 0) throw new InspectJavaError("snapshot-mismatch", "Incomplete Git object header");
-    const header = decoder.decode(bytes.subarray(offset, end));
-    const match = /^([a-f0-9]{40,64}) blob (\d+)$/.exec(header);
-    if (!match || match[1] !== item.oid) throw new InspectJavaError("snapshot-mismatch", "Git object identity differs");
-    const length = Number(match[2]);
-    if (!Number.isSafeInteger(length) || length > MAX_GIT_BYTES || end + 1 + length >= bytes.length || bytes[end + 1 + length] !== 10) {
-      throw new InspectJavaError("snapshot-mismatch", "Incomplete Git object body");
-    }
-    const content = bytes.subarray(end + 1, end + 1 + length);
-    result.set(item.path, content);
-    offset = end + length + 2;
-  }
-  if (offset !== bytes.length) throw new InspectJavaError("snapshot-mismatch", "Unrequested Git object content");
-  return result;
-}
-
 function modulePath(path: string, module: string): string | null {
   return module === "." ? path : path.startsWith(`${module}/`) ? path.slice(module.length + 1) : null;
 }
@@ -194,7 +136,7 @@ function selected(path: string, config: InspectJavaConfig): boolean {
 
 async function snapshot(repo: string, revision: string, destination: string, config: InspectJavaConfig, live: boolean):
   Promise<Array<{ path: string; sourceSet: "main" | "test"; reason: string }>> {
-  const treeEntries = await tree(repo, revision);
+  const treeEntries = await fromGit(readGitTree(repo, revision));
   const entries = treeEntries.filter((item) => selected(item.path, config));
   const skipped = treeEntries.filter((item) => item.path.endsWith(".java") && !selected(item.path, config));
   if (config.maxJavaFiles !== undefined) {
@@ -207,7 +149,7 @@ async function snapshot(repo: string, revision: string, destination: string, con
   if (entries.some((item) => !["100644", "100755"].includes(item.mode))) {
     throw new InspectJavaError("snapshot-mismatch", "Analyzed inputs include a symlink or nonregular file");
   }
-  const contents = await blobs(repo, entries);
+  const contents = await fromGit(readGitBlobs(repo, entries));
   const root = await realpath(repo);
   for (const entry of entries) {
     const data = contents.get(entry.path)!;
@@ -230,9 +172,9 @@ async function snapshot(repo: string, revision: string, destination: string, con
   }
   if (live) {
     const prefix = config.module === "." ? "" : `${config.module}/`;
-    const others = await gitBytes(repo, [
+    const others = await fromGit(gitBytes(repo, [
       "ls-files", "--others", "-z", "--", `:(glob)${prefix}**/*.java`, `:(glob)${prefix}*.java`,
-    ]);
+    ]));
     for (const path of others.toString("binary").split("\0")) {
       if (path && selected(decoder.decode(Buffer.from(path, "binary")), config)) {
         throw new InspectJavaError("snapshot-mismatch", "Untracked Java source in configured module");
