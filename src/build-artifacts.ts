@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { access, copyFile, mkdir, mkdtemp, open, readdir, rm, writeFile, type FileHandle } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { BuildArtifact, BuildEvidenceManifest, BuildEvidenceRequest } from "./build-evidence-contract.js";
-import { readGitBlobs, readGitTree, type GitTreeEntry } from "./git-objects.js";
+import type { BuildArtifact, BuildCompilation, BuildEvidenceManifest, BuildEvidenceRequest } from "./build-evidence-contract.js";
+import { GitObjectError, readGitBlobs, readGitTree, type GitTreeEntry } from "./git-objects.js";
 
 /**
  * Byte admission for a build-evidence manifest that already passed the strict wire parser.
@@ -14,6 +14,11 @@ import { readGitBlobs, readGitTree, type GitTreeEntry } from "./git-objects.js";
  * never redirect a read (there is no realpath-then-open window). Node has no openat, so a child of a held
  * descriptor is addressed as `/proc/self/fd/<fd>/<name>`; this is the supported Linux host contract.
  * Verified bytes are copied into scratch owned by this call and nothing else is ever written or deleted.
+ *
+ * Failures are classified by the operation that raised them. A fault of the named source (a missing or
+ * unlistable payload path, a symlink, a Git object that does not match) rejects that artifact and the scopes
+ * that depend on it. A fault of the host (descriptor or memory exhaustion, a Git process that cannot run, a
+ * scratch directory that cannot be written) is not the artifact's fault and rejects the whole call.
  */
 
 export type ArtifactRejection = {
@@ -39,6 +44,7 @@ export type FrozenBuildArtifacts = {
 };
 
 type Available = Extract<BuildArtifact, { availability: "available" }>;
+type AvailableFile = Extract<Available, { kind: "file" }>;
 type AvailableDirectory = Extract<Available, { kind: "directory" }>;
 type Item = { artifact: Available; dest: string };
 type Capture = { signal: AbortSignal | undefined; chunk: Buffer };
@@ -63,6 +69,7 @@ const REASON = {
   collision: "artifact path collides with another by prefix, case or normalization",
   claims: "payload path carries conflicting size or hash claims",
   unreadable: "payload path could not be read",
+  tooLong: "artifact path is too long for the private copy",
 } as const;
 
 const { O_RDONLY, O_DIRECTORY, O_NOFOLLOW, O_NONBLOCK } = constants;
@@ -80,16 +87,46 @@ class Rejection extends Error {
   constructor(readonly reason: string) { super(reason); }
 }
 
-function reasonFor(error: unknown): string {
-  if (error instanceof Rejection) return error.reason;
+/** A source-root member whose manifest-chosen relative path cannot be laid out in the private scratch. */
+class LayoutFault extends Error {
+  constructor(readonly artifactId: string) { super(REASON.tooLong); }
+}
+
+const errnoOf = (error: unknown): string | undefined => {
   const code = (error as NodeJS.ErrnoException | null)?.code;
-  if (code === "ENOENT") return REASON.missing;
-  if (code === "ENOTDIR" || code === "ELOOP") return REASON.symlink;
-  if (code === "ENXIO") return REASON.nonRegular;
-  // Other errno failures are this artifact's problem; host exhaustion and programming errors are not.
-  if (typeof code === "string" && /^E[A-Z]+$/.test(code) && !RESOURCE_ERRORS.includes(code)) return REASON.unreadable;
+  return typeof code === "string" ? code : undefined;
+};
+
+/** Faults of the named source: the artifact is rejected. Host failures, aborts and bugs keep propagating. */
+function sourceFault(error: unknown): never {
+  if (error instanceof Rejection) throw error;
+  const code = errnoOf(error);
+  if (code === "ENOENT") throw new Rejection(REASON.missing);
+  if (code === "ENOTDIR" || code === "ELOOP") throw new Rejection(REASON.symlink);
+  if (code === "ENXIO") throw new Rejection(REASON.nonRegular);
+  if (code !== undefined && /^E[A-Z0-9]+$/.test(code) && !RESOURCE_ERRORS.includes(code)) throw new Rejection(REASON.unreadable);
   throw error;
 }
+
+/** Awaits an operation on the manifest-named source, mapping its faults to artifact rejections. */
+async function fromSource<T>(operation: Promise<T>): Promise<T> {
+  try { return await operation; } catch (error) { return sourceFault(error); }
+}
+
+/**
+ * Awaits a write whose destination name was chosen by the manifest (a directory member or a source-root
+ * member). Only a name too long for the host filesystem is the manifest's fault; any other failure writing
+ * scratch stays a host failure.
+ */
+async function fromLayout<T>(operation: Promise<T>): Promise<T> {
+  try { return await operation; } catch (error) {
+    throw errnoOf(error) === "ENAMETOOLONG" ? new Rejection(REASON.tooLong) : error;
+  }
+}
+
+/** Failures that are about the pinned Git content rather than the host: bad revision, object, path or encoding. */
+const isGitContentFault = (error: unknown): boolean =>
+  error instanceof GitObjectError || (error instanceof TypeError && errnoOf(error) === "ERR_ENCODING_INVALID_ENCODED_DATA");
 
 /** Normalized relative path components, or null when any component could leave or alias the containing directory. */
 function components(path: string): string[] | null {
@@ -144,11 +181,11 @@ async function openBelow(root: FileHandle, parts: readonly string[], last: numbe
   let parent = root;
   try {
     for (const name of parts.slice(0, -1)) {
-      const next = await open(under(parent, name), DIRECTORY);
+      const next = await fromSource(open(under(parent, name), DIRECTORY));
       if (parent !== root) await parent.close();
       parent = next;
     }
-    return await open(under(parent, parts[parts.length - 1]!), last);
+    return await fromSource(open(under(parent, parts[parts.length - 1]!), last));
   } finally {
     if (parent !== root) await parent.close();
   }
@@ -156,7 +193,7 @@ async function openBelow(root: FileHandle, parts: readonly string[], last: numbe
 
 /** Streams a regular file into a new private copy while hashing; any mismatch removes the copy. */
 async function copyVerified(source: FileHandle, destination: string, expected: { sha256: string; sizeBytes: number }, ctx: Capture): Promise<void> {
-  const before = await source.stat({ bigint: true });
+  const before = await fromSource(source.stat({ bigint: true }));
   if (!before.isFile()) throw new Rejection(REASON.nonRegular);
   if (before.size !== BigInt(expected.sizeBytes)) throw new Rejection(REASON.mismatch);
   const out = await open(destination, "wx", 0o400);
@@ -166,14 +203,14 @@ async function copyVerified(source: FileHandle, destination: string, expected: {
     let total = 0;
     for (;;) {
       ctx.signal?.throwIfAborted();
-      const { bytesRead } = await source.read(ctx.chunk, 0, ctx.chunk.length, null);
+      const { bytesRead } = await fromSource(source.read(ctx.chunk, 0, ctx.chunk.length, null));
       if (bytesRead === 0) break;
       total += bytesRead;
       if (total > expected.sizeBytes) throw new Rejection(REASON.mismatch);
       hash.update(ctx.chunk.subarray(0, bytesRead));
       for (let at = 0; at < bytesRead;) at += (await out.write(ctx.chunk, at, bytesRead - at)).bytesWritten;
     }
-    const after = await source.stat({ bigint: true });
+    const after = await fromSource(source.stat({ bigint: true }));
     if (after.size !== before.size || after.mtimeNs !== before.mtimeNs || after.ctimeNs !== before.ctimeNs) throw new Rejection(REASON.changed);
     if (total !== expected.sizeBytes || hash.digest("hex") !== expected.sha256) throw new Rejection(REASON.mismatch);
     complete = true;
@@ -193,17 +230,17 @@ async function captureDirectory(root: FileHandle, item: AvailableDirectory, dest
   for (const path of members.keys()) for (let at = path.indexOf("/"); at >= 0; at = path.indexOf("/", at + 1)) parents.add(path.slice(0, at));
   const seen = new Set<string>();
   const walk = async (dir: FileHandle, prefix: string): Promise<void> => {
-    for (const entry of await readdir(under(dir), { withFileTypes: true })) {
+    for (const entry of await fromSource(readdir(under(dir), { withFileTypes: true }))) {
       ctx.signal?.throwIfAborted();
       const path = prefix + entry.name;
       if (entry.isSymbolicLink()) throw new Rejection(REASON.symlink);
       if (entry.isDirectory()) {
-        const child = await open(under(dir, entry.name), DIRECTORY);
+        const child = await fromSource(open(under(dir, entry.name), DIRECTORY));
         try {
           if (parents.has(path)) {
-            await mkdir(join(destination, path), { mode: 0o700 });
+            await fromLayout(mkdir(join(destination, path), { mode: 0o700 }));
             await walk(child, `${path}/`);
-          } else if ((await readdir(under(child))).length > 0) {
+          } else if ((await fromSource(readdir(under(child)))).length > 0) {
             throw new Rejection(REASON.inventory);
           }
         } finally {
@@ -212,9 +249,9 @@ async function captureDirectory(root: FileHandle, item: AvailableDirectory, dest
       } else if (entry.isFile()) {
         const expected = members.get(path);
         if (!expected) throw new Rejection(REASON.inventory);
-        const leaf = await open(under(dir, entry.name), LEAF);
+        const leaf = await fromSource(open(under(dir, entry.name), LEAF));
         try {
-          await copyVerified(leaf, join(destination, path), expected, ctx);
+          await fromLayout(copyVerified(leaf, join(destination, path), expected, ctx));
         } finally {
           await leaf.close();
         }
@@ -234,11 +271,18 @@ async function captureDirectory(root: FileHandle, item: AvailableDirectory, dest
   }
 }
 
-/** Reads blobs together; if the batch fails, retries one by one so a single bad object only rejects itself. */
+/**
+ * Reads blobs together; if the batch fails on its content, retries one by one so a single bad object only
+ * rejects itself. Anything that is not a content fault (a Git process that cannot run, exhaustion) propagates.
+ */
 async function readBlobs(repo: string, entries: readonly GitTreeEntry[], signal: AbortSignal | undefined): Promise<Map<string, Buffer | null>> {
   const attempt = async (group: readonly GitTreeEntry[]) => {
     try { return await readGitBlobs(repo, group, signal); }
-    catch (error) { signal?.throwIfAborted(); return null; }
+    catch (error) {
+      signal?.throwIfAborted();
+      if (!isGitContentFault(error)) throw error;
+      return null;
+    }
   };
   const together = await attempt(entries);
   if (together) return together;
@@ -257,13 +301,14 @@ async function admitAuthored(
     tree = new Map((await readGitTree(request.repo, request.revision, ctx.signal)).map((entry): [string, GitTreeEntry] => [entry.path, entry]));
   } catch (error) {
     ctx.signal?.throwIfAborted();
+    if (!isGitContentFault(error)) throw error;
     for (const { artifact } of authored) reject(artifact.id, REASON.gitRevision);
     return;
   }
-  const batches: Array<Array<{ item: Item; entry: GitTreeEntry; file: Extract<Available, { kind: "file" }> }>> = [[]];
+  const batches: Array<Array<{ item: Item; entry: GitTreeEntry; file: AvailableFile }>> = [[]];
   let batchBytes = 0;
   for (const item of authored) {
-    const file = item.artifact as Extract<Available, { kind: "file" }>;
+    const file = item.artifact as AvailableFile;
     const entry = tree.get(file.content.location.path);
     if (!entry) reject(file.id, REASON.gitMissing);
     else if (!REGULAR_GIT_MODES.includes(entry.mode)) reject(file.id, REASON.gitNonRegular);
@@ -300,8 +345,8 @@ async function admitPayload(
     root = await open(request.pin.payloadRoot, O_RDONLY | O_DIRECTORY);
   } catch (error) {
     ctx.signal?.throwIfAborted();
-    const code = (error as NodeJS.ErrnoException | null)?.code;
-    if (!(error instanceof Rejection) && (typeof code !== "string" || RESOURCE_ERRORS.includes(code))) throw error;
+    const code = errnoOf(error);
+    if (!(error instanceof Rejection) && (code === undefined || RESOURCE_ERRORS.includes(code))) throw error;
     for (const { artifact } of payload) reject(artifact.id, REASON.payloadRoot);
     return;
   }
@@ -320,7 +365,8 @@ async function admitPayload(
         stored.set(artifact.id, dest);
       } catch (error) {
         ctx.signal?.throwIfAborted();
-        reject(artifact.id, reasonFor(error));
+        if (!(error instanceof Rejection)) throw error;
+        reject(artifact.id, error.reason);
         await rm(dest, { recursive: true, force: true });
       }
     }
@@ -329,39 +375,70 @@ async function admitPayload(
   }
 }
 
-/** Maps an artifact to the compilations it degrades: references, transformation lineage, then upstream consumers. */
+/** Every artifact id a compilation names directly (inputs, root members, original/resource/output lists, path sets). */
+function forEachReference(compilation: BuildCompilation, visit: (artifactId: string, upstreamCompilationId: string | null) => void): void {
+  for (const id of compilation.inputArtifactIds) visit(id, null);
+  for (const root of compilation.sourceRoots) for (const member of root.members) visit(member.artifactId, null);
+  for (const id of compilation.authoredArtifactIds) visit(id, null);
+  for (const id of compilation.resourceArtifactIds) visit(id, null);
+  for (const id of compilation.outputArtifactIds) visit(id, null);
+  const options = compilation.compiler.moduleOptions;
+  const pathSets = [compilation.compileClasspath, compilation.modulePath, compilation.processorPath,
+    ...(options ? [options.sourcePath, options.bootClasspath, ...(options.patchModules ?? []).map((patch) => patch.path)] : [])];
+  for (const set of pathSets) for (const entry of set.entries) visit(entry.artifactId, entry.upstreamCompilationId);
+}
+
+/**
+ * Maps an artifact to the compilations it degrades: direct references, transformation lineage (an output
+ * is only as good as its inputs), then every consumer of an upstream compilation. The graph is built on
+ * first use, so an admission without rejections never pays for it; each transformation is expanded once
+ * per compilation however many inputs and outputs it lists.
+ */
 function scopeResolver(manifest: BuildEvidenceManifest): (artifactId: string) => string[] {
-  const lineage = new Map<string, string[]>();
-  for (const transformation of manifest.transformations) {
-    for (const output of transformation.outputArtifactIds) lineage.set(output, [...(lineage.get(output) ?? []), ...transformation.inputArtifactIds]);
-  }
-  const reaches = new Map<string, Set<string>>();
-  const consumers = new Map<string, string[]>();
-  for (const compilation of manifest.compilations) {
-    const options = compilation.compiler.moduleOptions;
-    const pathSets = [compilation.compileClasspath, compilation.modulePath, compilation.processorPath,
-      ...(options ? [options.sourcePath, options.bootClasspath, ...(options.patchModules ?? []).map((patch) => patch.path)] : [])];
-    const pending = [
-      ...compilation.inputArtifactIds, ...compilation.sourceRoots.flatMap((root) => root.members.map((member) => member.artifactId)),
-      ...compilation.authoredArtifactIds, ...compilation.resourceArtifactIds, ...compilation.outputArtifactIds,
-    ];
-    for (const entry of pathSets.flatMap((set) => set.entries)) {
-      pending.push(entry.artifactId);
-      if (entry.upstreamCompilationId !== null) consumers.set(entry.upstreamCompilationId, [...(consumers.get(entry.upstreamCompilationId) ?? []), compilation.id]);
+  let graph: { reaches: Map<string, Set<string>>; consumers: Map<string, string[]> } | undefined;
+  const build = () => {
+    const producers = new Map<string, number[]>();
+    manifest.transformations.forEach((transformation, index) => {
+      for (const output of transformation.outputArtifactIds) {
+        const list = producers.get(output);
+        if (list) list.push(index); else producers.set(output, [index]);
+      }
+    });
+    const reaches = new Map<string, Set<string>>();
+    const consumers = new Map<string, string[]>();
+    for (const compilation of manifest.compilations) {
+      const seen = new Set<string>();
+      const expanded = new Set<number>();
+      const pending: string[] = [];
+      const reach = (artifactId: string) => { if (!seen.has(artifactId)) { seen.add(artifactId); pending.push(artifactId); } };
+      forEachReference(compilation, (artifactId, upstream) => {
+        reach(artifactId);
+        if (upstream === null) return;
+        const list = consumers.get(upstream);
+        if (list) list.push(compilation.id); else consumers.set(upstream, [compilation.id]);
+      });
+      for (let id = pending.pop(); id !== undefined; id = pending.pop()) {
+        for (const index of producers.get(id) ?? []) {
+          if (expanded.has(index)) continue;
+          expanded.add(index);
+          for (const input of manifest.transformations[index]!.inputArtifactIds) reach(input);
+        }
+      }
+      reaches.set(compilation.id, seen);
     }
-    const seen = new Set<string>();
-    for (let id = pending.pop(); id !== undefined; id = pending.pop()) {
-      if (seen.has(id)) continue;
-      seen.add(id);
-      pending.push(...(lineage.get(id) ?? []));
-    }
-    reaches.set(compilation.id, seen);
-  }
+    return { reaches, consumers };
+  };
+  const memo = new Map<string, string[]>();
   return (artifactId) => {
-    const affected = new Set(manifest.compilations.filter((compilation) => reaches.get(compilation.id)!.has(artifactId)).map((compilation) => compilation.id));
+    const known = memo.get(artifactId);
+    if (known) return known;
+    graph ??= build();
+    const affected = new Set(manifest.compilations.filter((compilation) => graph!.reaches.get(compilation.id)!.has(artifactId)).map((compilation) => compilation.id));
     // A Set iteration also visits entries added meanwhile, so this walks the whole upstream-consumer closure.
-    for (const id of affected) for (const consumer of consumers.get(id) ?? []) affected.add(consumer);
-    return manifest.compilations.filter((compilation) => affected.has(compilation.id)).map((compilation) => compilation.id);
+    for (const id of affected) for (const consumer of graph.consumers.get(id) ?? []) affected.add(consumer);
+    const scopes = manifest.compilations.filter((compilation) => affected.has(compilation.id)).map((compilation) => compilation.id);
+    memo.set(artifactId, scopes);
+    return scopes;
   };
 }
 
@@ -421,45 +498,80 @@ async function admit(request: BuildEvidenceRequest, manifest: BuildEvidenceManif
   const payload = candidates.filter(({ artifact }) => artifact.origin !== "authored");
   if (payload.length > 0) await admitPayload(request, payload, reject, stored, ctx);
 
+  // Source roots are rebuilt from explicit verified members only. A member whose manifest-chosen relative path
+  // cannot be laid out is itself rejected, which can degrade more compilations, so the layout repeats until
+  // every undegraded compilation has its roots and every degraded one has none.
   const scopesOf = scopeResolver(manifest);
+  const kinds = new Map(manifest.artifacts.map((artifact): [string, BuildArtifact["kind"]] => [artifact.id, artifact.kind]));
+  const built = new Map<string, { index: number; roots: FrozenSourceRoot[] }>();
+  const rootsDir = (index: number) => join(scratch, "roots", String(index));
+  const layoutRoots = async (compilation: BuildCompilation, index: number): Promise<FrozenSourceRoot[]> => {
+    const roots: FrozenSourceRoot[] = [];
+    for (const [rootIndex, root] of compilation.sourceRoots.entries()) {
+      const path = join(rootsDir(index), String(rootIndex));
+      await mkdir(path, { recursive: true, mode: 0o700 });
+      const memberIds: string[] = [];
+      for (const member of root.members) {
+        ctx.signal?.throwIfAborted();
+        const source = reasons.has(member.artifactId) ? undefined : stored.get(member.artifactId);
+        if (source === undefined || kinds.get(member.artifactId) !== "file") continue;
+        const target = join(path, member.relativePath);
+        try {
+          await mkdir(dirname(target), { recursive: true, mode: 0o700 });
+          await copyFile(source, target, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
+        } catch (error) {
+          throw errnoOf(error) === "ENAMETOOLONG" ? new LayoutFault(member.artifactId) : error;
+        }
+        memberIds.push(member.artifactId);
+      }
+      roots.push({ rootId: root.id, path, memberIds });
+    }
+    return roots;
+  };
+  for (;;) {
+    const degraded = new Set<string>();
+    for (const id of reasons.keys()) for (const scope of scopesOf(id)) degraded.add(scope);
+    for (const [id, { index }] of [...built]) {
+      if (!degraded.has(id)) continue;
+      await rm(rootsDir(index), { recursive: true, force: true });
+      built.delete(id);
+    }
+    let laidOut = true;
+    for (const [index, compilation] of manifest.compilations.entries()) {
+      if (degraded.has(compilation.id) || built.has(compilation.id)) continue;
+      try {
+        built.set(compilation.id, { index, roots: await layoutRoots(compilation, index) });
+      } catch (error) {
+        if (!(error instanceof LayoutFault)) throw error;
+        reject(error.artifactId, REASON.tooLong);
+        await rm(rootsDir(index), { recursive: true, force: true });
+        await rm(stored.get(error.artifactId)!, { force: true });
+        laidOut = false;
+        break;
+      }
+    }
+    if (laidOut) break;
+  }
+
   const rejected = manifest.artifacts.filter((artifact) => reasons.has(artifact.id))
     .map((artifact): ArtifactRejection => ({ artifactId: artifact.id, reason: reasons.get(artifact.id)!, compilationIds: scopesOf(artifact.id) }));
-  const degraded = new Set(rejected.flatMap((entry) => entry.compilationIds));
   const available = new Map<string, { artifact: BuildArtifact; path: string }>();
   for (const { artifact } of items) {
     const path = stored.get(artifact.id);
     if (path !== undefined && !reasons.has(artifact.id)) available.set(artifact.id, { artifact, path });
   }
-
-  // Source roots are rebuilt from explicit verified members only; a degraded compilation publishes none.
   const sourceRoots = new Map<string, readonly FrozenSourceRoot[]>();
-  for (const [compilationIndex, compilation] of manifest.compilations.entries()) {
-    if (degraded.has(compilation.id)) continue;
-    const roots: FrozenSourceRoot[] = [];
-    for (const [rootIndex, root] of compilation.sourceRoots.entries()) {
-      const path = join(scratch, "roots", String(compilationIndex), String(rootIndex));
-      await mkdir(path, { recursive: true, mode: 0o700 });
-      const memberIds: string[] = [];
-      for (const member of root.members) {
-        ctx.signal?.throwIfAborted();
-        const source = available.get(member.artifactId);
-        if (source?.artifact.kind !== "file") continue;
-        const target = join(path, member.relativePath);
-        await mkdir(dirname(target), { recursive: true, mode: 0o700 });
-        await copyFile(source.path, target, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
-        memberIds.push(member.artifactId);
-      }
-      roots.push({ rootId: root.id, path, memberIds });
-    }
-    sourceRoots.set(compilation.id, roots);
+  for (const compilation of manifest.compilations) {
+    const frozen = built.get(compilation.id);
+    if (frozen) sourceRoots.set(compilation.id, frozen.roots);
   }
   return { available, rejected, sourceRoots };
 }
 
 /**
- * Admits and freezes every available artifact of one manifest. Failures reject the artifact (with every
- * scope that depends on it) and never the rest; cancellation or an unexpected host failure removes the
- * scratch created here and publishes nothing.
+ * Admits and freezes every available artifact of one manifest. Failures of an artifact reject it (with every
+ * scope that depends on it) and never the rest; cancellation or a host failure removes the scratch created
+ * here, rejects the call and publishes nothing.
  */
 export async function freezeBuildArtifacts(request: BuildEvidenceRequest, manifest: BuildEvidenceManifest): Promise<FrozenBuildArtifacts> {
   const signal = request.signal;

@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync,
@@ -6,11 +6,44 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildEvidenceSchema, type BuildEvidenceRequest } from "../src/build-evidence-contract.js";
 import { freezeBuildArtifacts, type FrozenBuildArtifacts } from "../src/build-artifacts.js";
 import { readGitBlobs, readGitTree } from "../src/git-objects.js";
 import { createBuildFixture, fixtureGit, fixtureRequest, type BuildFixture, type FixtureSide } from "./build-evidence-fixture.js";
+import type * as FsPromises from "node:fs/promises";
+import type * as GitObjects from "../src/git-objects.js";
+
+// Failure injection at two host boundaries. Everything delegates to the real implementation unless a test arms a
+// hook: the Git readers (to land cancellation or a host failure exactly between two Git operations) and `open` (to
+// produce permission and read-only errors that a root-run suite cannot create with chmod).
+const hooks = vi.hoisted(() => ({
+  tree: undefined as (() => void) | undefined,
+  blobs: undefined as (() => void) | undefined,
+  open: undefined as ((path: string) => Error | undefined) | undefined,
+}));
+vi.mock("../src/git-objects.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof GitObjects>();
+  return {
+    ...actual,
+    readGitTree: (...args: Parameters<typeof actual.readGitTree>) => { hooks.tree?.(); return actual.readGitTree(...args); },
+    readGitBlobs: (...args: Parameters<typeof actual.readGitBlobs>) => { hooks.blobs?.(); return actual.readGitBlobs(...args); },
+  };
+});
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof FsPromises>();
+  return {
+    ...actual,
+    open: (path: unknown, ...rest: unknown[]) => {
+      const failed = hooks.open?.(String(path));
+      return failed ? Promise.reject(failed) : (actual.open as (...args: unknown[]) => Promise<unknown>)(path, ...rest);
+    },
+  };
+});
+afterEach(() => { hooks.tree = undefined; hooks.blobs = undefined; hooks.open = undefined; });
+const failure = (code: string) => Object.assign(new Error(`injected ${code}`), { code });
 
 // Manifests are mutated as loose JSON on purpose (as in the contract tests): admission must stay safe even when
 // it is handed a manifest that never went through the strict parser, so each case changes exactly one thing.
@@ -91,8 +124,8 @@ function expectNoOrphans(c: Case, frozen: FrozenBuildArtifacts): void {
   expect(filesUnder(join(c.runtime, scratch!)).length).toBe(served.reduce((sum, n) => sum + n, 0));
 }
 
-const extraFile = (id: string, path: string, bytes: Uint8Array): Json => ({
-  id, kind: "file", role: "resource", origin: "external", repositoryPath: null, availability: "available",
+const extraFile = (id: string, path: string, bytes: Uint8Array, role = "resource"): Json => ({
+  id, kind: "file", role, origin: "external", repositoryPath: null, availability: "available",
   content: { location: { kind: "payload", path }, sha256: sha256(bytes), sizeBytes: bytes.length }, encoding: null,
 });
 const extraDirectory = (id: string, path: string, entries: Json[] = []): Json => ({
@@ -134,6 +167,117 @@ function bulk(c: Case, count: number): { request: BuildEvidenceRequest; manifest
   buildEvidenceSchema.parse(manifest);
   return { manifest, payload, request: { ...c.request, pin: { ...c.request.pin!, payloadRoot: payload } } };
 }
+
+/** Every entry (files, directories, symlinks) below `dir`, relative and sorted, so an empty leftover directory counts too. */
+function everything(dir: string, prefix = ""): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+    return entry.isDirectory() ? [path, ...everything(join(dir, entry.name), path)] : [path];
+  }).sort();
+}
+
+/** A real AbortSignal whose `poll`-th `throwIfAborted()` call aborts it, so cancellation lands at an exact, repeatable point. */
+function abortingAt(poll: number): { signal: AbortSignal; polls: () => number } {
+  const controller = new AbortController();
+  let polls = 0;
+  const signal = new Proxy(controller.signal, {
+    get(target, property) {
+      if (property === "throwIfAborted") return () => { if (++polls === poll) controller.abort(); target.throwIfAborted(); };
+      const value = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return { signal, polls: () => polls };
+}
+
+/** One admission input set: request, manifest and the payload directory that must come out of any run unchanged. */
+type Run = { request: BuildEvidenceRequest; manifest: Json; payload: string };
+
+/** Total `throwIfAborted()` polls of an uncancelled admission, measured in a runtime directory of its own. */
+async function pollsOf(run: Run): Promise<number> {
+  const probe = abortingAt(Number.POSITIVE_INFINITY);
+  await freezeBuildArtifacts({ ...run.request, runtimeDir: `${run.request.runtimeDir}-probe`, signal: probe.signal }, run.manifest);
+  return probe.polls();
+}
+
+/** Runtime state owned by someone else, which cancellation must never touch. */
+function withBystanders(runtime: string): string[] {
+  mkdirSync(join(runtime, "bystander-dir"), { recursive: true });
+  writeFileSync(join(runtime, "bystander.txt"), "owned by someone else");
+  writeFileSync(join(runtime, "bystander-dir/keep.txt"), "kept");
+  return everything(runtime);
+}
+
+async function expectCancelledAtEveryPoll(run: Run, polls: readonly number[]): Promise<void> {
+  const bystanders = withBystanders(run.request.runtimeDir);
+  const payloadBefore = treeDigest(run.payload);
+  for (const poll of polls) {
+    const { signal } = abortingAt(poll);
+    await expect(freezeBuildArtifacts({ ...run.request, signal }, run.manifest), `cancelled at poll ${poll}`)
+      .rejects.toMatchObject({ name: "AbortError" });
+    expect(everything(run.request.runtimeDir), `scratch or stray file left after cancelling at poll ${poll}`).toEqual(bystanders);
+    expect(treeDigest(run.payload), `payload changed after cancelling at poll ${poll}`).toEqual(payloadBefore);
+  }
+  expect(readFileSync(join(run.request.runtimeDir, "bystander-dir/keep.txt"), "utf8")).toBe("kept");
+}
+
+/** A standalone, strictly valid manifest of payload artifacts written by `build`, with its own payload and runtime directories. */
+function scenario(c: Case, name: string, build: (write: (path: string, bytes: Uint8Array) => void) => Json[], compilations: Json[] = []): Run {
+  const payload = join(c.dir, `${name}-payload`);
+  mkdirSync(payload, { recursive: true });
+  const write = (path: string, bytes: Uint8Array) => { mkdirSync(join(payload, dirname(path)), { recursive: true }); writeFileSync(join(payload, path), bytes); };
+  const manifest = { ...structuredClone(c.manifest), artifacts: build(write), compilations, transformations: [], diagnostics: [] };
+  buildEvidenceSchema.parse(manifest);
+  return { manifest, payload, request: { ...c.request, runtimeDir: join(c.dir, `${name}-runtime`), pin: { ...c.request.pin!, payloadRoot: payload } } };
+}
+
+const emptyFiles = (count: number, role: string) => (write: (path: string, bytes: Uint8Array) => void): Json[] =>
+  Array.from({ length: count }, (_, n) => {
+    const path = `empty/f${String(n).padStart(2, "0")}.txt`;
+    write(path, Buffer.alloc(0));
+    return extraFile(`f${n}`, path, Buffer.alloc(0), role);
+  });
+
+/** `count` authored originals committed to a private clone, with a manifest that claims all of them. */
+function authoredScenario(f: BuildFixture, count: number): Run {
+  const repo = cloneOf(f);
+  const files = Array.from({ length: count }, (_, n) => ({ path: `many/a${String(n).padStart(2, "0")}.txt`, bytes: Buffer.from(`authored ${n}\n`) }));
+  for (const { path, bytes } of files) {
+    mkdirSync(join(repo, dirname(path)), { recursive: true });
+    writeFileSync(join(repo, path), bytes);
+  }
+  fixtureGit(repo, "add", "-A");
+  const revision = commitIn(repo);
+  const c = setup(f);
+  const manifest = {
+    ...structuredClone(c.manifest), compilations: [], transformations: [], diagnostics: [],
+    artifacts: files.map(({ path, bytes }, n) => ({ ...extraAuthored(`authored-${n}`, path, bytes), encoding: "UTF-8" })),
+  };
+  buildEvidenceSchema.parse(manifest);
+  return { manifest, payload: c.payload, request: { ...c.request, repo, revision } };
+}
+
+/** A valid compilation (cloned from the fixture's test scope) with only the given fields changed. */
+function compilationOver(c: Case, id: string, patch: Json): Json {
+  return Object.assign(structuredClone(comp(c.manifest, "test")), {
+    id, inputArtifactIds: [], sourceRoots: [], authoredArtifactIds: [], resourceArtifactIds: [], outputArtifactIds: [],
+    compileClasspath: { state: "complete", reason: null, entries: [] },
+  }, patch);
+}
+
+/** A complete path set naming one artifact, optionally as the output of an upstream compilation. */
+const complete = (artifactId: string, upstreamCompilationId: string | null = null): Json => ({
+  state: "complete", reason: null, entries: [{ artifactId, coordinates: null, upstreamCompilationId }],
+});
+
+/** A nonavailable artifact: a gap that is resolvable by reference but supplies no bytes. */
+const gap = (id: string, availability: string, role = "resource"): Json => ({
+  id, kind: "file", role, origin: "materialized", repositoryPath: null, availability, reason: "not captured",
+});
+const producedBy = (id: string, inputs: string[], outputs: string[]): Json => ({
+  id, producer: { name: "fixture-hop", version: null, executionId: `${id}-run` }, kind: "transform",
+  inputArtifactIds: inputs, outputArtifactIds: outputs, basis: "exporter-recorded", locations: [],
+});
 
 describe("build artifact admission", () => {
   describe("authored originals and transformed outputs", () => {
@@ -619,6 +763,118 @@ describe("build artifact admission", () => {
       expect(generated.memberIds).toEqual([]);
       expect(frozen.sourceRoots.get("prod")!.find((root) => root.rootId === "authored-main")!.memberIds).toEqual(["consumer-original"]);
     });
+
+    // The old quadratic lineage copy needs gigabytes at this size. The case runs in a child process with a 512 MiB heap
+    // so that a regression is a clean child failure (not a parent OOM) and no wall-clock threshold is involved.
+    it("propagates through one transformation of 20,000 inputs and 20,000 outputs within a 512 MiB heap", async () => {
+      const size = 20_000;
+      const c = setup(valid);
+      const payload = join(c.dir, "scale-payload");
+      mkdirSync(payload, { recursive: true });
+      const stale = Buffer.from("these bytes do not match their claimed hash\n");
+      const safe = Buffer.from("unrelated and intact\n");
+      writeFileSync(join(payload, "input-0.txt"), stale);
+      writeFileSync(join(payload, "safe.txt"), safe);
+      const tampered = extraFile("input-0", "input-0.txt", stale);
+      tampered.content.sha256 = HASH;
+      const inputs = Array.from({ length: size }, (_, n) => `input-${n}`);
+      const outputs = Array.from({ length: size }, (_, n) => `output-${n}`);
+      const manifest = {
+        ...structuredClone(c.manifest),
+        artifacts: [tampered, ...inputs.slice(1).map((id) => gap(id, "missing")), ...outputs.map((id) => gap(id, "not-produced")), extraFile("safe", "safe.txt", safe)],
+        compilations: [compilationOver(c, "scale", { outputArtifactIds: outputs }), compilationOver(c, "other", { outputArtifactIds: ["safe"] })],
+        transformations: [producedBy("many-to-many", inputs, outputs)],
+        diagnostics: [],
+      };
+      buildEvidenceSchema.parse(manifest);
+      const input = join(c.dir, "scale-input.json");
+      writeFileSync(input, JSON.stringify({ request: { ...c.request, pin: { ...c.request.pin!, payloadRoot: payload } }, manifest }));
+      const root = fileURLToPath(new URL("..", import.meta.url));
+      const program = [
+        'import { readFileSync } from "node:fs";',
+        `import { freezeBuildArtifacts } from ${JSON.stringify(pathToFileURL(join(root, "src/build-artifacts.ts")).href)};`,
+        "const { request, manifest } = JSON.parse(readFileSync(process.env.SCALE_INPUT, 'utf8'));",
+        "const frozen = await freezeBuildArtifacts(request, manifest);",
+        "process.stdout.write(JSON.stringify({ rejected: frozen.rejected,",
+        "  available: Object.fromEntries([...frozen.available].map(([id, stored]) => [id, stored.path])), roots: [...frozen.sourceRoots.keys()] }));",
+      ].join("\n");
+      const { stdout } = await promisify(execFile)(
+        process.execPath, ["--max-old-space-size=512", "--import", "tsx", "--input-type=module", "--eval", program],
+        { cwd: root, env: { ...process.env, SCALE_INPUT: input }, maxBuffer: 16 << 20, timeout: 110_000 },
+      );
+      const result = JSON.parse(stdout) as { rejected: FrozenBuildArtifacts["rejected"]; available: Record<string, string>; roots: string[] };
+      const frozen = {
+        rejected: result.rejected,
+        available: new Map(Object.entries(result.available).map(([id, path]) => [id, { artifact: art(manifest, id), path }])),
+        sourceRoots: new Map(result.roots.map((id) => [id, []])),
+      } as FrozenBuildArtifacts;
+      expect(frozen.rejected).toHaveLength(1);
+      rejected(frozen, "input-0", /size or hash/, ["scale"]);
+      expect(frozen.sourceRoots.has("scale")).toBe(false);
+      expect(frozen.sourceRoots.has("other")).toBe(true);
+      expect([...frozen.available.keys()]).toEqual(["safe"]);
+      expect(bytesOf(frozen, "safe")).toEqual(safe);
+    }, 120_000);
+
+    it("follows lineage across several transformations to every compilation that reaches the failed input", async () => {
+      const c = setup(inPlace);
+      put(c, "chain/a.txt", "stage a\n");
+      c.manifest.artifacts.push(extraFile("stage-a", "chain/a.txt", Buffer.from("stage a\n")), gap("stage-b", "missing"), gap("stage-c", "missing"));
+      c.manifest.transformations.push(producedBy("hop-1", ["stage-a"], ["stage-b"]), producedBy("hop-2", ["stage-b"], ["stage-c"]));
+      c.manifest.compilations.push(
+        compilationOver(c, "reaches-c", { resourceArtifactIds: ["stage-c"] }),
+        compilationOver(c, "reaches-b", { resourceArtifactIds: ["stage-b"] }),
+        compilationOver(c, "unrelated", {}),
+      );
+      buildEvidenceSchema.parse(c.manifest);
+      art(c.manifest, "stage-a").content.sha256 = HASH;
+      const frozen = await freeze(c);
+      rejected(frozen, "stage-a", /size or hash/, ["reaches-b", "reaches-c"]);
+      expect(frozen.rejected).toHaveLength(1);
+      for (const id of ["reaches-b", "reaches-c"]) expect(frozen.sourceRoots.has(id), id).toBe(false);
+      for (const id of ["unrelated", "prod", "test"]) expect(frozen.sourceRoots.has(id), id).toBe(true);
+    });
+
+    it.each([
+      ["modulePath", (x: Json, id: string) => { x.modulePath = complete(id); }],
+      ["processorPath", (x: Json, id: string) => { x.processorPath = complete(id); }],
+      ["compiler sourcePath", (x: Json, id: string) => { x.compiler.moduleOptions.sourcePath = complete(id); }],
+      ["compiler bootClasspath", (x: Json, id: string) => { x.compiler.moduleOptions.bootClasspath = complete(id); }],
+      ["compiler patchModules path", (x: Json, id: string) => { x.compiler.moduleOptions.patchModules = [{ module: "m", path: complete(id) }]; }],
+      ["compileClasspath entry that names no upstream compilation", (x: Json, id: string) => { x.compileClasspath = complete(id); }],
+    ])("degrades a compilation that reaches the failed artifact through its %s", async (_label, wire) => {
+      const c = setup(inPlace);
+      put(c, "deps/library.bin", "library bytes\n");
+      c.manifest.artifacts.push(extraFile("library", "deps/library.bin", Buffer.from("library bytes\n"), "dependency"));
+      const via = compilationOver(c, "via-path", {});
+      wire(via, "library");
+      c.manifest.compilations.push(via);
+      buildEvidenceSchema.parse(c.manifest);
+      art(c.manifest, "library").content.sha256 = HASH;
+      const frozen = await freeze(c);
+      rejected(frozen, "library", /size or hash/, ["via-path"]);
+      expect(frozen.sourceRoots.has("via-path")).toBe(false);
+      for (const id of ["prod", "test"]) expect(frozen.sourceRoots.has(id), id).toBe(true);
+    });
+
+    it.each([
+      ["a production input", "consumer-original", ["chain-x", "chain-y", "prod", "test"]],
+      ["a test-only original", "pricing-test", ["chain-x", "chain-y", "test"]],
+    ])("degrades every scope downstream of an upstream compilation through several hops: %s", async (_label, id, scopes) => {
+      const c = setup(inPlace);
+      c.manifest.artifacts.push(gap("x-out", "not-produced", "classes"));
+      c.manifest.compilations.push(
+        compilationOver(c, "chain-x", { outputArtifactIds: ["x-out"], compileClasspath: complete("test-classes", "test") }),
+        compilationOver(c, "chain-y", { compileClasspath: complete("x-out", "chain-x") }),
+        compilationOver(c, "bystander", {}),
+      );
+      buildEvidenceSchema.parse(c.manifest);
+      art(c.manifest, id).content.sha256 = HASH;
+      const frozen = await freeze(c);
+      rejected(frozen, id, /size or hash/, scopes);
+      for (const scope of ["prod", "test", "chain-x", "chain-y"]) expect(frozen.sourceRoots.has(scope), scope).toBe(!scopes.includes(scope));
+      expect(frozen.sourceRoots.has("bystander")).toBe(true);
+    });
   });
 
   describe("source root layout", () => {
@@ -688,7 +944,7 @@ describe("build artifact admission", () => {
       });
   });
 
-  describe("scale and cancellation", () => {
+  describe("scale", () => {
     it("admits 2,001 ordinary payload artifacts without a default count gate", async () => {
       const { request, manifest } = bulk(setup(valid), 2001);
       const frozen = await freezeBuildArtifacts(request, manifest);
@@ -698,6 +954,14 @@ describe("build artifact admission", () => {
       for (const n of [0, 1000, 2000]) expect(readFileSync(frozen.available.get(`bulk-${n}`)!.path, "utf8")).toBe(`ordinary artifact ${n}\n`);
     });
 
+  });
+
+  describe("cancellation", () => {
+    const inPlaceRun = (): Run => {
+      const c = setup(inPlace);
+      return { request: c.request, manifest: c.manifest, payload: c.payload };
+    };
+
     it("a signal aborted before the call rejects with the abort reason and creates nothing", async () => {
       const c = setup(inPlace);
       const listing = filesUnder(c.payload);
@@ -706,26 +970,171 @@ describe("build artifact admission", () => {
       expect(filesUnder(c.payload)).toEqual(listing);
     });
 
-    it("an abort during admission publishes no admission, removes only its own scratch and leaves inputs intact", async () => {
-      const { request, manifest, payload } = bulk(setup(valid), 2001);
-      const listing = filesUnder(payload);
-      const controller = new AbortController();
-      const pending = freezeBuildArtifacts({ ...request, signal: controller.signal }, manifest);
-      controller.abort();
-      await expect(pending).rejects.toMatchObject({ name: "AbortError" });
-      expect(existsSync(request.runtimeDir) ? readdirSync(request.runtimeDir) : []).toEqual([]);
-      expect(filesUnder(payload)).toEqual(listing);
+    it("stops at every successive poll of a real admission, removing only its own scratch and touching no input", async () => {
+      const r = inPlaceRun();
+      const total = await pollsOf(r);
+      // Git blobs, payload files, directory members and source-root members are all polled inside one admission.
+      expect(total).toBeGreaterThan(15);
+      await expectCancelledAtEveryPoll(r, Array.from({ length: total }, (_, i) => i + 1));
+      const completed = await freezeBuildArtifacts(r.request, r.manifest);
+      expect(completed.rejected).toEqual([]);
+      expect(completed.available.size).toBeGreaterThan(0);
     });
 
-    it("leaves a pre-existing sibling in the runtime directory alone when admission is cancelled", async () => {
-      const { request, manifest } = bulk(setup(valid), 300);
-      mkdirSync(request.runtimeDir, { recursive: true });
-      writeFileSync(join(request.runtimeDir, "unrelated.txt"), "owned by someone else");
+    it("cancels in the middle of a streamed file and discards the partial copy", async () => {
+      const c = setup(valid);
+      const big = scenario(c, "big", (write) => {
+        write("big/blob.bin", Buffer.alloc(3 * 1024 * 1024, 0x61));
+        return [extraFile("big", "big/blob.bin", Buffer.alloc(3 * 1024 * 1024, 0x61))];
+      });
+      const small = scenario(c, "small", (write) => {
+        write("big/blob.bin", Buffer.from("x"));
+        return [extraFile("small", "big/blob.bin", Buffer.from("x"))];
+      });
+      const [bigPolls, smallPolls] = [await pollsOf(big), await pollsOf(small)];
+      // Streaming itself is polled: at least once per half MiB of the 3 MiB file.
+      expect(bigPolls - smallPolls).toBeGreaterThanOrEqual(5);
+      await expectCancelledAtEveryPoll(big, Array.from({ length: bigPolls }, (_, i) => i + 1));
+    });
+
+    it("polls at least once per artifact, directory member, Git blob and source-root member", async () => {
+      const c = setup(valid);
+      const members = Array.from({ length: 30 }, (_, n) => `m${String(n).padStart(2, "0")}.class`);
+      const none = scenario(c, "none", () => []);
+      const plain = scenario(c, "plain", emptyFiles(30, "source"));
+      const rooted = scenario(c, "rooted", emptyFiles(30, "source"), [compilationOver(c, "rooted", {
+        inputArtifactIds: Array.from({ length: 30 }, (_, n) => `f${n}`),
+        sourceRoots: [{ id: "many", repositoryPath: null, members: Array.from({ length: 30 }, (_, n) => ({ artifactId: `f${n}`, relativePath: `p/F${n}.java` })) }],
+      })]);
+      const directory = scenario(c, "directory", (write) => {
+        for (const name of members) write(`classes/many/${name}`, Buffer.alloc(0));
+        return [extraDirectory("many", "classes/many", members.map((path) => ({ path, sha256: sha256(Buffer.alloc(0)), sizeBytes: 0 })))];
+      });
+      const base = await pollsOf(none);
+      // Each of 30 artifacts is polled when reached and again while its (empty) copy streams.
+      expect((await pollsOf(plain)) - base).toBeGreaterThanOrEqual(60);
+      // Placing 30 verified members into a source root polls once per member.
+      expect((await pollsOf(rooted)) - (await pollsOf(plain))).toBeGreaterThanOrEqual(30);
+      // A directory polls once per entry it walks and once per member copy.
+      expect((await pollsOf(directory)) - base).toBeGreaterThanOrEqual(60);
+      // Each authored blob is polled before it is verified and written.
+      expect((await pollsOf(authoredScenario(valid, 30))) - base).toBeGreaterThanOrEqual(30);
+    });
+
+    it.each([
+      ["listing the pinned tree", (stop: () => void) => { hooks.tree = stop; }],
+      ["reading the pinned blobs", (stop: () => void) => { hooks.blobs = stop; }],
+    ])("cancels while Git is %s", async (_label, arm) => {
+      const r = inPlaceRun();
+      const bystanders = withBystanders(r.request.runtimeDir);
+      const payloadBefore = treeDigest(r.payload);
       const controller = new AbortController();
-      const pending = freezeBuildArtifacts({ ...request, signal: controller.signal }, manifest);
-      controller.abort();
-      await expect(pending).rejects.toMatchObject({ name: "AbortError" });
-      expect(readdirSync(request.runtimeDir)).toEqual(["unrelated.txt"]);
+      arm(() => controller.abort());
+      await expect(freezeBuildArtifacts({ ...r.request, signal: controller.signal }, r.manifest)).rejects.toMatchObject({ name: "AbortError" });
+      expect(everything(r.request.runtimeDir)).toEqual(bystanders);
+      expect(treeDigest(r.payload)).toEqual(payloadBefore);
+    });
+  });
+
+  describe("host failures versus artifact faults", () => {
+    it.each([
+      ["a repository directory that does not exist", (c: Case) => join(c.dir, "no-such-repository")],
+      ["a repository path that is a file", (c: Case) => livePath(c, "app-resource-output")],
+    ])("rejects the whole call, not every original, when the Git process cannot run in %s", async (_label, repository) => {
+      const c = setup(inPlace);
+      const bystanders = withBystanders(c.runtime);
+      c.request = { ...c.request, repo: repository(c) };
+      await expect(freeze(c)).rejects.toMatchObject({ code: expect.stringMatching(/^E(NOENT|NOTDIR)$/) });
+      expect(everything(c.runtime)).toEqual(bystanders);
+    });
+
+    it.each([
+      ["listing the tree", (error: Error) => { hooks.tree = () => { throw error; }; }],
+      ["reading the blobs", (error: Error) => { hooks.blobs = () => { throw error; }; }],
+    ])("lets resource exhaustion while %s escape instead of degrading the originals", async (_label, arm) => {
+      const c = setup(inPlace);
+      const bystanders = withBystanders(c.runtime);
+      arm(failure("EMFILE"));
+      await expect(freeze(c)).rejects.toMatchObject({ code: "EMFILE" });
+      expect(everything(c.runtime)).toEqual(bystanders);
+    });
+
+    it.each([
+      ["a path that is not valid UTF-8", Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x2e, 0x74, 0x78, 0x74])],
+      ["a path containing a backslash", Buffer.from("back\\slash.txt")],
+    ])("rejects every authored original, not the call, when the pinned tree holds %s", async (_label, name) => {
+      const repo = cloneOf(inPlace);
+      writeFileSync(Buffer.concat([Buffer.from(`${repo}/`), name]), "content\n");
+      fixtureGit(repo, "add", "-A");
+      const c = atRevision(inPlace, { repo, revision: commitIn(repo) });
+      const frozen = await freeze(c);
+      const authored = (c.manifest.artifacts as Json[]).filter((a) => a.origin === "authored").map((a) => a.id).sort();
+      expect(frozen.rejected.map((item) => item.artifactId).sort()).toEqual(authored);
+      for (const id of authored) expect(frozen.rejected.find((item) => item.artifactId === id)!.reason).toMatch(/revision could not be read/);
+      expect(frozen.available.has("pricing-output")).toBe(true);
+    });
+
+    it("still rejects only the artifact when the payload source is unreadable", async () => {
+      const c = setup(inPlace);
+      hooks.open = (path) => (path.startsWith("/proc/self/fd/") && path.endsWith("/application.properties") ? failure("EACCES") : undefined);
+      const frozen = await freeze(c);
+      rejected(frozen, "app-resource-output", /could not be read/, ["prod", "test"]);
+      expect(frozen.rejected).toHaveLength(1);
+      expect(frozen.available.has("pricing-output")).toBe(true);
+    });
+
+    it("lets descriptor exhaustion while opening a payload source escape", async () => {
+      const c = setup(inPlace);
+      const bystanders = withBystanders(c.runtime);
+      hooks.open = (path) => (path.startsWith("/proc/self/fd/") ? failure("EMFILE") : undefined);
+      await expect(freeze(c)).rejects.toMatchObject({ code: "EMFILE" });
+      expect(everything(c.runtime)).toEqual(bystanders);
+    });
+
+    it("lets a failure writing the private copy escape instead of blaming the payload artifact", async () => {
+      const c = setup(inPlace);
+      const bystanders = withBystanders(c.runtime);
+      hooks.open = (path) => (path.startsWith(c.runtime) ? failure("EROFS") : undefined);
+      await expect(freeze(c)).rejects.toMatchObject({ code: "EROFS" });
+      expect(everything(c.runtime)).toEqual(bystanders);
+    });
+
+    it("rejects the member, not the call, when a source-root member path is too long to lay out", async () => {
+      const c = setup(inPlace);
+      comp(c.manifest, "prod").sourceRoots[0].members[1].relativePath = `example/${"n".repeat(300)}/Pricing.java`;
+      const frozen = await freeze(c);
+      rejected(frozen, "pricing-output", /too long/, ["prod", "test"]);
+      expect(frozen.rejected).toHaveLength(1);
+      expect(frozen.sourceRoots.has("prod")).toBe(false);
+      expect(frozen.available.has("consumer-original")).toBe(true);
+      expectNoOrphans(c, frozen);
+    });
+
+    it("rejects a directory whose tree is too deep for the private copy, not the call", async () => {
+      const c = setup(valid);
+      const name = "n".repeat(200);
+      const depth = 30; // about 6 KB of relative path: readable one component at a time, never as one host path
+      const payload = join(c.dir, "deep-payload");
+      const deep = scenario(c, "deep", (write) => {
+        write("ok.txt", Buffer.from("ok\n"));
+        mkdirSync(join(payload, "deep"), { recursive: true });
+        execFileSync("bash", ["-c", `for i in $(seq ${depth}); do mkdir ${name} && cd ${name} || exit 1; done; printf x > leaf.bin`], { cwd: join(payload, "deep") });
+        return [
+          extraFile("ok", "ok.txt", Buffer.from("ok\n")),
+          extraDirectory("deep-classes", "deep", [{ path: `${`${name}/`.repeat(depth)}leaf.bin`, sha256: sha256("x"), sizeBytes: 1 }]),
+        ];
+      });
+      try {
+        const frozen = await freezeBuildArtifacts(deep.request, deep.manifest);
+        rejected(frozen, "deep-classes", /too long/, []);
+        expect(frozen.rejected).toHaveLength(1);
+        expect(bytesOf(frozen, "ok").toString("utf8")).toBe("ok\n");
+        const [scratch, ...others] = readdirSync(deep.request.runtimeDir);
+        expect(others).toEqual([]);
+        expect(filesUnder(join(deep.request.runtimeDir, scratch!))).toEqual(["artifacts/0"]);
+      } finally {
+        execFileSync("rm", ["-rf", join(payload, "deep")]);
+      }
     });
   });
 
