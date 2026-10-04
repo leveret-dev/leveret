@@ -36,7 +36,7 @@ function compareUtf8(a: string, b: string): number {
 }
 
 const count = (min: number, message: string) =>
-  z.number().refine((value) => Number.isSafeInteger(value) && value >= min && !Object.is(value, -0), message);
+  z.number().refine((value) => Number.isSafeInteger(value) && value >= min, message);
 const size = count(0, "expected a nonnegative safe integer");
 const line = count(1, "expected a one-based safe integer line");
 const column = count(0, "expected a nonnegative safe integer column");
@@ -377,7 +377,11 @@ function validateDiagnostics(
   });
 }
 
-/** Strict structure plus reference graph; refinements run only after the whole shape validated. */
+/**
+ * Strict structure plus reference graph. Zod can still run this refinement after non-aborting leaf
+ * failures (`min`, `regex`, `refine`), so the graph code relies on the types being right and treats
+ * every value as untrusted: unresolved or malformed values become graph errors, never exceptions.
+ */
 export const buildEvidenceSchema = manifestSchema.superRefine((manifest, ctx) => {
   try {
     const artifacts = indexById(manifest.artifacts, "artifacts", "duplicate artifact id");
@@ -410,13 +414,50 @@ export type BuildEvidenceRequest = {
 
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 
+const DUPLICATE_KEY = "manifest repeats an object key";
+const INEXACT_NUMBER = "manifest contains a number that is not an exact safe integer";
+const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
+
 /**
- * Walks a document that already passed the standard JSON grammar check and reports whether any object
- * repeats a key after escape decoding (`id` and `\u0069d` are the same key). Structure is tracked by
- * token: strings are skipped over (so braces/commas inside them never count) and only a string in key
- * position is decoded. JSON.parse alone cannot do this because it silently keeps the last duplicate.
+ * Whether a grammar-valid JSON number token denotes, exactly, a safe integer. The decimal coefficient
+ * and scale are evaluated directly, because JSON.parse silently rounds `12.00000000000000001` to 12
+ * and `12e-999999999999` to 0. Alternate spellings of an exact integer (`1e2`, `1.0`, `-0`) are the
+ * same value and stay valid; fractional, negative nonzero and unsafe values are not.
  */
-function hasDuplicateKey(source: string): boolean {
+function isExactSafeInteger(token: string): boolean {
+  const negative = token.startsWith("-");
+  const body = negative ? token.slice(1) : token;
+  let marker = body.indexOf("e");
+  if (marker < 0) marker = body.indexOf("E");
+  const mantissa = marker < 0 ? body : body.slice(0, marker);
+  const exponent = marker < 0 ? 0 : Number(body.slice(marker + 1));
+  const dot = mantissa.indexOf(".");
+  const fraction = dot < 0 ? "" : mantissa.slice(dot + 1);
+  const digits = (dot < 0 ? mantissa : mantissa.slice(0, dot)) + fraction;
+  let first = 0;
+  while (first < digits.length && digits[first] === "0") first++;
+  if (first === digits.length) return true; // zero, however it is spelled (including -0)
+  let last = digits.length;
+  while (digits[last - 1] === "0") last--;
+  const significant = digits.slice(first, last);
+  // value = significant * 10^scale; an absurd exponent overflows Number to +/-Infinity, which still
+  // lands on the correct side of both comparisons below.
+  const scale = exponent - fraction.length + (digits.length - last);
+  if (negative || scale < 0 || significant.length + scale > 16) return false;
+  return BigInt(significant) * 10n ** BigInt(scale) <= MAX_SAFE;
+}
+
+/**
+ * Walks a document that already passed the standard JSON grammar check (so every string is terminated
+ * and every number token is well formed) and returns a safe reason for the first violation JSON.parse
+ * cannot see, or null:
+ * - an object that repeats a key after escape decoding (`id` and `\u0069d` are the same key; JSON.parse
+ *   silently keeps the last one);
+ * - a number that is not exactly a safe integer (every number in this contract is a size, line or column).
+ * Structure is tracked by token: strings are skipped as a unit, so braces, commas and quotes inside
+ * them never count, and only a string in key position is decoded.
+ */
+function lexicalViolation(source: string): string | null {
   const stack: (Set<string> | null)[] = [];
   let expectKey = false;
   for (let i = 0; i < source.length; i++) {
@@ -432,14 +473,19 @@ function hasDuplicateKey(source: string): boolean {
       if (keys) {
         const token = source.slice(i, end + 1);
         const key = token.includes("\\") ? (JSON.parse(token) as string) : token.slice(1, -1);
-        if (keys.has(key)) return true;
+        if (keys.has(key)) return DUPLICATE_KEY;
         keys.add(key);
         expectKey = false;
       }
       i = end;
+    } else if (char === "-" || (char >= "0" && char <= "9")) {
+      let end = i + 1;
+      while (end < source.length && "0123456789+-.eE".includes(source[end])) end++;
+      if (!isExactSafeInteger(source.slice(i, end))) return INEXACT_NUMBER;
+      i = end - 1;
     }
   }
-  return false;
+  return null;
 }
 
 function describeIssue(issue: z.ZodError["issues"][number]): string {
@@ -465,7 +511,8 @@ export function parseBuildEvidence(bytes: Uint8Array): BuildEvidenceManifest {
   let value: unknown;
   try { value = JSON.parse(source); }
   catch { throw new BuildEvidenceInputError("invalid-input", "manifest is not a single valid JSON document"); }
-  if (hasDuplicateKey(source)) throw new BuildEvidenceInputError("invalid-input", "manifest repeats an object key");
+  const violation = lexicalViolation(source);
+  if (violation) throw new BuildEvidenceInputError("invalid-input", violation);
   const result = buildEvidenceSchema.safeParse(value);
   if (!result.success) throw new BuildEvidenceInputError("invalid-input", describeIssue(result.error.issues[0]));
   return result.data;

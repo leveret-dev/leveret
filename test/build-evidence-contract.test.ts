@@ -98,7 +98,7 @@ describe("strict manifest decoding", () => {
     expect(buildEvidenceSchema.safeParse({ ...fx.valid.manifests.head, extra: true }).success).toBe(false);
   });
 
-  it("selects compilations by explicit ID and keeps compiler state distinct from guesses", () => {
+  it("preserves compilation IDs, source-set roles and upstream path entries as written", () => {
     const validBytes = Buffer.from(JSON.stringify(fx.valid.manifests.head));
     const parsed = parseBuildEvidence(validBytes);
     expect(parsed.compilations[0].moduleDir).toBe(".");
@@ -126,6 +126,109 @@ describe("strict manifest decoding", () => {
       // duplicate-aware decoder can reject them.
       expect(() => JSON.parse(bytes.toString("utf8"))).not.toThrow();
       rejection(bytes);
+    });
+  });
+
+  describe("duplicate detection is not confused by string content", () => {
+    const head = () => structuredClone(fx.valid.manifests.head) as Json;
+    const runIdMember = (m: Json) => `"runId":${JSON.stringify(m.producer.runId)}`;
+    /** Serializes `m`, then splices raw object members into producer right after its last key. */
+    const withMembers = (m: Json, raw: string) => {
+      const json = JSON.stringify(m);
+      expect(json).toContain(runIdMember(m));
+      return Buffer.from(json.replace(runIdMember(m), () => `${runIdMember(m)},${raw}`));
+    };
+    /** Doubles producer.runId and the top-level context (after producer); every duplicate repeats its valid value. */
+    const withRealDuplicates = (m: Json) => {
+      const context = `"context":${JSON.stringify(m.context)}`;
+      const json = JSON.stringify(m);
+      expect(json).toContain(context);
+      return Buffer.from(json
+        .replace(runIdMember(m), () => `${runIdMember(m)},${runIdMember(m)}`)
+        .replace(context, () => `${context},${context}`));
+    };
+    /**
+     * Unknown keys are schema errors too, so reasons tell the two rejections apart: the same position
+     * and a different cause must produce a different safe reason, and equal causes an equal one.
+     */
+    const reasons = () => {
+      const duplicate = rejection(withMembers(head(), '"zz":1,"zz":1')).safeReason;
+      const unknown = rejection(withMembers(head(), '"zz":1')).safeReason;
+      expect(unknown, "control: a single unknown key is a schema rejection, not a duplicate").not.toBe(duplicate);
+      return { duplicate, unknown };
+    };
+
+    it.each([
+      ["both spelled with an escaped quote", String.raw`"a\"b":1,"a\"b":1`],
+      ["escaped quote and its \\u0022 spelling", String.raw`"a\"b":1,"a\u0022b":1`],
+      ["\\u0022 spelling and the escaped quote", String.raw`"a\u0022b":1,"a\"b":1`],
+      ["a key that is a single escaped quote", String.raw`"\"":1,"\"":1`],
+      ["a key ending in an escaped backslash", String.raw`"a\\":1,"a\\":1`],
+      ["a key ending in an escaped backslash and quote", String.raw`"a\\\"":1,"a\\\"":1`],
+    ])("rejects a duplicate key whose decoded name has a quote or backslash: %s", (_label, raw) => {
+      const { duplicate } = reasons();
+      expect(rejection(withMembers(head(), raw)).safeReason).toBe(duplicate);
+    });
+
+    it.each([
+      ["one escaped backslash", "ends\\"],
+      ["two escaped backslashes", "ends\\\\"],
+      ["an escaped backslash then an escaped quote", 'ends\\"'],
+      ["only a backslash", "\\"],
+    ])("rejects real duplicates after a string value ending with %s before its closing quote", (_label, name) => {
+      const m = head();
+      m.producer.name = name;
+      const bytes = withRealDuplicates(m);
+      expect(bytes.toString("utf8")).toContain(JSON.stringify(name));
+      expect(JSON.parse(bytes.toString("utf8")).producer.name, "the value itself is valid text").toBe(name);
+      expect(rejection(bytes).safeReason).toBe(reasons().duplicate);
+      // Control: with no duplicates the same value is an ordinary, valid manifest.
+      accepted(Buffer.from(JSON.stringify(m)));
+    });
+
+    const structural = '{"id":1,"id":2}';
+    const noisy = 'a,b]c}d[e{f:g"h\\i';
+    const stringy = (m: Json) => {
+      m.producer.name = structural;
+      m.producer.version = noisy;
+      m.producer.buildTool.name = "]},[{";
+      m.context.profiles = [structural, noisy, "[", "}", ","];
+      m.context.variant = { state: "set", value: '{"a":1,"a":2}' };
+      m.diagnostics.push({ code: noisy, message: `x":1,"x":2,"${structural}`, compilationId: null, artifactIds: [] });
+    };
+
+    it("accepts structural-looking text inside string values as ordinary text", () => {
+      const m = head();
+      stringy(m);
+      const parsed = accepted(Buffer.from(JSON.stringify(m)));
+      expect(parsed.producer.name).toBe(structural);
+      expect(parsed.producer.version).toBe(noisy);
+      expect(parsed.context.profiles).toEqual([structural, noisy, "[", "}", ","]);
+      expect(parsed.diagnostics[0].message).toBe(`x":1,"x":2,"${structural}`);
+    });
+
+    it.each([structural, noisy, "a,b", "]", "[", "}{", '"id":1,"id":2', "id"])(
+      "does not mistake a key containing structural text %j for a duplicate", (key) => {
+        const { unknown } = reasons();
+        expect(rejection(withMembers(head(), `${JSON.stringify(key)}:1`)).safeReason).toBe(unknown);
+        // Two different keys whose text contains each other's syntax are still two keys.
+        expect(rejection(withMembers(head(), `${JSON.stringify(key)}:1,${JSON.stringify(`${key}.`)}:1`)).safeReason).toBe(unknown);
+      });
+
+    it("rejects real duplicates that follow structural text inside strings", () => {
+      const m = head();
+      stringy(m);
+      const bytes = withRealDuplicates(m);
+      expect(() => JSON.parse(bytes.toString("utf8"))).not.toThrow();
+      expect(rejection(bytes).safeReason).toBe(reasons().duplicate);
+      accepted(Buffer.from(JSON.stringify(m)));
+    });
+
+    it("rejects a real duplicate that follows a key made of structural text", () => {
+      const { duplicate } = reasons();
+      const key = JSON.stringify(structural);
+      expect(rejection(withMembers(head(), `${key}:1,"zz":1,"zz":1`)).safeReason).toBe(duplicate);
+      expect(rejection(withMembers(head(), `${key}:1,${key}:1`)).safeReason).toBe(duplicate);
     });
   });
 
@@ -169,10 +272,54 @@ describe("strict manifest decoding", () => {
       expect(parsed.producer.name).toBe("exporteur-é-日本-𝒳");
     });
 
-    it("rejects unsafe numeric tokens without rounding them", () => {
-      const literal = JSON.stringify(fx.valid.manifests.head).replace(/"sizeBytes":\d+/, '"sizeBytes":9007199254740993');
-      expect(literal).toContain("9007199254740993");
-      rejection(Buffer.from(literal));
+    describe("numeric tokens are exact safe integers, whatever their spelling", () => {
+      const MARK = 424242424242;
+      const MAX = Number.MAX_SAFE_INTEGER;
+      type Target = [label: string, set: (m: Json) => void, get: (m: Json) => number, minimum: number];
+      const targets: Target[] = [
+        ["file size", (m) => { art(m, "pricing-output").content.sizeBytes = MARK; }, (m) => art(m, "pricing-output").content.sizeBytes, 0],
+        ["source-map line", (m) => { m.transformations[0].locations[0].inputRange.start.line = MARK; }, (m) => m.transformations[0].locations[0].inputRange.start.line, 1],
+        ["source-map column", (m) => { m.transformations[0].locations[0].outputRange.end.column = MARK; }, (m) => m.transformations[0].locations[0].outputRange.end.column, 0],
+      ];
+      /** Manifest bytes with the target number written as a raw JSON token, exactly as a client may spell it. */
+      const spelled = (set: (m: Json) => void, token: string) => {
+        const json = encode(set).toString("utf8");
+        expect(json.split(String(MARK)), "the marker occurs exactly once").toHaveLength(2);
+        return Buffer.from(json.replace(String(MARK), () => token));
+      };
+
+      const exact: [token: string, value: number][] = [
+        ["1e2", 100], ["1.0", 1], ["10E+1", 100], ["1.50e2", 150], ["1500e-1", 150], ["2e0", 2], ["0.1e1", 1],
+        [String(MAX), MAX], [`${MAX}.000`, MAX], [`${MAX}0e-1`, MAX],
+      ];
+      it.each(targets.flatMap(([label, set, get]) => exact.map(([token, value]) => ({ label, set, get, token, value }))))(
+        "accepts the exact safe-integer spelling $token (= $value) for a $label", ({ set, get, token, value }) => {
+          expect(get(accepted(spelled(set, token)))).toBe(value);
+        });
+
+      const zero = ["0", "0.0", "-0", "-0.0", "0e5", "0e-5", "0.000e+9", "-0e0"];
+      it.each(targets.filter(([, , , minimum]) => minimum === 0).flatMap(([label, set, get]) => zero.map((token) => ({ label, set, get, token }))))(
+        "accepts the zero spelling $token for a $label", ({ set, get, token }) => {
+          // -0 is an exact zero; adding +0 only normalizes the sign for the comparison.
+          expect(get(accepted(spelled(set, token))) + 0).toBe(0);
+        });
+      it.each(zero)("rejects the zero spelling %s for a one-based line", (token) => {
+        rejection(spelled(targets[1][1], token));
+      });
+
+      // `premise` is what the standard parser turns the token into: it hides the fraction or exponent,
+      // so only a lexical check of the original token can tell these from valid integers.
+      const inexact: [token: string, premise: number | null][] = [
+        ["12.00000000000000001", 12], [`${MAX}.0000000001`, MAX], ["1.00000000000000000000001e1", 10],
+        ["100000000000000000000000001e-26", 1], ["12e-999999999999", 0], ["1e-400", 0], ["-1e-400", -0],
+        ["12.5", null], ["1.5e0", null], ["1e-1", null], ["25e-1", null], ["-1", null], ["-12", null], ["-0.5", null], ["-1e0", null],
+        ["9007199254740992", null], ["9007199254740993", null], ["1e16", null], ["1.5e16", null], ["1e400", null], ["12e999999999999", null],
+      ];
+      it.each(targets.flatMap(([label, set]) => inexact.map(([token, premise]) => ({ label, set, token, premise }))))(
+        "rejects the non-integer, negative or unsafe token $token for a $label", ({ set, token, premise }) => {
+          if (premise !== null) expect(Object.is(JSON.parse(token), premise), "the standard parser hides this value").toBe(true);
+          rejection(spelled(set, token));
+        });
     });
   });
 
@@ -429,6 +576,17 @@ describe("wire shape", () => {
       ["missing root path key", (m) => { delete comp(m, "prod").sourceRoots[0].repositoryPath; }],
     ];
     it.each(graph)("rejects %s", (_label, mutate, source) => { rejection(encode(mutate, source)); });
+
+    it("rejects a repeated effective input even when it has no repository path to collide on", () => {
+      const withExtra = (listed: string[]) => encode((m) => {
+        extra(m, { ...payloadFile("generated/main/example/Extra.java", HASH, 1), role: "source" });
+        const prod = comp(m, "prod");
+        prod.inputArtifactIds.push(...listed);
+        prod.sourceRoots[1].members.push({ artifactId: "extra", relativePath: "example/Extra.java" });
+      });
+      accepted(withExtra(["extra"])); // control: the same input listed once is a valid inventory
+      rejection(withExtra(["extra", "extra"]));
+    });
 
     it.each<Case>([
       ["same relative filename in different roots", (m) => { comp(m, "prod").sourceRoots[1].members[0].relativePath = "example/Consumer.java"; }],
@@ -873,23 +1031,27 @@ describe("real client-export fixtures", () => {
 
   describe("the export command is a real pipeline", () => {
     it("follows the pinned revision's Git objects, not a dirty workspace or a canned answer", async () => {
-      const f = fx.valid;
-      writeFileSync(join(f.repo, "generator.properties"), "endpoint=https://billing.example.test\nfactor=7\n");
-      fixtureGit(f.repo, "add", "-A");
-      fixtureGit(f.repo, "-c", "commit.gpgsign=false", "commit", "-m", "factor 7");
-      const revision = fixtureGit(f.repo, "rev-parse", "HEAD");
-      const template = join(f.repo, "templates/Pricing.java.tpl");
+      // Works on a private clone: the shared fixture repositories stay untouched for every other test.
+      const clone = join(home, "pipeline-clone");
+      fixtureGit(home, "clone", "-q", fx.valid.repo, clone);
+      writeFileSync(join(clone, "generator.properties"), "endpoint=https://billing.example.test\nfactor=7\n");
+      fixtureGit(clone, "add", "-A");
+      fixtureGit(clone, "-c", "commit.gpgsign=false", "commit", "-m", "factor 7");
+      const revision = fixtureGit(clone, "rev-parse", "HEAD");
+      const template = join(clone, "templates/Pricing.java.tpl");
       const dirty = `${readFileSync(template, "utf8")}// uncommitted workspace edit\n`;
       writeFileSync(template, dirty);
 
       const output = join(home, "pipeline-run");
-      await runFixtureExporter(f.repo, revision, output, "valid");
+      await runFixtureExporter(clone, revision, output, "valid");
       const manifest = parseBuildEvidence(readFileSync(join(output, "manifest.json")));
       expect(manifest.revision).toBe(revision);
       expect(text(readFileSync(join(output, "payload/generated/main/example/Pricing.java")))).toContain("return quantity * 7;");
       const template0 = art(manifest, "pricing-template").content;
-      expect(template0.sha256).toBe(sha256(blob(f.repo, revision, "templates/Pricing.java.tpl")));
+      expect(template0.sha256).toBe(sha256(blob(clone, revision, "templates/Pricing.java.tpl")));
       expect(template0.sha256).not.toBe(sha256(dirty));
+      expect(fixtureGit(fx.valid.repo, "rev-parse", "HEAD"), "the shared fixture repository was not advanced").toBe(fx.valid.head);
+      expect(fixtureGit(fx.valid.repo, "status", "--porcelain"), "and has no workspace changes").toBe("");
     });
 
     it("fails like a real command on a bad mode or an unknown revision, leaving no manifest", async () => {

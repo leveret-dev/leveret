@@ -133,13 +133,20 @@ const jdk = dirname(dirname(javac));
 const javaVersion = /^JAVA_VERSION="([^"]+)"/m.exec(readFileSync(join(jdk, "release"), "utf8"))?.[1];
 if (!javaVersion) throw new Error("JDK release file has no JAVA_VERSION");
 mkdirSync(join(workspace, "build/empty"), { recursive: true });
-function compile(classes: string, sources: string[], classpath: string): "succeeded" | "failed" {
+/**
+ * Every fixture mode is designed to compile, so a javac failure is a fixture bug, never a silently
+ * recorded "failed" outcome: surface the compiler's own diagnostics and abort before any publish.
+ */
+function compile(classes: string, sources: string[], classpath: string): "succeeded" {
   mkdirSync(classes, { recursive: true });
   try {
     execFileSync(javac, ["-proc:none", "-encoding", "UTF-8", "-source", "21", "-target", "21", "-Xlint:-options",
       "-classpath", classpath, "-d", classes, ...sources], { env, stdio: "pipe" });
-    return "succeeded";
-  } catch { return "failed"; }
+  } catch (error) {
+    const { stderr, stdout } = error as { stderr?: Buffer; stdout?: Buffer };
+    throw new Error(`javac failed for ${classes}:\n${stderr?.toString("utf8") ?? ""}${stdout?.toString("utf8") ?? ""}`, { cause: error });
+  }
+  return "succeeded";
 }
 const prodClasses = join(workspace, "build/classes/main");
 const testClasses = join(workspace, "build/classes/test");
