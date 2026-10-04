@@ -529,26 +529,34 @@ export async function listBuildArtifacts(
   const bytes = (end: number, complete: boolean): number => Buffer.byteLength(JSON.stringify({ ok: true, result: reply(end, complete) }), "utf8");
   const itemBytes = (index: number): number => Buffer.byteLength(JSON.stringify(listed[index]), "utf8");
 
-  // Completing drops the cursor, so the whole remainder can cost less than a shorter incomplete page. Sizes are tracked additively
-  // and serialized exactly only for a candidate that the running total says fits.
+  // Completing drops the cursor, so try the complete remainder before pricing any incomplete prefix. Its additive size is exact;
+  // stop as soon as the bound exceeds the relevant limit, without slicing or serializing a large remaining inventory.
+  const completeBytes = (limit: number): number | null => {
+    let total = bytes(from, true);
+    if (total > limit) return null;
+    for (let index = from; index < listed.length; index++) {
+      total += itemBytes(index) + (index > from ? 1 : 0);
+      if (total > limit) return null;
+    }
+    return total;
+  };
+  const complete = completeBytes(request.byteBudget);
+  if (complete !== null) return { ok: true, result: reply(listed.length, true) };
+  if (from === listed.length) {
+    return failure("budget-too-small", "Build artifact listing page exceeds byte budget", bytes(from, true));
+  }
   const header = bytes(from, false);
   let sum = 0;
   let end = from;
-  while (end < listed.length && header + sum + itemBytes(end) + (end > from ? 1 : 0) <= request.byteBudget) {
+  while (end < listed.length - 1 && header + sum + itemBytes(end) + (end > from ? 1 : 0) <= request.byteBudget) {
     sum += itemBytes(end) + (end > from ? 1 : 0);
     end += 1;
   }
-  const fits = (last: number, complete: boolean): boolean => bytes(last, complete) <= request.byteBudget;
-  if (end >= listed.length) {
-    if (fits(listed.length, true)) return { ok: true, result: reply(listed.length, true) };
-    end = listed.length - 1; // an incomplete page must leave something for its cursor to continue to
-  }
-  while (end > from && !fits(end, false)) end -= 1;
+  // Cursor lengths can change as the end index grows: validate the final encoded reply, shrinking deterministically if needed.
+  while (end > from && bytes(end, false) > request.byteBudget) end -= 1;
   if (end > from) return { ok: true, result: reply(end, false) };
-  if (from === listed.length) return { ok: true, result: reply(listed.length, true) };
-  const wholeBound = Buffer.byteLength(JSON.stringify({ ok: true, result: reply(from, true) }), "utf8") +
-    Array.from({ length: listed.length - from }, (_, n) => itemBytes(from + n) + (n > 0 ? 1 : 0)).reduce((a, b) => a + b, 0);
   const firstExact = bytes(from + 1, listed.length === from + 1);
-  const smallest = Math.min(firstExact, wholeBound <= firstExact ? bytes(listed.length, true) : firstExact);
-  return failure("budget-too-small", "Build artifact listing page exceeds byte budget", smallest);
+  const whole = completeBytes(firstExact);
+  return failure("budget-too-small", "Build artifact listing page exceeds byte budget",
+    whole === null ? firstExact : Math.min(firstExact, whole));
 }

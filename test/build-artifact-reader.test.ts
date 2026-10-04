@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { Value } from "typebox/value";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { renderInline, renderWalkthrough, type VerifyOutput } from "../src/app/render.js";
-import { readBuildArtifact } from "../src/build-artifact-reader.js";
+import { listBuildArtifacts, readBuildArtifact } from "../src/build-artifact-reader.js";
 import type { BuildCitable } from "../src/build-citations.js";
 import type { BuildEvidenceManifest, BuildEvidencePin, BuildEvidenceRequest } from "../src/build-evidence-contract.js";
 import { admitBuildEvidence, type AdmittedBuildEvidence } from "../src/build-evidence.js";
@@ -1248,6 +1248,85 @@ describe("registered leveret_build_artifact availability", () => {
 });
 
 describe("canonical artifact tool inventory and cursor identity", () => {
+  it("lists the last page, a single artifact and an empty listing with the true minimum budget (completion is cheaper)", async () => {
+    const secretPolicy = policy();
+    const one = await admitted(fixtureRequest(inplace, "head", join(home, `list-one-${++serial}`)), secretPolicy);
+    try {
+      const all = (byteBudget: number, cursor?: string) => listBuildArtifacts(one, {
+        side: "head", manifestSha256: one.manifestSha256, byteBudget, ...(cursor ? { cursor } : {}),
+      }, secretPolicy);
+      const whole = await all(65_536);
+      if (!whole.ok) throw new Error(whole.error.message);
+      const size = (reply: unknown) => Buffer.byteLength(JSON.stringify(reply));
+      expect(whole.result).toMatchObject({ side: "head", delivery: { complete: true, nextCursor: null } });
+      const complete = size(whole);
+      // the same listing at exactly its complete size succeeds complete; one byte below reports exactly that size as the minimum
+      await expect(all(complete)).resolves.toMatchObject({ ok: true, result: { delivery: { complete: true, nextCursor: null } } });
+      const below = await all(complete - 1);
+      if (below.ok) {
+        // an incomplete page cannot be cheaper here, so a smaller budget may legitimately deliver a first page; it must then fit
+        expect(size(below)).toBeLessThanOrEqual(complete - 1);
+      } else {
+        expect(below.error).toMatchObject({ code: "budget-too-small", requiredBytes: expect.any(Number) });
+        expect(below.error.requiredBytes).toBeGreaterThan(complete - 1);
+      }
+      // a tiny budget reports a minimum that is itself sufficient and, minus one, insufficient
+      const tiny = await all(1);
+      if (tiny.ok || tiny.error.requiredBytes === undefined) throw new Error("expected a one byte budget to be too small");
+      const need = tiny.error.requiredBytes;
+      const fits = await all(need);
+      if (!fits.ok) throw new Error(`requiredBytes ${need} was not sufficient: ${fits.error.message}`);
+      expect(size(fits)).toBeLessThanOrEqual(need);
+      await expect(all(need - 1)).resolves.toMatchObject({ ok: false, error: { code: "budget-too-small", requiredBytes: need } });
+    } finally {
+      rmSync(one.frozen.scratch, { recursive: true, force: true });
+    }
+
+    // Walk a real multi-page listing with the smallest budget each page needs: every page must be reachable, including the last
+    // one, where the complete remainder is cheaper than the incomplete page with a cursor.
+    const walked = await admitted(fixtureRequest(defect, "head", join(home, `list-walk-${++serial}`)), secretPolicy);
+    try {
+      const request = (byteBudget: number, cursor?: string) => ({
+        side: "head" as const, manifestSha256: walked.manifestSha256, byteBudget, ...(cursor ? { cursor } : {}),
+      });
+      const seen: string[] = [];
+      let cursor: string | undefined;
+      for (let page = 0; page < 40; page++) {
+        const probe = await listBuildArtifacts(walked, request(1, cursor), secretPolicy);
+        if (probe.ok) throw new Error("a one byte budget cannot hold a listing page");
+        const need = probe.error.requiredBytes as number;
+        const reply = await listBuildArtifacts(walked, request(need, cursor), secretPolicy);
+        if (!reply.ok) throw new Error(`page ${page}: requiredBytes ${need} did not progress: ${reply.error.message}`);
+        expect(Buffer.byteLength(JSON.stringify(reply))).toBeLessThanOrEqual(need);
+        seen.push(...reply.result.artifacts.map((item) => item.id));
+        cursor = reply.result.delivery.nextCursor ?? undefined;
+        if (!cursor) break;
+      }
+      expect(cursor).toBeUndefined();
+      expect(new Set(seen).size).toBe(seen.length);
+      for (const id of ["pricing-template", "pricing-output", "pricing-generator-config", "app-resource-output"]) expect(seen).toContain(id);
+    } finally {
+      rmSync(walked.frozen.scratch, { recursive: true, force: true });
+    }
+
+    // An empty eligible listing is still sized: it is derived from a real admission with no listable text artifacts, and below its size
+    // the reply is budget-too-small with the exact minimum, never an over-budget success.
+    const emptied = await admitted(fixtureRequest(defect, "head", join(home, `list-empty-${++serial}`)), secretPolicy);
+    try {
+      const empty = { ...emptied, manifest: { ...emptied.manifest, artifacts: [], transformations: [] } };
+      const ask = (byteBudget: number) => listBuildArtifacts(empty, { side: "head", manifestSha256: empty.manifestSha256, byteBudget }, secretPolicy);
+      const full = await ask(65_536);
+      if (!full.ok) throw new Error(full.error.message);
+      expect(full.result).toMatchObject({ total: 0, withheld: 0, artifacts: [], delivery: { complete: true, nextCursor: null } });
+      const size = Buffer.byteLength(JSON.stringify(full));
+      await expect(ask(size)).resolves.toMatchObject({ ok: true });
+      await expect(ask(size - 1)).resolves.toMatchObject({ ok: false, error: { code: "budget-too-small", requiredBytes: size } });
+      await expect(ask(1)).resolves.toMatchObject({ ok: false, error: { code: "budget-too-small", requiredBytes: size } });
+    } finally {
+      rmSync(emptied.frozen.scratch, { recursive: true, force: true });
+    }
+  });
+
   it("accepts a reordered range key on the next page and rejects a cursor minted under another policy", async () => {
     const text = Array.from({ length: 30 }, (_, n) => `line ${n}\n`).join("");
     const secretPolicy = policy();
@@ -1291,6 +1370,8 @@ describe("canonical artifact tool inventory and cursor identity", () => {
     it("bounds the prompt-visible inventory by bytes with disclosed totals and omissions", () => {
       const capability = tools.capabilities.build_evidence;
       if (capability.availability !== "available") throw new Error("build evidence capability is unavailable");
+      // the production bound is the whole pretty-printed block the prompts inline, not just the artifact array
+      expect(Buffer.byteLength(JSON.stringify(capability, null, 1))).toBeLessThanOrEqual(16_384);
       expect(Buffer.byteLength(JSON.stringify(capability.head.artifacts))).toBeLessThanOrEqual(16_384);
       expect(capability.head.artifactTotal).toBeGreaterThanOrEqual(bulk.length + 4);
       expect(capability.head.artifactsOmitted).toBe(capability.head.artifactTotal - capability.head.artifacts.length);
