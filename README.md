@@ -152,6 +152,22 @@ overloads and method-reference expressions, and reports unresolved or skipped
 scope separately. A complete response is not proof a change is safe.
 See [Inspect's supported host and configuration](inspect/README.md#internal-java-reference-worker).
 
+When the same host configuration pins an optional build-evidence export for a
+side, the reviewer also gets `leveret_build_artifact`: bounded, cursor-paged
+reads of the exact text of an authored original (source, template, resource,
+schema, build configuration) and of the generated or processed output it
+produced, addressed by manifest hash and artifact ID, never by path. Replies
+label provenance (authored, exporter-recorded, inferred, unknown), return only
+exporter-recorded source maps that validated against both texts, and are
+re-screened against the host secret policy on every read. Non-UTF-8, binary,
+withheld and unavailable artifacts return typed errors. A finding may carry
+`build_citations`; the host resolves each against what that phase actually read,
+and a generated location is never published as an inline Git anchor: only an
+authored original the phase read (or a validated whole-line map reaching it) can
+anchor a finding, otherwise it is listed in the walkthrough with attribution
+marked uncertain. Exported lineage is exporter-asserted: it does not prove
+freshness or causality.
+
 ```sh
 npm test        # integration suite; exercises the real tools
 ```

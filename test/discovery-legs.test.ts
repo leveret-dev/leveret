@@ -21,7 +21,7 @@ import {
 } from "../src/runner/discovery-legs.js";
 import { piRuntimeConfig, singleDiscoveryInput } from "../src/runner/pi.js";
 import { MECHANISM_CHECKLISTS } from "../src/runner/mechanism-checklists.js";
-import { verifySchemaGaps } from "../src/runner/verify-output.js";
+import { parseReviewOutput, verifySchemaGaps } from "../src/runner/verify-output.js";
 
 const manifest: ChangeManifest = {
   schema: 1, base: "0".repeat(40), head: "1".repeat(40), range: `${"0".repeat(40)}...${"1".repeat(40)}`, truncated: false, errors: [],
@@ -64,7 +64,7 @@ const disclosureFor = (
   checklists: plan.checklistIds.map((id) => ({ id, state: "examined" as const })),
   stopping: { rule: plan.definition.stoppingRule, reason: "complete" },
 });
-const tools = ["leveret_diff", "leveret_read", "leveret_grep", "leveret_find", "leveret_ast_search", "leveret_probe", "leveret_scan", "leveret_context", "leveret_memory", "leveret_java_references", "codegraph_explore", "graphify_query", "graphify_path", "graphify_explain", "lsp_find_declaration", "lsp_find_referencing_symbols"].map((name) => ({ name, label: name, description: name, parameters: {}, execute: vi.fn() })) as unknown as ToolDefinition[];
+const tools = ["leveret_diff", "leveret_read", "leveret_grep", "leveret_find", "leveret_ast_search", "leveret_probe", "leveret_scan", "leveret_context", "leveret_memory", "leveret_java_references", "leveret_build_artifact", "codegraph_explore", "graphify_query", "graphify_path", "graphify_explain", "lsp_find_declaration", "lsp_find_referencing_symbols"].map((name) => ({ name, label: name, description: name, parameters: {}, execute: vi.fn() })) as unknown as ToolDefinition[];
 
 describe("specialized discovery", () => {
   it("keeps discovery and scheduling host-owned and separate", () => {
@@ -172,5 +172,102 @@ describe("specialized discovery", () => {
     expect(Value.Check(verifierDiff.parameters, { kind: "patch", paths: [] })).toBe(false);
     const gaps = verifySchemaGaps({ report: [], verdicts: [{ id: "correctness:R1", grade: "dropped", reason: "not grounded" }], coverage: { lenses: ["correctness-hostile-inputs", "contract-conformance", "test-honesty", "blast-radius", "leads-triage"].map((lens) => ({ lens, outcome: "checked" })), files: manifest.files.map((file) => ({ file: file.path, verdict: file.path === "src/core.ts" ? "findings" : "considered-fine" })) }, resolutions: [] }, { concerns: [{ id: "correctness:R1", file: "src/core.ts" }], leads: [], changedFiles: manifest.files.map((file) => file.path), priorThreadIds: ["prior-1"] });
     expect(gaps).toContain("resolutions:missing:prior-1");
+  });
+});
+
+describe("build evidence in discovery", () => {
+  const citation = { manifestSha256: "a".repeat(64), artifactId: "pricing-output", range: { startLine: 4, endLine: 4 } };
+  const firstLeg = () => buildDiscoveryLegPlans(manifest, evidencePack, guidance, { mode: "diff-only", availability: "unavailable" })[0]!;
+  const concern = (extra: object = {}) => ({
+    id: "R1", file: "src/core.ts", range: { start: 4, end: 5 }, title: "t", claim: "same exact failure mechanism",
+    impact: "i", evidence_hint: "h", scope: "in-diff", evidence_ids: ["e1"], ...extra,
+  });
+  const legOutput = (leg: DiscoveryLegPlan, concerns: unknown[]) => ({ leg_id: leg.definition.id, concerns, coverage: disclosureFor(leg) });
+
+  it("offers the artifact tool to every leg and the verifier as an optional capability", () => {
+    for (const leg of SPECIALIZED_LEG_DEFINITIONS) {
+      expect(leg.optionalTools).toContain("leveret_build_artifact");
+      expect(leg.requiredTools).not.toContain("leveret_build_artifact");
+      expect(selectPhaseTools(tools, leg.requiredTools, leg.optionalTools).map((tool) => tool.name)).toContain("leveret_build_artifact");
+      const unavailable = tools.filter((tool) => tool.name !== "leveret_build_artifact");
+      expect(selectPhaseTools(unavailable, leg.requiredTools, leg.optionalTools).map((tool) => tool.name)).not.toContain("leveret_build_artifact");
+    }
+    expect(TARGETED_VERIFIER_TOOLS.optional).toContain("leveret_build_artifact");
+    expect(TARGETED_VERIFIER_TOOLS.required).not.toContain("leveret_build_artifact");
+    expect(selectPhaseTools(tools, TARGETED_VERIFIER_TOOLS.required, TARGETED_VERIFIER_TOOLS.optional, true).map((tool) => tool.name))
+      .toContain("leveret_build_artifact");
+  });
+
+  it("resolves leg citations through the supplied resolver and carries them on the concern", () => {
+    const leg = firstLeg();
+    const calls: unknown[] = [];
+    const parsed = parseDiscoveryLegOutput(leg, legOutput(leg, [concern({ build_citations: [citation] })]), (item) => {
+      calls.push(item);
+      return { ok: true, citations: [], anchor: null };
+    });
+    expect(parsed.concerns[0]?.build_citations).toEqual([citation]);
+    expect(calls).toEqual([{ file: "src/core.ts", line: 4, build_citations: [citation] }]);
+    expect(() => parseDiscoveryLegOutput(leg, legOutput(leg, [concern({ build_citations: [citation] })]),
+      () => ({ ok: false, reason: "build citation 0 was not retrieved in this phase" }))).toThrow(/unresolved build citation/);
+    expect(() => parseDiscoveryLegOutput(leg, legOutput(leg, [concern()]), () => { throw new Error("no citation to resolve"); })).not.toThrow();
+  });
+
+  it("rejects malformed citations before any resolution", () => {
+    const leg = firstLeg();
+    for (const bad of [
+      { ...citation, manifestSha256: "short" },
+      { ...citation, artifactId: "" },
+      { ...citation, range: { startLine: 5, endLine: 4 } },
+      { ...citation, path: "build/generated/example/Pricing.java" },
+      { manifestSha256: citation.manifestSha256, artifactId: citation.artifactId },
+      // a span restates the cited lines exactly, is ordered, and cannot ride on a whole-file citation
+      { ...citation, range: null, span: { start: { line: 4, column: 2 }, end: { line: 4, column: 9 } } },
+      { ...citation, range: { startLine: 4, endLine: 5 }, span: { start: { line: 4, column: 2 }, end: { line: 4, column: 9 } } },
+      { ...citation, span: { start: { line: 4, column: 9 }, end: { line: 4, column: 2 } } },
+      { ...citation, span: { start: { line: 4, column: -1 }, end: { line: 4, column: 2 } } },
+      { ...citation, span: { start: { line: 4, column: 2 }, end: { line: 4, column: 9 }, extra: 1 } },
+    ]) {
+      expect(() => parseDiscoveryLegOutput(leg, legOutput(leg, [concern({ build_citations: [bad] })]))).toThrow();
+    }
+    expect(parseDiscoveryLegOutput(leg, legOutput(leg, [concern({ build_citations: [{ ...citation, range: null }] })])).concerns[0]?.build_citations)
+      .toEqual([{ ...citation, range: null }]);
+    // a span ending at column 0 of the next line still names only the cited line
+    for (const span of [
+      { start: { line: 4, column: 2 }, end: { line: 4, column: 9 } },
+      { start: { line: 4, column: 0 }, end: { line: 5, column: 0 } },
+    ]) {
+      expect(parseDiscoveryLegOutput(leg, legOutput(leg, [concern({ build_citations: [{ ...citation, span }] })])).concerns[0]?.build_citations)
+        .toEqual([{ ...citation, span }]);
+    }
+  });
+
+  it("merges repeated mechanism citations without deduplicating on shared generated evidence", async () => {
+    const result = await runSpecializedDiscovery(manifest, evidencePack, guidance, { mode: "diff-only", availability: "unavailable" }, async (leg) => {
+      if (leg.definition.id === "test-honesty") return legOutput(leg, []);
+      const own = { ...citation, artifactId: `pricing-output-${leg.definition.id}` };
+      const concerns = [concern({ evidence_ids: [`e-${leg.definition.id}`], build_citations: [own, citation] })];
+      // A second instance of the same generated mechanism at another location is a separate concern.
+      if (leg.definition.id === "correctness") concerns.push(concern({ id: "R2", range: { start: 8, end: 9 }, build_citations: [citation] }));
+      return legOutput(leg, concerns);
+    });
+    expect(result.concerns).toHaveLength(2);
+    expect(result.concerns[0]).toMatchObject({
+      id: "correctness:R1", raising_leg_ids: ["correctness", "contract-operability"],
+      build_citations: [{ ...citation, artifactId: "pricing-output-correctness" }, citation, { ...citation, artifactId: "pricing-output-contract-operability" }],
+    });
+    expect(result.concerns[1]).toMatchObject({ id: "correctness:R2", range: { start: 8, end: 9 }, build_citations: [citation] });
+  });
+
+  it("resolves single-discovery concern citations the same way", () => {
+    const review = {
+      concerns: [{
+        id: "R1", file: "src/core.ts", line: 4, title: "t", claim: "c", impact: "i", evidence_hint: "h", scope: "in-diff",
+        evidence_ids: [], lead_ids: [], build_citations: [citation],
+      }],
+      coverage: { lenses: [], files: [] },
+    };
+    expect(parseReviewOutput(review).concerns[0]).toMatchObject({ build_citations: [citation] });
+    expect(() => parseReviewOutput(review, () => ({ ok: false, reason: "not retrieved" }))).toThrow(/unresolved build citation/);
+    expect(() => parseReviewOutput({ ...review, concerns: [{ ...review.concerns[0]!, build_citations: [{ ...citation, manifestSha256: "short" }] }] })).toThrow();
   });
 });

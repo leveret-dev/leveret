@@ -130,6 +130,15 @@ base/head side, returns out-of-diff checked references with separate coverage,
 and pages details within its byte budget. Model-visible results carry the
 existing tool evidence ID; the model cannot select the worker or its mounts.
 
+The target is either a Git `path` or, when an export is admitted for that side,
+an `artifactId` naming an original or generated Java source in the pinned
+imported view (the two shapes are exclusive; extra fields are rejected). An
+artifact target selects exact bytes even when an original and its generated
+output share a path. `referenceScope` is `outside-diff` (default) or `all`;
+generated-source sites carry the `generated` diff status and the artifact's
+manifest hash and ID, and are supporting evidence rather than Git diff anchors.
+`leveret_build_artifact` reads the matching text and lineage by the same IDs.
+
 The supported extraction host is Linux x86-64 with usable Bubblewrap user,
 network, PID, and mount namespaces, `prlimit`, `/usr/lib` and `/usr/lib64`,
 and these tools in `/usr/bin`: `bwrap`, `prlimit`, `dash`, `uname`, `ls`,

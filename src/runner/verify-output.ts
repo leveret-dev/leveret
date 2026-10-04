@@ -1,4 +1,7 @@
 import { z } from "zod";
+import {
+  buildAnchorSchema, buildCitationSchema, resolvedBuildCitationSchema, type BuildCitationResolver,
+} from "../build-citations.js";
 
 const text = z.string().min(1);
 const coverageVerdict = z.enum(["findings", "considered-fine", "not-examined"]);
@@ -23,13 +26,19 @@ const findingFields = {
   evidence_ids: z.array(text),
   extra_real: z.boolean().nullable().optional(),
   beyond_diff: z.boolean().nullable().optional(),
+  /** Verifier's explicit reasoning why the defect originates at the anchored original; required when that anchor rests on a source map. */
+  root_cause: text.optional(),
 };
-const findingBodySchema = z.object(findingFields).strict().superRefine((item, ctx) => {
+const findingBodySchema = z.object({ ...findingFields, build_citations: z.array(buildCitationSchema).optional() }).strict().superRefine((item, ctx) => {
   if (item.scope === "out-of-diff" && !item.correlation) {
     ctx.addIssue({ code: "custom", path: ["correlation"], message: "out-of-diff findings require correlation" });
   }
 });
-const reportSchema = z.object({ id: text, ...findingFields }).strict().superRefine((item, ctx) => {
+// A canonical row carries the host's resolved citations and anchor, never the model's raw claims about them.
+const reportSchema = z.object({
+  id: text, ...findingFields,
+  build_citations: z.array(resolvedBuildCitationSchema).optional(), build_anchor: buildAnchorSchema.optional(),
+}).strict().superRefine((item, ctx) => {
   if (item.scope === "out-of-diff" && !item.correlation) {
     ctx.addIssue({ code: "custom", path: ["correlation"], message: "out-of-diff reports require correlation" });
   }
@@ -97,6 +106,7 @@ const reviewConcernSchema = z.looseObject({
   scope: z.enum(["in-diff", "out-of-diff"]),
   correlation: text.optional(),
   evidence_ids: z.array(text),
+  build_citations: z.array(buildCitationSchema).optional(),
   lead_ids: z.array(text).max(0),
 }).superRefine((concern, ctx) => {
   if (concern.scope === "out-of-diff" && !concern.correlation) {
@@ -131,8 +141,16 @@ export type FinalVerifyOutput = Omit<VerifyOutput, "coverage"> & {
   };
 };
 
-export function parseReviewOutput(output: unknown): ReviewOutput {
-  return reviewSubmissionSchema.parse(output);
+export function parseReviewOutput(output: unknown, resolveBuildCitations?: BuildCitationResolver): ReviewOutput {
+  const parsed = reviewSubmissionSchema.parse(output);
+  if (resolveBuildCitations) {
+    for (const concern of parsed.concerns) {
+      if (!concern.build_citations?.length) continue;
+      const resolution = resolveBuildCitations({ file: concern.file, line: concern.line, build_citations: concern.build_citations });
+      if (!resolution.ok) throw new Error(`review returned unresolved build citation: ${resolution.reason}`);
+    }
+  }
+  return parsed;
 }
 
 /** Normalize harmless optional-field shapes before strict schema validation. */
@@ -145,6 +163,7 @@ export function normalizeVerifyOutput(output: unknown): unknown {
     if (normalized.scope === "in-diff") delete normalized.correlation;
     else if (normalized.correlation === "") delete normalized.correlation;
     if (normalized.suggested_fix === "") delete normalized.suggested_fix;
+    if (normalized.root_cause === "") delete normalized.root_cause;
     return normalized;
   }) : value.report;
   const verdicts = Array.isArray(value.verdicts) ? value.verdicts.map((item) => {
@@ -162,6 +181,7 @@ export function normalizeVerifyOutput(output: unknown): unknown {
       if (finding.scope === "in-diff") delete finding.correlation;
       else if (finding.correlation === "") delete finding.correlation;
       if (finding.suggested_fix === "") delete finding.suggested_fix;
+      if (finding.root_cause === "") delete finding.root_cause;
       normalized.finding = finding;
     }
     return normalized;
@@ -205,6 +225,8 @@ export interface VerifyExpectations {
   leads: { id: string; file: string }[];
   changedFiles: string[];
   priorThreadIds: string[];
+  /** Resolves a finding's build citations against what the verifying phase retrieved; absent when no build evidence exists. */
+  resolveBuildCitations?: BuildCitationResolver;
 }
 
 /** Turn compact per-ID model decisions into the canonical verifier result. */
@@ -218,10 +240,18 @@ export function assembleVerifierOutput(output: unknown, expected: VerifyExpectat
     grade,
     ...(reason ? { reason } : {}),
   }));
-  const report = parsed.decisions.flatMap((decision) =>
-    decision.grade === "actionable" && decision.finding
-      ? [{ id: decision.id, ...decision.finding }]
-      : []);
+  const report = parsed.decisions.flatMap((decision) => {
+    if (decision.grade !== "actionable" || !decision.finding) return [];
+    const { build_citations: cited, ...finding } = decision.finding;
+    const row = { id: decision.id, ...finding };
+    if (!cited?.length || !expected.resolveBuildCitations) return [cited ? { ...row, build_citations: cited } : row];
+    const resolution = expected.resolveBuildCitations({ file: finding.file, line: finding.line, build_citations: cited });
+    if (!resolution.ok) throw new Error(`invalid build citation: ${resolution.reason}`);
+    if (resolution.anchor?.kind === "original" && resolution.anchor.basis === "validated-map" && !finding.root_cause?.trim()) {
+      throw new Error("invalid build citation: an original anchored through a source map requires root_cause reasoning from the verifier row");
+    }
+    return [{ ...row, build_citations: resolution.citations, ...(resolution.anchor ? { build_anchor: resolution.anchor } : {}) }];
+  });
   const decisionsById = new Map(parsed.decisions.map((decision) => [decision.id, decision]));
   const fileIds = new Map<string, { concern: boolean; ids: string[] }>();
   for (const item of expected.concerns) {
@@ -315,6 +345,30 @@ export function verifySchemaGaps(output: unknown, expected: VerifyExpectations):
   }
   for (const report of value.report) {
     if (coverageByFile.get(report.file) !== "findings") gaps.add(`coverage.files:report-without-findings:${report.file}`);
+  }
+
+  for (const row of value.report) {
+    const cited = (row.build_citations ?? []).map(({ manifestSha256, artifactId, range, span }) => ({
+      manifestSha256, artifactId, range, ...(span ? { span } : {}),
+    }));
+    if (!expected.resolveBuildCitations) {
+      if (cited.length > 0 || row.build_anchor) gaps.add(`report:build-evidence-unresolvable:${row.id}`);
+      continue;
+    }
+    const resolution = expected.resolveBuildCitations({ file: row.file, line: row.line, build_citations: cited });
+    if (!resolution.ok) {
+      gaps.add(`report:build_citations:unresolved:${row.id}`);
+      continue;
+    }
+    if (JSON.stringify(z.array(resolvedBuildCitationSchema).parse(resolution.citations)) !== JSON.stringify(row.build_citations ?? [])) {
+      gaps.add(`report:build_citations:untrusted:${row.id}`);
+    }
+    if (JSON.stringify(buildAnchorSchema.nullable().parse(resolution.anchor)) !== JSON.stringify(row.build_anchor ?? null)) {
+      gaps.add(`report:build_anchor:untrusted:${row.id}`);
+    }
+    if (resolution.anchor?.kind === "original" && resolution.anchor.basis === "validated-map" && !row.root_cause?.trim()) {
+      gaps.add(`report:root_cause:missing:${row.id}`);
+    }
   }
 
   const resolutions = value.resolutions ?? [];

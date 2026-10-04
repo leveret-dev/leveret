@@ -3,6 +3,8 @@ import type { Finding, ScanResult } from "../findings.js";
 import type { GraphStatus } from "./graph.js";
 import type { GraphifyStatus } from "./graphify.js";
 import type { PostWalkLeadAccounting } from "../runner/post-walk-leads.js";
+import type { BuildAnchor, ResolvedBuildCitation } from "../build-citations.js";
+import type { SourceRange } from "../build-artifact-reader.js";
 
 // Rendering the verify output + scan result into the published review: tier-grouped
 // inline comments and the what-was-checked walkthrough. Pure functions — the App's
@@ -23,6 +25,11 @@ export interface ReportItem {
   suggested_fix?: string;
   extra_real?: boolean | null;
   beyond_diff?: boolean | null;
+  /** Host-resolved citations and anchor; absent for findings without build evidence. Never taken from the model. */
+  build_citations?: ResolvedBuildCitation[];
+  build_anchor?: BuildAnchor;
+  /** The verifier's reasoning that the defect originates at the anchored original; required when that anchor rests on a source map. */
+  root_cause?: string;
 }
 
 export interface VerifyOutput {
@@ -61,6 +68,34 @@ export interface VerifyOutput {
 const TIER_ORDER: Record<Tier, number> = { critical: 0, major: 1, minor: 2, nit: 3 };
 const byTier = (a: ReportItem, b: ReportItem) => TIER_ORDER[a.tier] - TIER_ORDER[b.tier];
 
+/** Exporter-controlled identifiers are rendered inside a code span that cannot be closed or broken across lines. */
+const codeSpan = (value: string): string => `\`${value.replace(/[`\u0000-\u001f\u007f\u2028\u2029]+/g, " ")}\``;
+const lineLabel = (range: ResolvedBuildCitation["range"]): string =>
+  range.startLine === range.endLine ? `L${range.startLine}` : `L${range.startLine}-${range.endLine}`;
+const spanLabel = (range: SourceRange): string => `L${range.start.line}:${range.start.column}-L${range.end.line}:${range.end.column}`;
+
+function citationLabel(citation: ResolvedBuildCitation): string {
+  const where = `${codeSpan(citation.artifactId)} ${citation.span ? spanLabel(citation.span) : lineLabel(citation.range)}`;
+  const revision = citation.side === "base" ? "base " : "";
+  if (citation.origin === "authored") return `${revision}original ${where} (${citation.basis === "retrieved" ? "independent read" : "validated source map"})`;
+  return `${revision}${citation.origin === "materialized" ? "generated" : "external"} ${where}`;
+}
+
+const buildEvidence = (r: ReportItem): string | null =>
+  r.build_citations?.length ? `build evidence: ${r.build_citations.map(citationLabel).join("; ")}` : null;
+
+/** The generated artifacts a generated-output-only finding rests on: its only locator, never a Git path. */
+const generatedLocation = (r: ReportItem): string => {
+  const generated = (r.build_citations ?? []).filter((citation) => citation.origin !== "authored");
+  return generated.length > 0 ? generated.map(citationLabel).join("; ") : "generated output";
+};
+
+/** The base-side originals a base-only finding rests on: evidence from another revision, never a head position. */
+const baseLocation = (r: ReportItem): string => {
+  const base = (r.build_citations ?? []).filter((citation) => citation.side === "base" && citation.origin === "authored");
+  return base.length > 0 ? base.map(citationLabel).join("; ") : "base-side evidence";
+};
+
 export function renderWalkthrough(
   v: VerifyOutput,
   scan: ScanResult,
@@ -68,7 +103,9 @@ export function renderWalkthrough(
   graphify?: GraphifyStatus,
 ): string {
   const all = [...v.report].sort(byTier);
-  const outOfDiff = all.filter((r) => r.scope === "out-of-diff");
+  const outputOnly = all.filter((r) => r.build_anchor?.kind === "output-only");
+  const baseOnly = all.filter((r) => r.build_anchor?.kind === "base-only");
+  const outOfDiff = all.filter((r) => r.scope === "out-of-diff" && r.build_anchor?.kind !== "output-only" && r.build_anchor?.kind !== "base-only");
   const s: string[] = ["## Leveret review", ""];
 
   if (all.length === 0) {
@@ -76,8 +113,25 @@ export function renderWalkthrough(
   } else {
     s.push("### Findings", "");
     for (const r of all) {
+      if (r.build_anchor?.kind === "output-only") {
+        s.push(`- **[${r.tier}]** ${generatedLocation(r)} — ${r.title} *(generated output only; attribution uncertain)*`);
+        continue;
+      }
+      if (r.build_anchor?.kind === "base-only") {
+        s.push(`- **[${r.tier}]** ${baseLocation(r)} — ${r.title} *(base-side evidence only; head position unverified)*`);
+        continue;
+      }
+      if (r.build_anchor?.kind === "unanchored") {
+        s.push(`- **[${r.tier}]** \`${r.file}:${r.line}\` — ${r.title} *(build evidence does not verify this location; supporting evidence only)*`);
+        const supporting = buildEvidence(r);
+        if (supporting) s.push(`  - ${supporting}`);
+        continue;
+      }
       const marker = r.scope === "out-of-diff" ? " *(out-of-diff)*" : "";
       s.push(`- **[${r.tier}]** \`${r.file}:${r.line}\` — ${r.title}${marker}`);
+      const evidence = buildEvidence(r);
+      if (evidence) s.push(`  - ${evidence}`);
+      if (r.root_cause) s.push(`  - root cause: ${r.root_cause}`);
     }
     s.push("");
   }
@@ -93,6 +147,38 @@ export function renderWalkthrough(
       s.push(`- **[${r.tier}]** \`${r.file}:${r.line}\` — ${r.title}`);
       s.push(`  - correlation: ${r.correlation ?? "unstated"}`);
       s.push(`  - evidence: ${r.evidence}`);
+    }
+    s.push("");
+  }
+
+  if (outputOnly.length > 0) {
+    s.push(
+      "### Generated-output evidence (attribution uncertain)",
+      "",
+      "Evidence from generated or processed output only. It is not a Git diff anchor, and the build records do not establish which original is responsible:",
+      "",
+    );
+    for (const r of outputOnly) {
+      s.push(`- **[${r.tier}]** ${generatedLocation(r)} — ${r.title}`);
+      s.push(`  - evidence: ${r.evidence}`);
+      if (r.suggested_fix) s.push(`  - suggested fix: ${r.suggested_fix}`);
+      s.push("  - responsible original: not established");
+    }
+    s.push("");
+  }
+
+  if (baseOnly.length > 0) {
+    s.push(
+      "### Base-side evidence (head position unverified)",
+      "",
+      "Evidence read from the base revision only. The head revision's bytes at that path and line were not verified, so this is not an inline head anchor:",
+      "",
+    );
+    for (const r of baseOnly) {
+      s.push(`- **[${r.tier}]** ${baseLocation(r)} — ${r.title}`);
+      s.push(`  - evidence: ${r.evidence}`);
+      if (r.suggested_fix) s.push(`  - suggested fix: ${r.suggested_fix}`);
+      s.push("  - head position: not verified");
     }
     s.push("");
   }
@@ -198,18 +284,23 @@ export interface InlineComment {
  * the diff and live in the walkthrough instead. */
 export function renderInline(v: VerifyOutput): InlineComment[] {
   return v.report
-    .filter((r) => r.scope !== "out-of-diff")
+    .filter((r) => r.scope !== "out-of-diff" && r.build_anchor?.kind !== "output-only" && r.build_anchor?.kind !== "base-only" && r.build_anchor?.kind !== "unanchored")
     .sort(byTier)
-    .map((r) => ({
-      path: r.file,
-      line: r.line,
-      body: [
-        `**[${r.tier}]** ${r.title}`,
-        "",
-        `evidence: ${r.evidence}`,
-        ...(r.suggested_fix ? ["", `suggested fix: ${r.suggested_fix}`] : []),
-      ].join("\n"),
-    }));
+    .map((r) => {
+      const evidence = buildEvidence(r);
+      return {
+        path: r.file,
+        line: r.line,
+        body: [
+          `**[${r.tier}]** ${r.title}`,
+          "",
+          `evidence: ${r.evidence}`,
+          ...(evidence ? ["", evidence] : []),
+          ...(r.root_cause ? ["", `root cause: ${r.root_cause}`] : []),
+          ...(r.suggested_fix ? ["", `suggested fix: ${r.suggested_fix}`] : []),
+        ].join("\n"),
+      };
+    });
 }
 
 // ── Acknowledgement comment ─────────────────────────────────────────────────

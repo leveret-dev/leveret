@@ -321,3 +321,127 @@ describe("readCappedBody", () => {
     expect(pushed).toBeLessThan(20); // destroyed early, not drained
   });
 });
+
+describe("build evidence rendering", () => {
+  const manifestSha256 = "ab".repeat(32);
+  const cite = (
+    artifactId: string, origin: "authored" | "materialized", repositoryPath: string | null,
+    basis: "retrieved" | "validated-map" = "retrieved",
+  ) => ({ manifestSha256, artifactId, side: "head" as "base" | "head", range: { startLine: 4, endLine: 4 }, origin, repositoryPath, basis });
+  const row = { tier: "major" as const, severity: "warning", scope: "in-diff" as const, evidence: "the generated source reads quantity / 10" };
+  const originalFinding = {
+    ...row, id: "R1", file: "templates/Pricing.java.tpl", line: 4, title: "Division replaces the pricing multiplier",
+    build_citations: [
+      cite("pricing-template", "authored", "templates/Pricing.java.tpl"),
+      cite("pricing-output", "materialized", "build/generated/example/Pricing.java"),
+    ],
+    build_anchor: { kind: "original" as const, basis: "independent-read" as const },
+  };
+  const outputOnly = {
+    ...row, id: "R2", file: "src/main/java/example/Pricing.java", line: 4, title: "Generated factor is wrong", suggested_fix: "change the template",
+    build_citations: [cite("pricing-output", "materialized", "src/main/java/example/Pricing.java")],
+    build_anchor: { kind: "output-only" as const },
+  };
+  const withReport = (...report: VerifyOutput["report"]): VerifyOutput => ({ ...verifyOutput, report });
+
+  it("anchors an original inline and cites both evidence views in the comment", () => {
+    const inline = renderInline(withReport(originalFinding));
+    expect(inline).toHaveLength(1);
+    expect(inline[0]).toMatchObject({ path: "templates/Pricing.java.tpl", line: 4 });
+    expect(inline[0]!.body).toContain("original `pricing-template` L4 (independent read)");
+    expect(inline[0]!.body).toContain("generated `pricing-output` L4");
+  });
+
+  it("lists a finding whose build citations do not verify its location as unanchored, never inline", () => {
+    const unanchored = {
+      ...row, id: "R4", file: "templates/Pricing.java.tpl", line: 4, title: "Template divides",
+      build_citations: [cite("pricing-output", "materialized", "build/generated/example/Pricing.java")],
+      build_anchor: { kind: "unanchored" as const },
+    };
+    expect(renderInline(withReport(unanchored))).toEqual([]);
+    const md = renderWalkthrough(withReport(unanchored), scanResult);
+    expect(md).toContain("build evidence does not verify this location");
+    expect(md).toContain("generated `pricing-output` L4");
+  });
+
+  it("never publishes base-side evidence as an inline head position, even for the same path and line", () => {
+    const baseOnly = {
+      ...row, id: "R3", file: "templates/Pricing.java.tpl", line: 4, title: "Base template multiplies where head divides",
+      build_citations: [{ ...cite("pricing-template", "authored", "templates/Pricing.java.tpl"), side: "base" as const }],
+      build_anchor: { kind: "base-only" as const },
+    };
+    expect(renderInline(withReport(baseOnly))).toEqual([]);
+    const md = renderWalkthrough(withReport(baseOnly), scanResult);
+    expect(md).toContain("### Base-side evidence (head position unverified)");
+    expect(md).toContain("base original `pricing-template` L4");
+    expect(md).toContain("base-side evidence only; head position unverified");
+    expect(md).not.toContain("`templates/Pricing.java.tpl:4`");
+    // the head citation is the one that anchors; a base citation beside it stays labelled supporting evidence
+    const both = {
+      ...originalFinding,
+      build_citations: [{ ...cite("pricing-template", "authored", "templates/Pricing.java.tpl"), side: "base" as const }, ...originalFinding.build_citations],
+    };
+    expect(renderInline(withReport(both))[0]!.body).toContain("base original `pricing-template` L4 (independent read); original `pricing-template` L4 (independent read)");
+  });
+
+  it("says when an original anchor rests on a validated source map rather than an independent read", () => {
+    const mapped = {
+      ...originalFinding,
+      build_citations: [cite("pricing-template", "authored", "templates/Pricing.java.tpl", "validated-map"), originalFinding.build_citations[1]!],
+      build_anchor: { kind: "original" as const, basis: "validated-map" as const },
+    };
+    expect(renderInline(withReport(mapped))[0]!.body).toContain("original `pricing-template` L4 (validated source map)");
+  });
+
+  it("never publishes generated output as an inline Git position, even for a shared path marked in-diff", () => {
+    expect(renderInline(withReport(outputOnly))).toEqual([]);
+    const md = renderWalkthrough(withReport(outputOnly), scanResult);
+    expect(md).toContain("### Generated-output evidence (attribution uncertain)");
+    expect(md).toContain("generated `pricing-output` L4");
+    expect(md).toContain("responsible original: not established");
+    expect(md).toContain("change the template");
+    expect(md).not.toContain("`src/main/java/example/Pricing.java:4`");
+  });
+
+  it("keeps an original-anchored finding's anchor and lists generated-only evidence separately", () => {
+    const md = renderWalkthrough(withReport(originalFinding, outputOnly), scanResult);
+    expect(md).toContain("`templates/Pricing.java.tpl:4`");
+    expect(md).toContain("original `pricing-template` L4 (independent read)");
+    expect(md.indexOf("`templates/Pricing.java.tpl:4`")).toBeLessThan(md.indexOf("### Generated-output evidence"));
+    expect(renderInline(withReport(originalFinding, outputOnly)).map((comment) => comment.path)).toEqual(["templates/Pricing.java.tpl"]);
+  });
+
+  it("does not let exporter-controlled identifiers inject markdown", () => {
+    const hostile = { ...outputOnly, build_citations: [cite("x`\n- [click](https://evil.example)", "materialized", null)] };
+    const md = renderWalkthrough(withReport(hostile), scanResult);
+    expect(md).not.toContain("\n- [click]");
+    expect(md).not.toContain("x`\n");
+    expect(md).toContain("attribution uncertain");
+  });
+
+  it("shows the verifier's root-cause reasoning and the exact declared span of a mapped anchor", () => {
+    const declared = { start: { line: 4, column: 24 }, end: { line: 4, column: 33 } };
+    const mapped = {
+      ...originalFinding,
+      root_cause: "The template divides by the factor where the contract multiplies.",
+      build_citations: [
+        { ...cite("pricing-template", "authored", "templates/Pricing.java.tpl", "validated-map"), span: declared },
+        originalFinding.build_citations[1]!,
+      ],
+      build_anchor: { kind: "original" as const, basis: "validated-map" as const },
+    };
+    const body = renderInline(withReport(mapped))[0]!.body;
+    expect(body).toContain("original `pricing-template` L4:24-L4:33 (validated source map)");
+    expect(body).toContain("root cause: The template divides by the factor where the contract multiplies.");
+    const md = renderWalkthrough(withReport(mapped), scanResult);
+    expect(md).toContain("original `pricing-template` L4:24-L4:33 (validated source map)");
+    expect(md).toContain("root cause: The template divides by the factor where the contract multiplies.");
+  });
+
+  it("renders findings without build evidence exactly as before", () => {
+    const plain = withReport(verifyOutput.report[1]!);
+    expect(renderInline(plain)).toEqual([expect.objectContaining({ path: "a.ts", line: 3 })]);
+    expect(renderWalkthrough(plain, scanResult)).not.toContain("Generated-output evidence");
+    expect(renderInline(plain)[0]!.body).not.toContain("build evidence");
+  });
+});

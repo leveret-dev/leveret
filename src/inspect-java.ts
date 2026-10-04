@@ -8,7 +8,9 @@ import { GitObjectError, gitBytes, isSafeRelativePath, readGitBlobs, readGitTree
 import { runStreaming } from "./exec.js";
 import { pathIsInside } from "./path.js";
 import { scopeResolver } from "./build-artifacts.js";
-import { readBuildArtifact, type BuildArtifactReadReply, type BuildArtifactReadRequest } from "./build-artifact-reader.js";
+import {
+  describeBuildArtifacts, readBuildArtifact, type BuildArtifactInventory, type BuildArtifactReadReply, type BuildArtifactReadRequest,
+} from "./build-artifact-reader.js";
 import { prepareBuildJavaInputs, type BuildJavaDecision, type PreparedJavaCompilation } from "./build-java-inputs.js";
 import type { BuildEvidencePin } from "./build-evidence-contract.js";
 import {
@@ -65,6 +67,8 @@ export interface InspectJavaBridge {
   summaries: { base: AnalysisSummary; head: AnalysisSummary };
   identity: { configSha256: string; distributionSha256: string; jdkSha256: string };
   buildEvidence: { base: InspectJavaBuildEvidence; head: InspectJavaBuildEvidence };
+  /** Retrievable text artifact IDs per side as admitted; empty unless that side is admitted. */
+  buildArtifacts: { base: BuildArtifactInventory; head: BuildArtifactInventory };
   references(request: ReferenceRequest): Promise<ReferencePage>;
   readArtifact(side: "base" | "head", request: BuildArtifactReadRequest): Promise<BuildArtifactReadReply>;
   close(): Promise<void>;
@@ -649,7 +653,11 @@ export async function openInspectJava(
       return { path: file.displayPath, position, buildArtifact: file.buildArtifact };
     };
 
-    const verifyRun = async (side: "base" | "head") => {
+    /**
+     * Host pins, checkout and frozen bytes: what every use of the admitted evidence rests on. Any drift fails closed, and a
+     * clean artifact read needs nothing more: the reader screens that artifact and every counterpart it exposes itself.
+     */
+    const verifyIntegrity = async () => {
       await verifyToolchain(config);
       if (await digestFile(config.configPath) !== config.configSha256) {
         throw new InspectJavaError("configuration-mismatch", "Java configuration changed during review");
@@ -659,6 +667,13 @@ export async function openInspectJava(
       await verifyAdmission(admissions.head);
       await verifyFrozenArtifacts(config, artifacts.base);
       await verifyFrozenArtifacts(config, artifacts.head);
+    };
+
+    /**
+     * Whether a side's semantic facts may still be exposed: every input that shaped them must still pass the refreshed
+     * secret policy. A rotated credential in any in-scope artifact denies queries here without denying reads of clean artifacts.
+     */
+    const verifySemantics = async (side: "base" | "head") => {
       if (modes[side] !== "prepared") {
         const baseline = withheldPaths(decisions[side]);
         const fallbackPolicy = config.buildEvidence?.[side] ? policy : undefined;
@@ -688,6 +703,10 @@ export async function openInspectJava(
         base: javaEvidenceSummary(admissions.base, decisions.base),
         head: javaEvidenceSummary(admissions.head, decisions.head),
       },
+      buildArtifacts: {
+        base: describeBuildArtifacts(admissions.base),
+        head: describeBuildArtifacts(admissions.head),
+      },
       references(request) {
         if (closed) return Promise.reject(new InspectJavaError("analysis-unavailable", "Java bridge is closed"));
         const side = request.side;
@@ -700,7 +719,8 @@ export async function openInspectJava(
         try { target = normalizeTarget(side, request.target); }
         catch (error) { return Promise.reject(error); }
         const action = async () => {
-          await verifyRun(side);
+          await verifyIntegrity();
+          await verifySemantics(side);
           const { target: _hostTarget, ...rest } = request;
           return await sandbox(config, {}, storeDir, join(scratch, `work-query-${++calls}`), {
             schema: 2, kind: "references", store: "/store/refs",
@@ -717,7 +737,7 @@ export async function openInspectJava(
       readArtifact(side, request) {
         if (closed) return Promise.resolve({ ok: false, error: { code: "artifact-unavailable", message: "Java bridge is closed" } });
         const action = async () => {
-          await verifyRun(side);
+          await verifyIntegrity();
           return readBuildArtifact(admissions[side], request, policy);
         };
         const next = serial.then(action);
