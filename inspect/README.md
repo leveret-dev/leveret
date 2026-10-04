@@ -83,12 +83,16 @@ in `temp/`. Restrict configuration, data, and log access to the account running 
 ## Internal Java reference worker
 
 The host bridge invokes `leveret-inspect java --request /work/request.json` with
-one host-generated JSON command. This is an internal protocol, not a separate
-Inspect service or an API for reviewed source to invoke. Analysis uses Git
-objects for pinned base/head snapshots, verifies every selected head source
-and build metadata file against the live checkout, and rejects dirty or
-untracked Java inputs. Skipped Java roots/modules remain in incomplete coverage.
-Completed analyses are stored in a dedicated H2 file outside the checkout.
+one host-generated schema-2 JSON command. `analyze.input` is either `cache-only`
+or `prepared`; the prepared form contains only frozen, screened compilation data
+and never invokes a classpath resolver, processor, generator, target build, or
+test. The unchanged reference query is read-only. This is an internal protocol,
+not a separate Inspect service or an API for reviewed source to invoke.
+Cache-only analysis uses Git objects for pinned base/head snapshots, verifies
+every selected head source and build metadata file against the live checkout,
+and rejects dirty or untracked Java inputs. Skipped Java roots/modules remain
+in incomplete coverage. Completed analyses are stored in a dedicated H2 file
+outside the checkout.
 
 Leveret's trusted review host owns `LEVERET_BASE` and is required to supply
 only its verified accepted revision as the manifest base. Inspect checks that
@@ -102,10 +106,15 @@ checkout. It selects `repositoryId`, the installed `distribution`, a
 SHA-256 digests, `jdkHome` and `jdkFiles` digests for `bin/java`, `release`,
 `lib/modules`, and `lib/server/libjvm.so`, the operator-owned bare `cache`,
 one `module`, `build` (`maven` or `gradle`), one `mainRoots` and one
-`testRoots` entry, `javaLevel`, and `limits`. No target repository
-file chooses the executable, cache, mounts, or worker limits. Only classpath
-artifacts already in the cache are copied into private scratch; provisioning
-and target builds are not worker operations.
+`testRoots` entry, `javaLevel`, and `limits`. It may also pin independent
+`buildEvidence.base` and `buildEvidence.head` exports plus host-only screening
+rules and nonsecret placeholder values. A complete supported selected export is
+preferred even when compilation was not run; a rejected or unsupported side uses
+coherent cache-only discovery without merging export fragments. Only screened
+source members and required dependencies enter the prepared read-only mount.
+No target repository or export file chooses an executable, cache, mounts, or
+worker limits. Cache-only artifacts already in the cache are copied into private
+scratch; provisioning and target builds are not worker operations.
 
 The reviewer accepts only the paired `LEVERET_INSPECT_JAVA_CONFIG` (absolute
 path outside the checkout) and `LEVERET_INSPECT_JAVA_CONFIG_SHA256` (digest of

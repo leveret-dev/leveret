@@ -62,7 +62,7 @@ export type ReferenceRequest = {
   configurationSha256: string;
   manifest: ChangeManifest;
   side: "base" | "head";
-  target: { path: string; position: z.infer<typeof position>; buildArtifact: z.infer<typeof buildArtifact> | null };
+  target: { path: string; position: z.infer<typeof position> } | { artifactId: string; position: z.infer<typeof position> };
   referenceScope?: "outside-diff" | "all";
   byteBudget?: number;
   cursor?: string;

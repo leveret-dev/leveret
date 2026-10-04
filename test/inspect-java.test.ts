@@ -72,7 +72,7 @@ describe("Inspect Java boundary", () => {
     try {
       const page = await bridge.references({
         analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
-        manifest, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 }, buildArtifact: null },
+        manifest, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 } },
       });
       expect(page.items.filter((item) => item.kind === "reference").map((item) => item.reference?.location.path))
         .toEqual(["src/test/java/example/PricingTest.java"]);
@@ -93,7 +93,7 @@ describe("Inspect Java boundary", () => {
       try {
         const page = await bridge.references({
           analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
-          manifest: change, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 }, buildArtifact: null },
+          manifest: change, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 } },
         });
         expect(page.items.filter((item) => item.kind === "reference").map((item) => item.reference?.location.path))
           .toEqual(["src/test/java/example/PricingTest.java"]);
@@ -105,7 +105,7 @@ describe("Inspect Java boundary", () => {
           if (!part.delivery.nextCursor) break;
           part = await bridge.references({
             analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
-            manifest: change, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 }, buildArtifact: null },
+            manifest: change, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 } },
             cursor: part.delivery.nextCursor,
           });
         }
@@ -145,7 +145,7 @@ describe("Inspect Java boundary", () => {
     try {
       const page = await bridge.references({
         analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
-        manifest, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 }, buildArtifact: null },
+        manifest, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 } },
       });
       expect(page.items.filter((item) => item.kind === "reference").map((item) => item.reference?.location.path))
         .toEqual(["src/test/java/example/PricingTest.java"]);
@@ -302,7 +302,7 @@ describe("Inspect Java boundary", () => {
     try {
       const page = await bridge.references({
         analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
-        manifest: change, side: "head", target: { path: nestedMain, position: { line: 3, column: 14 }, buildArtifact: null },
+        manifest: change, side: "head", target: { path: nestedMain, position: { line: 3, column: 14 } },
       });
       const checked = page.items.filter((item) => item.kind === "reference").map((item) => item.reference!);
       expect(checked.map((item) => [item.location.path, item.location.range.start.line]))
@@ -356,7 +356,7 @@ describe("Inspect Java boundary", () => {
       try {
         const page = await bridge.references({
           analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
-          manifest, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 }, buildArtifact: null },
+          manifest, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 } },
         });
         expect(page.items.filter((item) => item.kind === "reference").map((item) => item.reference?.location.path))
           .toEqual(["src/test/java/example/PricingTest.java"]);
@@ -417,7 +417,7 @@ describe("Inspect Java boundary", () => {
       writeFileSync(cachedArtifact, Buffer.from("changed artifact"));
       await expect(bridge.references({
         analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
-        manifest, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 }, buildArtifact: null },
+        manifest, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 } },
       })).rejects.toMatchObject({ code: "configuration-mismatch" });
     } finally {
       writeFileSync(cachedArtifact, original);
@@ -606,7 +606,7 @@ describe("Inspect Java boundary", () => {
     try {
       const page = await bridge.references({
         analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
-        manifest: change, side: "head", target: { path: mavenMain, position: { line: 3, column: 14 }, buildArtifact: null },
+        manifest: change, side: "head", target: { path: mavenMain, position: { line: 3, column: 14 } },
       });
       expect(page.items.filter((item) => item.kind === "reference").map((item) => item.reference?.location.path))
         .toEqual([mavenTest]);
@@ -679,7 +679,7 @@ describe("Inspect Java boundary", () => {
       try {
         const page = await bridge.references({
           analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
-          manifest: expanded, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 }, buildArtifact: null },
+          manifest: expanded, side: "head", target: { path: "src/main/java/example/Pricing.java", position: { line: 3, column: 14 } },
         });
         expect(page.summary.coverage.complete).toBe(false);
         expect(page.items.some((item) => item.file?.path === "other/src/main/java/Other.java" && item.file.examined === false)).toBe(true);

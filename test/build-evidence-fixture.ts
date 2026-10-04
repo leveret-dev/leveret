@@ -71,6 +71,8 @@ function repoFiles(mode: BuildFixtureMode, side: FixtureSide): Record<string, st
       "package example;\n\npublic final class PricingTest {\n    int numeric() { return Pricing.price(3); }\n    int textual() { return Pricing.price(\"ABC\"); }\n}\n",
     // The secret-resource head introduces a filtered line whose value only CI knows; it is never tracked.
     "src/main/resources/application.properties": `endpoint=\${endpoint}\nregion=eu\n${mode === "secret-resource" && head ? "token=${apiToken}\n" : ""}`,
+    // The imported compilation must win over this coherent but source-incomplete legacy fallback.
+    "gradle.lockfile": "empty=compileClasspath,testCompileClasspath\n",
   };
   if (mode === "in-place") files["src/main/java/example/Pricing.java"] = pricing("@FACTOR@");
   else files["templates/Pricing.java.tpl"] = pricing("${factor}");

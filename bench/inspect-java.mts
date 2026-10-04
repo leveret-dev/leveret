@@ -31,7 +31,7 @@ const templateSchema = z.object({
 }).passthrough();
 const checkedPath = "src/test/java/example/PricingTest.java";
 const targetPath = "src/main/java/example/Pricing.java";
-const target = { path: targetPath, position: { line: 3, column: 17 }, buildArtifact: null };
+const target = { path: targetPath, position: { line: 3, column: 17 } };
 const targetBindingKey = "Lexample/Pricing;.price(I)I";
 const baseSource = "package example;\nfinal class Pricing {\n    static int price(int quantity) { return quantity * 10; }\n    static int price(String code) { return code.length(); }\n}\n";
 const headSource = baseSource.replace("quantity * 10", "quantity * 12");
@@ -362,14 +362,14 @@ async function evaluateCorpus(repo: string, cache: string, output: string, templ
       const before = performance.now();
       let inspect: Record<string, unknown>;
       try {
-        const first = await query(bridge, manifest, "head", { path, position: item.position, buildArtifact: null });
+        const first = await query(bridge, manifest, "head", { path, position: item.position });
         const details = [...first.items];
         let last = first;
         let pages = 1;
         while (last.delivery.nextCursor) {
           if (pages >= 256) throw new Error("Inspect pagination exceeded 256 pages");
           last = await query(bridge, manifest, "head",
-            { path, position: item.position, buildArtifact: null }, undefined, last.delivery.nextCursor);
+            { path, position: item.position }, undefined, last.delivery.nextCursor);
           details.push(...last.items);
           pages++;
         }

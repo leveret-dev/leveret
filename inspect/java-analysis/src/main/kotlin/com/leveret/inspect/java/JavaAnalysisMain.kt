@@ -34,7 +34,7 @@ object JavaAnalysisMain {
             val parsed = JsonParser.parseReader(reader)
             require(parsed.isJsonObject) { "Java command must be a JSON object" }
             val command = parsed.asJsonObject
-            require(reader.peek() == JsonToken.END_DOCUMENT && command.integer("schema") == 1) { "Invalid command schema" }
+            require(reader.peek() == JsonToken.END_DOCUMENT && command.integer("schema") == 2) { "Invalid command schema" }
             val result = when (command.string("kind")) {
                 "analyze" -> analyze(command)
                 "references" -> references(command)
@@ -57,13 +57,23 @@ object JavaAnalysisMain {
     }
 
     private fun analyze(command: JsonObject): FrozenAnalysis {
-        command.fields("schema", "kind", "store", "snapshot", "pathRoot", "repositoryId", "revision", "javaLevel", "build", "mainRoots", "testRoots", "cache", "artifacts", "skippedFiles")
-        val root = absolute(command.string("snapshot"))
-        val pathRoot = absolute(command.string("pathRoot"))
+        command.fields("schema", "kind", "store", "input")
+        val input = command.obj("input")
+        return when (input.string("kind")) {
+            "cache-only" -> analyzeCacheOnly(command, input)
+            "prepared" -> analyzePrepared(command, input)
+            else -> throw InspectException("invalid-input", "Unsupported Java analysis input")
+        }
+    }
+
+    private fun analyzeCacheOnly(command: JsonObject, input: JsonObject): FrozenAnalysis {
+        input.fields("kind", "snapshot", "pathRoot", "repositoryId", "revision", "javaLevel", "build", "mainRoots", "testRoots", "cache", "artifacts", "skippedFiles")
+        val root = absolute(input.string("snapshot"))
+        val pathRoot = absolute(input.string("pathRoot"))
         require(root.startsWith(pathRoot) && Files.isDirectory(pathRoot)) { "Invalid repository snapshot root" }
-        val cache = absolute(command.string("cache"))
-        val artifacts = absolute(command.string("artifacts"))
-        val classpath = when (command.string("build")) {
+        val cache = absolute(input.string("cache"))
+        val artifacts = absolute(input.string("artifacts"))
+        val classpath = when (input.string("build")) {
             "maven" -> CacheOnlyClasspathWorker.analyze(root.resolve("pom.xml"), cache)
             "gradle" -> GradleLockfileClasspathWorker.analyze(root, cache)
             else -> throw InspectException("invalid-input", "Unsupported classpath input")
@@ -88,8 +98,8 @@ object JavaAnalysisMain {
             }
             hashes[path] = java.util.HexFormat.of().formatHex(digest.digest())
         }
-        val mainRoots = command.array("mainRoots").map { inside(root, it.asString) }
-        val testRoots = command.array("testRoots").map { inside(root, it.asString) }
+        val mainRoots = input.array("mainRoots").map { inside(root, it.asString) }
+        val testRoots = input.array("testRoots").map { inside(root, it.asString) }
         require(mainRoots.size == 1 && testRoots.size == 1) { "Exactly one main and one test source root are supported" }
         fun sources(roots: List<Path>): List<Path> = roots.flatMap { directory ->
             if (!Files.exists(directory)) emptyList() else Files.walk(directory).use { walk ->
@@ -101,19 +111,65 @@ object JavaAnalysisMain {
             }
         }.sortedBy { it.toString() }
         val data = JavaExtractor.extract(JavaAnalysisInput.cacheOnly(
-            command.string("repositoryId"), command.string("revision"), pathRoot,
+            input.string("repositoryId"), input.string("revision"), pathRoot,
             sources(mainRoots), sources(testRoots), mainRoots, testRoots,
-            command.string("javaLevel"), classpath, artifacts,
-            command.array("skippedFiles").map { entry ->
-                val item = entry.asJsonObject.also { it.fields("path", "sourceSet", "reason") }
-                val path = item.string("path")
-                require(!Path.of(path).isAbsolute && Path.of(path).none { it.toString() == ".." } && path.endsWith(".java"))
-                SourceFile(path, item.string("sourceSet").also { require(it == "main" || it == "test") },
-                    false, item.string("reason"))
-            },
+            input.string("javaLevel"), classpath, artifacts, skipped(input),
         ))
         return store(command).use { (_, sessions) ->
             FrozenAnalysis(JavaFactStore(sessions).publish(data), hashes)
+        }
+    }
+
+    private fun analyzePrepared(command: JsonObject, input: JsonObject): FrozenAnalysis {
+        input.fields("kind", "repositoryId", "revision", "pathRoot", "artifactRoot", "compilations", "skippedFiles", "diagnostics", "buildIdentity")
+        val pathRoot = absolute(input.string("pathRoot"))
+        val artifactRoot = absolute(input.string("artifactRoot"))
+        require(Files.isDirectory(pathRoot) && Files.isDirectory(artifactRoot) && artifactRoot.startsWith(pathRoot)) { "Invalid prepared roots" }
+        val compilations = input.array("compilations").map { value ->
+            val item = value.asJsonObject.also {
+                it.fields("id", "resolutionDomain", "sourceSet", "files", "roots", "sourcePath", "classpath", "compiler", "origins")
+            }
+            val files = item.array("files").map { raw ->
+                val file = raw.asJsonObject.also { it.fields("physicalPath", "displayPath", "encoding", "buildArtifact") }
+                JavaSourceInput(
+                    contained(pathRoot, file.string("physicalPath")), file.string("displayPath"), file.string("encoding"),
+                    artifact(file.obj("buildArtifact")),
+                )
+            }
+            val compiler = item.obj("compiler").also {
+                it.fields("sourceLevel", "targetLevel", "encoding", "preview", "release", "platform", "usedModuleOptions")
+            }
+            val release = compiler.obj("release").also { it.fields("state", "value") }
+            val platform = compiler.obj("platform").entrySet().associate { (name, value) ->
+                require(value.isJsonPrimitive && value.asJsonPrimitive.isString) { "Invalid platform fingerprint" }
+                name to value.asString
+            }
+            val origins = item.array("origins").map { raw ->
+                val origin = raw.asJsonObject.also { it.fields("path", "artifact", "ownerCompilationId") }
+                JavaOrigin(
+                    contained(artifactRoot, origin.string("path")), artifact(origin.obj("artifact")),
+                    origin.nullableString("ownerCompilationId"),
+                )
+            }
+            JavaCompilationInput(
+                item.string("id"), item.string("resolutionDomain"), item.string("sourceSet"), files,
+                item.paths("roots", pathRoot), item.paths("sourcePath", pathRoot), item.paths("classpath", artifactRoot),
+                JavaCompilationEnvironment(
+                    compiler.nullableString("sourceLevel"), compiler.nullableString("targetLevel"),
+                    compiler.nullableString("encoding"), compiler.nullableBoolean("preview"),
+                    JavaRelease(release.string("state"), release.nullableString("value")), platform,
+                    compiler.nullableStrings("usedModuleOptions"),
+                ),
+                origins,
+            )
+        }
+        require(compilations.isNotEmpty()) { "Prepared input has no supported compilations" }
+        val data = JavaExtractor.extract(JavaAnalysisInput(
+            input.string("repositoryId"), input.string("revision"), pathRoot, artifactRoot, compilations,
+            skipped(input), input.array("diagnostics").map { it.asString }, input.string("buildIdentity"),
+        ))
+        return store(command).use { (_, sessions) ->
+            FrozenAnalysis(JavaFactStore(sessions).publish(data), emptyMap())
         }
     }
 
@@ -148,6 +204,55 @@ object JavaAnalysisMain {
             source.string("referenceScope"), source.integer("byteBudget"), source.get("cursor")?.takeIf { !it.isJsonNull }?.asString)
         return store(command).use { (_, sessions) ->
             JavaFactStore(sessions).query(request)
+        }
+    }
+
+    private fun skipped(input: JsonObject): List<SourceFile> = input.array("skippedFiles").map { entry ->
+        val item = entry.asJsonObject.also { it.fields("path", "sourceSet", "reason") }
+        val path = item.string("path")
+        require(!Path.of(path).isAbsolute && Path.of(path).none { it.toString() == ".." } && path.endsWith(".java"))
+        SourceFile(path, item.string("sourceSet").also { require(it == "main" || it == "test") }, false, item.string("reason"))
+    }
+
+    private fun artifact(item: JsonObject): BuildArtifactCitation {
+        item.fields("manifestSha256", "artifactId", "origin")
+        val hash = item.string("manifestSha256")
+        val id = item.string("artifactId")
+        val origin = item.string("origin")
+        require(hash.matches(Regex("[0-9a-f]{64}")) && id.isNotBlank() && origin in setOf("authored", "materialized", "external"))
+        return BuildArtifactCitation(hash, id, origin)
+    }
+
+    private fun contained(root: Path, raw: String): Path =
+        absolute(raw).also { require(it.startsWith(root)) { "Prepared path escapes its root" } }
+
+    private fun JsonObject.paths(name: String, root: Path): List<Path> =
+        array(name).map { value ->
+            require(value.isJsonPrimitive && value.asJsonPrimitive.isString) { "Invalid prepared path" }
+            contained(root, value.asString)
+        }
+
+    private fun JsonObject.nullableString(name: String): String? {
+        val value = get(name) ?: throw IllegalArgumentException("Missing $name")
+        if (value.isJsonNull) return null
+        require(value.isJsonPrimitive && value.asJsonPrimitive.isString) { "Invalid string $name" }
+        return value.asString
+    }
+
+    private fun JsonObject.nullableBoolean(name: String): Boolean? {
+        val value = get(name) ?: throw IllegalArgumentException("Missing $name")
+        if (value.isJsonNull) return null
+        require(value.isJsonPrimitive && value.asJsonPrimitive.isBoolean) { "Invalid boolean $name" }
+        return value.asBoolean
+    }
+
+    private fun JsonObject.nullableStrings(name: String): List<String>? {
+        val value = get(name) ?: throw IllegalArgumentException("Missing $name")
+        if (value.isJsonNull) return null
+        require(value.isJsonArray) { "Invalid string array $name" }
+        return value.asJsonArray.map {
+            require(it.isJsonPrimitive && it.asJsonPrimitive.isString) { "Invalid string in $name" }
+            it.asString
         }
     }
 
