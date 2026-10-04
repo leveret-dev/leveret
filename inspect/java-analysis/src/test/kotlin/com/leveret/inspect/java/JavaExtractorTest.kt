@@ -308,8 +308,7 @@ class JavaExtractorTest {
             }
         """.trimIndent())
         Files.writeString(test, "package example; class PricingTest { int checked() { return Pricing.price(TestOnly.value()); } }")
-        val base = input(dir, listOf(main), listOf(test))
-        val data = JavaExtractor.extract(base.copy(classpath = base.classpath.copy(testClasspath = listOf("test-only.jar"))))
+        val data = JavaExtractor.extract(input(dir, listOf(main), listOf(test), classpath(testClasspath = listOf("test-only.jar"))))
         val target = data.methods.single { it.signature.contains("price(int)") }
         assertThat(data.references.filter { it.targetId == target.id }.map { it.sourceSet }).containsExactly("main", "test")
         assertThat(data.unresolved.map { it.sourceSet }).contains("main")
@@ -369,14 +368,16 @@ class JavaExtractorTest {
         assertThat(data.files).contains(SourceFile("other/src/main/java/example/Other.java", "main", false, "unsupported module"))
     }
 
-    private fun input(root: Path, main: List<Path>, test: List<Path>) = JavaAnalysisInput(
-        repositoryId = "fixture", revision = "0123456789abcdef", sourceRoot = root,
-        mainFiles = main, testFiles = test, mainRoots = listOf(root.resolve("src/main/java")),
-        testRoots = listOf(root.resolve("src/test/java")), javaLevel = "21",
-        classpath = ClasspathAnalysis(
-            MavenTuple("fixture", "fixture"), emptyList(), RepositoryPolicy(true, true, true, "central", "https://repo.maven.apache.org/maven2"),
-            emptyList(), emptyList(), listOf("src/test/java"),
-        ),
-        artifactRoot = root.resolve("cache"),
+    private fun input(root: Path, main: List<Path>, test: List<Path>, classpath: ClasspathAnalysis = classpath()) =
+        JavaAnalysisInput.cacheOnly(
+            repositoryId = "fixture", revision = "0123456789abcdef", pathRoot = root,
+            mainFiles = main, testFiles = test, mainRoots = listOf(root.resolve("src/main/java")),
+            testRoots = listOf(root.resolve("src/test/java")), javaLevel = "21",
+            classpath = classpath, artifactRoot = root.resolve("cache"),
+        )
+
+    private fun classpath(testClasspath: List<String> = emptyList()) = ClasspathAnalysis(
+        MavenTuple("fixture", "fixture"), emptyList(), RepositoryPolicy(true, true, true, "central", "https://repo.maven.apache.org/maven2"),
+        emptyList(), testClasspath, listOf("src/test/java"),
     )
 }

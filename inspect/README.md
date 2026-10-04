@@ -38,6 +38,12 @@ It resolves source bindings against cache-only classpaths; unresolved sites and 
 dependencies remain coverage gaps, not checked references. Extraction reads sources
 and JARs without running the target build or tests. Its Java source level is explicit
 and distinct from the worker JDK; broader module resolution is not supported.
+Extraction consumes normalized compilations (member files, source path, classpath and compiler settings).
+The cache-only adapter yields main and test compilations sharing one resolution domain, so a name clash stays
+ambiguous; exported compilations resolve only within their own domain and declared paths. A call joins a source
+declaration only when its origin (member file, source-path file, or a classpath entry owned by that compilation)
+is established. An environment the worker cannot reproduce (`--release`, a different platform, JPMS options,
+preview features, non-UTF-8 sources) is rejected as `unsupported-exported-environment`, never analyzed.
 Eclipse JDT Core 3.46.0 is used under EPL-2.0; the installed distribution must
 retain its license notice.
 

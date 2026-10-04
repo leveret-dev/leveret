@@ -2,10 +2,13 @@ package com.leveret.inspect.java
 
 import com.leveret.inspect.classpath.ClasspathAnalysis
 import java.nio.file.Path
+import org.eclipse.jdt.core.JavaCore
 
 data class Position(val line: Int, val column: Int)
 data class Range(val start: Position, val end: Position)
-data class Location(val path: String, val range: Range)
+/** Identity of an exported build artifact; the manifest hash plus artifact id pin the exact immutable bytes. */
+data class BuildArtifactCitation(val manifestSha256: String, val artifactId: String, val origin: String)
+data class Location(val path: String, val range: Range, val buildArtifact: BuildArtifactCitation? = null)
 data class JavaMethod(
     val id: String,
     val signature: String,
@@ -59,16 +62,62 @@ data class AnalysisSummary(
     val configurationSha256: String,
     val coverage: AnalysisCoverage,
 )
+/** One Java source: [physicalPath] is what the compiler reads, [displayPath] is what facts report. */
+data class JavaSourceInput(val physicalPath: Path, val displayPath: String, val encoding: String, val buildArtifact: BuildArtifactCitation?)
+/** Verified origin of a compiler path entry. [ownerCompilationId] names the compilation whose sources produced a binary entry. */
+data class JavaOrigin(val path: Path, val artifact: BuildArtifactCitation?, val ownerCompilationId: String?)
+data class JavaCompilationInput(
+    val id: String,
+    val resolutionDomain: String,
+    val sourceSet: String,
+    val files: List<JavaSourceInput>,
+    val roots: List<Path>,
+    val sourcePath: List<Path>,
+    val classpath: List<Path>,
+    val compiler: JavaCompilationEnvironment,
+    val origins: List<JavaOrigin>,
+)
 data class JavaAnalysisInput(
     val repositoryId: String,
     val revision: String,
-    val sourceRoot: Path,
-    val mainFiles: List<Path>,
-    val testFiles: List<Path>,
-    val mainRoots: List<Path>,
-    val testRoots: List<Path>,
-    val javaLevel: String,
-    val classpath: ClasspathAnalysis,
+    val pathRoot: Path,
     val artifactRoot: Path,
-    val skippedFiles: List<SourceFile> = emptyList(),
-)
+    val compilations: List<JavaCompilationInput>,
+    val skippedFiles: List<SourceFile>,
+    val diagnostics: List<String>,
+    val buildIdentity: String,
+) {
+    companion object {
+        /** Declarations of the cache-only adapter share one domain: a main/test name clash stays ambiguous. */
+        const val CACHE_ONLY_DOMAIN = "shared-module"
+
+        /** Normalizes the cache-only main/test layout without changing its source-path or classpath semantics. */
+        fun cacheOnly(
+            repositoryId: String, revision: String, pathRoot: Path, mainFiles: List<Path>, testFiles: List<Path>,
+            mainRoots: List<Path>, testRoots: List<Path>, javaLevel: String, classpath: ClasspathAnalysis,
+            artifactRoot: Path, skippedFiles: List<SourceFile> = emptyList(),
+        ): JavaAnalysisInput {
+            require(JavaCore.isSupportedJavaVersion(javaLevel)) { "Unsupported Java level $javaLevel" }
+            val root = pathRoot.toRealPath()
+            val artifacts = artifactRoot.toAbsolutePath().normalize()
+            val compiler = JavaCompilationEnvironment.legacy(javaLevel)
+            fun files(paths: List<Path>) = paths.map { JavaSourceInput(it, JavaAnalysisIdentity.relative(root, it), "UTF-8", null) }
+            fun entries(names: List<String>) = names.map { artifacts.resolve(it).normalize() }
+            val compilations = listOfNotNull(
+                if (mainFiles.isEmpty()) null else JavaCompilationInput(
+                    "main", CACHE_ONLY_DOMAIN, "main", files(mainFiles), mainRoots, mainRoots,
+                    entries(classpath.mainClasspath), compiler, emptyList(),
+                ),
+                if (testFiles.isEmpty()) null else JavaCompilationInput(
+                    "test", CACHE_ONLY_DOMAIN, "test", files(testFiles), testRoots, mainRoots + testRoots,
+                    entries((classpath.mainClasspath + classpath.testClasspath).distinct()), compiler, emptyList(),
+                ),
+            )
+            return JavaAnalysisInput(
+                repositoryId, revision, pathRoot, artifactRoot, compilations, skippedFiles,
+                classpath.diagnostics.map { "${it.sourceSet ?: "all"}: ${it.reason}: ${it.message}" },
+                "cache-only:" + classpath.write(),
+            )
+        }
+    }
+}

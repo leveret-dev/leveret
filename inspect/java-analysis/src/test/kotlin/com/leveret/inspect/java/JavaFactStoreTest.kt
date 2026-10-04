@@ -143,15 +143,7 @@ class JavaFactStoreTest {
                 int textual() { return Pricing.price("ABC"); }
             }
         """.trimIndent())
-        val input = JavaAnalysisInput(
-            "fixture", "head", root, listOf(main), listOf(test),
-            listOf(root.resolve("src/main/java")), listOf(root.resolve("src/test/java")), "21",
-            com.leveret.inspect.classpath.ClasspathAnalysis(
-                com.leveret.inspect.classpath.MavenTuple("fixture", "fixture"), emptyList(),
-                com.leveret.inspect.classpath.RepositoryPolicy(true, true, true, "central", "https://repo.maven.apache.org/maven2"),
-                emptyList(), emptyList(), listOf("src/test/java"),
-            ), root.resolve("cache"),
-        )
+        val input = cacheOnly(root, listOf(main), listOf(test))
         val data = JavaExtractor.extract(input)
         opened(home) { JavaFactStore(it).publish(data) }
         opened(home) { sessions ->
@@ -185,15 +177,7 @@ class JavaFactStoreTest {
                 int caller() { return price($arguments); }
             }
         """.trimIndent())
-        val input = JavaAnalysisInput(
-            "fixture", "head", root, listOf(main), emptyList(),
-            listOf(root.resolve("src/main/java")), listOf(root.resolve("src/test/java")), "21",
-            com.leveret.inspect.classpath.ClasspathAnalysis(
-                com.leveret.inspect.classpath.MavenTuple("fixture", "fixture"), emptyList(),
-                com.leveret.inspect.classpath.RepositoryPolicy(true, true, true, "central", "https://repo.maven.apache.org/maven2"),
-                emptyList(), emptyList(), listOf("src/test/java"),
-            ), root.resolve("cache"),
-        )
+        val input = cacheOnly(root, listOf(main), emptyList())
         val data = JavaExtractor.extract(input)
         val declaration = data.methods.single { it.signature.contains(".price(") }
         opened(home) { JavaFactStore(it).publish(data) }
@@ -217,15 +201,7 @@ class JavaFactStoreTest {
         Files.createDirectories(test.parent)
         Files.writeString(main, "package example; class Pricing { static int price(int n) { return n; } }")
         Files.writeString(test, "package example; class Pricing { static int price(int n) { return n + 1; } }")
-        val input = JavaAnalysisInput(
-            "fixture", "head", root, listOf(main), listOf(test),
-            listOf(root.resolve("src/main/java")), listOf(root.resolve("src/test/java")), "21",
-            com.leveret.inspect.classpath.ClasspathAnalysis(
-                com.leveret.inspect.classpath.MavenTuple("fixture", "fixture"), emptyList(),
-                com.leveret.inspect.classpath.RepositoryPolicy(true, true, true, "central", "https://repo.maven.apache.org/maven2"),
-                emptyList(), emptyList(), listOf("src/test/java"),
-            ), root.resolve("cache"),
-        )
+        val input = cacheOnly(root, listOf(main), listOf(test))
         val data = JavaExtractor.extract(input)
         val declaration = data.methods.single { it.signature.contains(".price(") }
         opened(home) { JavaFactStore(it).publish(data) }
@@ -243,6 +219,28 @@ class JavaFactStoreTest {
             }
         }
     }
+
+    @Test
+    fun `artifact citations survive publication and declaration lookup`(@TempDir home: Path) {
+        val citation = BuildArtifactCitation("a".repeat(64), "pricing-generated", "materialized")
+        val base = fixture("head", "cited", "example.Pricing.price(int)")
+        val target = base.methods.single().let { it.copy(location = it.location.copy(buildArtifact = citation)) }
+        opened(home) { JavaFactStore(it).publish(base.copy(methods = listOf(target))) }
+        opened(home) { sessions ->
+            val found = JavaFactStore(sessions).methodAt("cited", target.location.path, Position(3, 16))
+            assertThat(found.location.buildArtifact).isEqualTo(citation)
+        }
+    }
+
+    private fun cacheOnly(root: Path, main: List<Path>, test: List<Path>) = JavaAnalysisInput.cacheOnly(
+        "fixture", "head", root, main, test,
+        listOf(root.resolve("src/main/java")), listOf(root.resolve("src/test/java")), "21",
+        com.leveret.inspect.classpath.ClasspathAnalysis(
+            com.leveret.inspect.classpath.MavenTuple("fixture", "fixture"), emptyList(),
+            com.leveret.inspect.classpath.RepositoryPolicy(true, true, true, "central", "https://repo.maven.apache.org/maven2"),
+            emptyList(), emptyList(), listOf("src/test/java"),
+        ), root.resolve("cache"),
+    )
 
     private fun fixture(revision: String, id: String, signature: String): AnalysisData {
         val target = JavaMethod("method-$id", signature, Location("src/main/java/Pricing.java", Range(Position(3, 4), Position(3, 40))),

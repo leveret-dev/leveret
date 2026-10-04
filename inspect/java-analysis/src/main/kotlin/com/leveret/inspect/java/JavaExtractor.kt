@@ -1,9 +1,11 @@
 package com.leveret.inspect.java
 
+import java.nio.file.Files
 import java.nio.file.Path
 import org.eclipse.jdt.core.JavaCore
 import org.eclipse.jdt.core.dom.AST
 import org.eclipse.jdt.core.dom.ASTNode
+import org.eclipse.jdt.core.dom.AbstractTypeDeclaration
 import org.eclipse.jdt.core.dom.AnonymousClassDeclaration
 import org.eclipse.jdt.core.dom.ASTParser
 import org.eclipse.jdt.core.dom.ASTVisitor
@@ -21,139 +23,197 @@ import org.eclipse.jdt.core.dom.TypeMethodReference
 import org.eclipse.core.runtime.NullProgressMonitor
 
 object JavaExtractor {
+    private const val UNSUPPORTED = "unsupported-exported-environment"
+
     fun extract(input: JavaAnalysisInput): AnalysisData {
-        require(JavaCore.isSupportedJavaVersion(input.javaLevel)) { "Unsupported Java level ${input.javaLevel}" }
-        val identity = JavaAnalysisIdentity.compute(input)
-        val methods = linkedMapOf<String, JavaMethod>()
-        val constructors = linkedMapOf<String, JavaMethod>()
-        val duplicateIds = mutableSetOf<String>()
-        val pending = mutableListOf<PendingReference>()
-        val unresolved = mutableListOf<UnresolvedSite>()
-        val files = mutableListOf<SourceFile>()
-        val diagnostics = input.classpath.diagnostics.map { "${it.sourceSet ?: "all"}: ${it.reason}: ${it.message}" }.toMutableList()
-        val root = input.sourceRoot.toRealPath()
-        val artifact = input.artifactRoot.toAbsolutePath().normalize()
-        for ((scope, sources, roots, paths) in listOf(
-            Batch("main", input.mainFiles, input.mainRoots, input.classpath.mainClasspath),
-            Batch("test", input.testFiles, input.mainRoots + input.testRoots,
-                (input.classpath.mainClasspath + input.classpath.testClasspath).distinct()),
-        )) {
-            if (sources.isEmpty()) continue
-            val parser = ASTParser.newParser(AST.getJLSLatest())
-            parser.setResolveBindings(true)
-            parser.setBindingsRecovery(false)
-            parser.setStatementsRecovery(false)
-            val options = JavaCore.getOptions()
-            JavaCore.setComplianceOptions(input.javaLevel, options)
-            parser.setCompilerOptions(options)
-            val artifactRoot = if (paths.isEmpty()) artifact else artifact.toRealPath()
-            parser.setEnvironment(
-                paths.map { JavaAnalysisIdentity.contained(artifactRoot, artifact.resolve(it)).toString() }.toTypedArray(),
-                roots.filter { java.nio.file.Files.exists(it) }.map { JavaAnalysisIdentity.contained(root, it).toString() }.toTypedArray(),
-                null,
-                true,
-            )
-            val requested = sources.map { JavaAnalysisIdentity.contained(root, it).toString() }.toSet()
-            val examined = mutableSetOf<String>()
-            parser.createASTs(requested.toTypedArray(), null, emptyArray<String>(), object : FileASTRequestor() {
-                override fun acceptAST(sourceFilePath: String, ast: CompilationUnit) {
-                    if (sourceFilePath !in requested) return
-                    val relative = JavaAnalysisIdentity.relative(root, Path.of(sourceFilePath))
-                    examined += relative
-                    files += SourceFile(relative, scope, true)
-                    val problems = ast.problems.filter { it.isError }
-                    diagnostics += problems.map { "$scope:$relative:${it.sourceLineNumber}: ${it.message}" }
-                    ast.accept(object : ASTVisitor() {
-                        override fun visit(node: MethodDeclaration): Boolean {
-                            val binding = node.resolveBinding()?.methodDeclaration
-                            if (binding != null && !binding.isRecovered && !recoveredSignature(binding)) {
-                                val method = JavaMethod(
-                                    binding.key, signature(binding), location(ast, relative, node),
-                                    range(ast, node.name.startPosition, node.name.length), scope,
-                                )
-                                val destination = if (node.isConstructor) constructors else methods
-                                val previous = destination.putIfAbsent(method.id, method)
-                                if (previous != null && previous != method) {
-                                    val declarations = if (duplicateIds.add(method.id)) listOf(previous, method) else listOf(method)
-                                    for (declaration in declarations) {
-                                        val start = declaration.nameRange.start
-                                        unresolved += UnresolvedSite(
-                                            "duplicate:${declaration.sourceSet}:${declaration.location.path}:${start.line}:${start.column}",
-                                            Location(declaration.location.path, declaration.nameRange),
-                                            declaration.sourceSet, "duplicate-declaration-identity",
-                                        )
-                                    }
-                                    diagnostics += "$scope:$relative: duplicate declaration identity ${method.id}"
-                                }
-                            }
-                            return true
-                        }
-                        override fun visit(node: MethodInvocation): Boolean {
-                            record(node, node.resolveMethodBinding(), "call", node.arguments().filterIsInstance<Expression>() + listOfNotNull(node.expression))
-                            return true
-                        }
-                        override fun visit(node: SuperMethodInvocation): Boolean {
-                            record(node, node.resolveMethodBinding(), "call", node.arguments().filterIsInstance<Expression>())
-                            return true
-                        }
-                        override fun visit(node: ExpressionMethodReference): Boolean {
-                            record(node, node.resolveMethodBinding(), "method-reference", listOf(node.expression))
-                            return true
-                        }
-                        override fun visit(node: TypeMethodReference): Boolean {
-                            record(node, node.resolveMethodBinding(), "method-reference", emptyList())
-                            return true
-                        }
-                        override fun visit(node: SuperMethodReference): Boolean {
-                            record(node, node.resolveMethodBinding(), "method-reference", emptyList())
-                            return true
-                        }
-                        private fun record(node: ASTNode, binding: IMethodBinding?, kind: String, expressions: List<Expression>) {
-                            val site = location(ast, relative, node)
-                            val siteId = "$relative:${node.startPosition}:${node.length}:$kind"
-                            val errors = problems.filter { it.sourceStart < node.startPosition + node.length && it.sourceEnd >= node.startPosition }
-                            val suspect = binding == null || binding.isRecovered || recoveredSignature(binding) ||
-                                expressions.any { expression -> recoveredType(expression.resolveTypeBinding()) } || errors.isNotEmpty()
-                            if (suspect) {
-                                unresolved += UnresolvedSite(siteId, site, scope,
-                                    if (errors.isNotEmpty()) "compiler: ${errors.first().message}" else "binding-unresolved")
-                            } else {
-                                if (implicitMember(binding)) return
-                                val enclosing = generateSequence(node.parent) { it.parent }.takeWhile { it !is org.eclipse.jdt.core.dom.LambdaExpression }
-                                    .firstOrNull { it is MethodDeclaration || it is org.eclipse.jdt.core.dom.Initializer ||
-                                        it is org.eclipse.jdt.core.dom.AbstractTypeDeclaration || it is AnonymousClassDeclaration }
-                                    as? MethodDeclaration
-                                pending += PendingReference(
-                                    siteId, binding.methodDeclaration.key, site,
-                                    enclosing?.resolveBinding()?.methodDeclaration?.key, scope, kind, binding.declaringClass.isFromSource,
-                                )
-                            }
-                        }
-                    })
-                }
-            }, NullProgressMonitor())
-            for (file in sources) {
-                val path = JavaAnalysisIdentity.relative(root, file)
-                if (path !in examined) {
-                    files += SourceFile(path, scope, false, "AST unavailable")
-                    diagnostics += "$scope:$path: AST unavailable"
+        val worker = JavaCompilationEnvironment.workerPlatform()
+        for (compilation in input.compilations) {
+            compilation.compiler.supportProblem(worker)?.let { throw InspectException(UNSUPPORTED, "Compilation ${compilation.id}: $it") }
+            for (file in compilation.files) {
+                if (!JavaCompilationEnvironment.isUtf8(file.encoding)) {
+                    throw InspectException(UNSUPPORTED, "Compilation ${compilation.id}: encoding ${file.encoding} of ${file.displayPath} " +
+                        "differs from the compiler encoding ${compilation.compiler.encoding}")
                 }
             }
         }
+        val identity = JavaAnalysisIdentity.compute(input)
+        val methods = linkedMapOf<String, JavaMethod>()
+        val constructors = linkedMapOf<String, JavaMethod>()
+        val declaredAt = HashMap<String, Path>()
+        val declaredKeys = HashSet<String>()
+        val fileOwners = HashMap<Path, MutableList<JavaCompilationInput>>()
+        val duplicateIds = mutableSetOf<String>()
+        val pending = mutableListOf<PendingReference>()
+        val unresolved = mutableListOf<UnresolvedSite>()
         val references = mutableListOf<JavaReference>()
-        for (candidate in pending) {
-            if (candidate.targetId in duplicateIds) {
-                unresolved += UnresolvedSite(candidate.id, candidate.location, candidate.sourceSet, "duplicate-declaration-identity")
-            } else if (methods[candidate.targetId] == null) {
-                if (candidate.sourceTarget) {
-                    unresolved += UnresolvedSite(candidate.id, candidate.location, candidate.sourceSet, "target-outside-verified-sources")
-                }
-            } else {
-                references += JavaReference(
-                    candidate.id, candidate.targetId, candidate.location,
-                    candidate.enclosingId?.takeUnless { it in duplicateIds }?.let { methods[it] ?: constructors[it] },
-                    candidate.sourceSet, candidate.kind,
+        val files = mutableListOf<SourceFile>()
+        val diagnostics = input.diagnostics.toMutableList()
+        val root = input.pathRoot.toRealPath()
+        val artifact = input.artifactRoot.toAbsolutePath().normalize()
+        JavaOriginIndex(input.compilations).use { index ->
+            for (compilation in input.compilations) {
+                if (compilation.files.isEmpty()) continue
+                val scope = compilation.sourceSet
+                val domain = compilation.resolutionDomain
+                val parser = ASTParser.newParser(AST.getJLSLatest())
+                parser.setResolveBindings(true)
+                parser.setBindingsRecovery(false)
+                parser.setStatementsRecovery(false)
+                val options = JavaCore.getOptions()
+                JavaCore.setComplianceOptions(checkNotNull(compilation.compiler.sourceLevel), options)
+                parser.setCompilerOptions(options)
+                val artifactRoot = if (compilation.classpath.isEmpty()) artifact else artifact.toRealPath()
+                val sourcePath = compilation.sourcePath.filter { Files.exists(it) }.map { JavaAnalysisIdentity.contained(root, it).toString() }
+                parser.setEnvironment(
+                    compilation.classpath.map { JavaAnalysisIdentity.contained(artifactRoot, it).toString() }.toTypedArray(),
+                    sourcePath.toTypedArray(),
+                    if (sourcePath.isEmpty()) null else Array(sourcePath.size) { "UTF-8" },
+                    true,
                 )
+                val members = LinkedHashMap<String, JavaSourceInput>()
+                for (file in compilation.files) {
+                    val real = JavaAnalysisIdentity.contained(root, file.physicalPath)
+                    members[real.toString()] = file
+                    fileOwners.getOrPut(real) { mutableListOf() }.add(compilation)
+                }
+                val requested = members.keys.toTypedArray()
+                val examined = mutableSetOf<String>()
+                parser.createASTs(requested, Array(requested.size) { "UTF-8" }, emptyArray<String>(), object : FileASTRequestor() {
+                    override fun acceptAST(sourceFilePath: String, ast: CompilationUnit) {
+                        val file = members[sourceFilePath] ?: return
+                        val real = Path.of(sourceFilePath)
+                        examined += sourceFilePath
+                        files += SourceFile(file.displayPath, scope, true)
+                        index.declare(compilation.id, real, topLevelTypes(ast))
+                        val problems = ast.problems.filter { it.isError }
+                        diagnostics += problems.map { "$scope:${file.displayPath}:${it.sourceLineNumber}: ${it.message}" }
+                        ast.accept(object : ASTVisitor() {
+                            override fun visit(node: MethodDeclaration): Boolean {
+                                val binding = node.resolveBinding()?.methodDeclaration
+                                if (binding != null && !binding.isRecovered && !recoveredSignature(binding)) {
+                                    val id = methodId(domain, binding.key)
+                                    val method = JavaMethod(
+                                        id, signature(binding), location(ast, file, node),
+                                        range(ast, node.name.startPosition, node.name.length), scope,
+                                    )
+                                    val destination = if (node.isConstructor) constructors else methods
+                                    val previous = destination.putIfAbsent(id, method)
+                                    if (previous == null) {
+                                        declaredAt[id] = real
+                                        if (!node.isConstructor) declaredKeys += binding.key
+                                    } else if (previous != method) {
+                                        val declarations = if (duplicateIds.add(id)) listOf(previous, method) else listOf(method)
+                                        for (declaration in declarations) {
+                                            val start = declaration.nameRange.start
+                                            unresolved += UnresolvedSite(
+                                                "duplicate:${declaration.sourceSet}:${declaration.location.path}:${start.line}:${start.column}",
+                                                Location(declaration.location.path, declaration.nameRange, declaration.location.buildArtifact),
+                                                declaration.sourceSet, "duplicate-declaration-identity",
+                                            )
+                                        }
+                                        diagnostics += "$scope:${file.displayPath}: duplicate declaration identity $id"
+                                    }
+                                }
+                                return true
+                            }
+                            override fun visit(node: MethodInvocation): Boolean {
+                                record(node, node.resolveMethodBinding(), "call", node.arguments().filterIsInstance<Expression>() + listOfNotNull(node.expression))
+                                return true
+                            }
+                            override fun visit(node: SuperMethodInvocation): Boolean {
+                                record(node, node.resolveMethodBinding(), "call", node.arguments().filterIsInstance<Expression>())
+                                return true
+                            }
+                            override fun visit(node: ExpressionMethodReference): Boolean {
+                                record(node, node.resolveMethodBinding(), "method-reference", listOf(node.expression))
+                                return true
+                            }
+                            override fun visit(node: TypeMethodReference): Boolean {
+                                record(node, node.resolveMethodBinding(), "method-reference", emptyList())
+                                return true
+                            }
+                            override fun visit(node: SuperMethodReference): Boolean {
+                                record(node, node.resolveMethodBinding(), "method-reference", emptyList())
+                                return true
+                            }
+                            private fun record(node: ASTNode, binding: IMethodBinding?, kind: String, expressions: List<Expression>) {
+                                val site = location(ast, file, node)
+                                val siteId = "${file.displayPath}:${node.startPosition}:${node.length}:$kind"
+                                val errors = problems.filter { it.sourceStart < node.startPosition + node.length && it.sourceEnd >= node.startPosition }
+                                val suspect = binding == null || binding.isRecovered || recoveredSignature(binding) ||
+                                    expressions.any { expression -> recoveredType(expression.resolveTypeBinding()) } || errors.isNotEmpty()
+                                if (suspect) {
+                                    unresolved += UnresolvedSite(siteId, site, scope,
+                                        if (errors.isNotEmpty()) "compiler: ${errors.first().message}" else "binding-unresolved")
+                                } else {
+                                    if (implicitMember(binding)) return
+                                    val enclosing = generateSequence(node.parent) { it.parent }.takeWhile { it !is org.eclipse.jdt.core.dom.LambdaExpression }
+                                        .firstOrNull { it is MethodDeclaration || it is org.eclipse.jdt.core.dom.Initializer ||
+                                            it is org.eclipse.jdt.core.dom.AbstractTypeDeclaration || it is AnonymousClassDeclaration }
+                                        as? MethodDeclaration
+                                    val enclosingBinding = enclosing?.resolveBinding()?.methodDeclaration
+                                    pending += PendingReference(
+                                        siteId, binding.methodDeclaration.key, JavaOriginIndex.declaringType(binding), site,
+                                        enclosingBinding?.key, enclosingBinding?.let { JavaOriginIndex.declaringType(it).topLevel }, compilation, kind,
+                                    )
+                                }
+                            }
+                        })
+                    }
+                }, NullProgressMonitor())
+                for ((path, file) in members) {
+                    if (path !in examined) {
+                        files += SourceFile(file.displayPath, scope, false, "AST unavailable")
+                        diagnostics += "$scope:${file.displayPath}: AST unavailable"
+                    }
+                }
+            }
+            // A call joins a selected source declaration only when the lookup over its frozen entries establishes the origin.
+            for (candidate in pending) {
+                val caller = candidate.compilation
+                fun gap(reason: String) {
+                    unresolved += UnresolvedSite(candidate.id, candidate.location, caller.sourceSet, reason)
+                }
+                // Two files declaring one type leave every call into it indeterminate, even if JDT bound only one copy.
+                if (candidate.type.fromSource && index.duplicated(caller.id, candidate.type.topLevel)) {
+                    gap("duplicate-declaration-identity")
+                    continue
+                }
+                if (candidate.key !in declaredKeys) {
+                    if (candidate.type.fromSource) gap("target-outside-verified-sources")
+                    continue
+                }
+                val origin = index.resolve(candidate.type, caller.id)
+                if (origin == null) {
+                    gap("target-origin-unresolved")
+                    continue
+                }
+                val targetDomain = when (origin) {
+                    is ResolvedMethodOrigin.Source -> fileOwners[origin.file].orEmpty().let { owners ->
+                        owners.firstOrNull { it === caller } ?: owners.singleOrNull()
+                    }?.resolutionDomain
+                    is ResolvedMethodOrigin.Binary -> origin.ownerCompilationId?.let { owner ->
+                        input.compilations.firstOrNull { it.id == owner }?.resolutionDomain
+                    }
+                }
+                val targetId = targetDomain?.let { methodId(it, candidate.key) }
+                if (targetId != null && targetId in duplicateIds) {
+                    gap("duplicate-declaration-identity")
+                    continue
+                }
+                if (targetId == null || methods[targetId] == null) {
+                    if (candidate.type.fromSource) gap("target-outside-verified-sources")
+                    continue
+                }
+                if (origin is ResolvedMethodOrigin.Source && declaredAt[targetId] != origin.file) {
+                    gap("target-origin-unresolved")
+                    continue
+                }
+                val enclosingId = candidate.enclosingKey?.let { methodId(caller.resolutionDomain, it) }
+                val enclosing = enclosingId
+                    ?.takeUnless { it in duplicateIds || index.duplicated(caller.id, candidate.enclosingType) }
+                    ?.let { methods[it] ?: constructors[it] }
+                references += JavaReference(candidate.id, targetId, candidate.location, enclosing, caller.sourceSet, candidate.kind)
             }
         }
         files += input.skippedFiles
@@ -214,16 +274,24 @@ object JavaExtractor {
         return "$owner.${method.name}(${method.parameterTypes.joinToString(",") { it.qualifiedName }})"
     }
 
-    private fun location(unit: CompilationUnit, path: String, node: ASTNode) = Location(path, range(unit, node.startPosition, node.length))
+    private fun location(unit: CompilationUnit, file: JavaSourceInput, node: ASTNode) =
+        Location(file.displayPath, range(unit, node.startPosition, node.length), file.buildArtifact)
+
+    /** Length-delimited domain plus the JDT binding key: equal keys in different resolution domains stay different methods. */
+    private fun methodId(domain: String, bindingKey: String) = "${domain.length}:$domain:$bindingKey"
+
+    private fun topLevelTypes(unit: CompilationUnit): List<String> {
+        val prefix = unit.getPackage()?.name?.fullyQualifiedName?.let { "$it." } ?: ""
+        return unit.types().filterIsInstance<AbstractTypeDeclaration>().map { prefix + it.name.identifier }
+    }
 
     private fun range(unit: CompilationUnit, offset: Int, length: Int): Range {
         fun position(index: Int) = Position(unit.getLineNumber(index), unit.getColumnNumber(index))
         return Range(position(offset), position(offset + length))
     }
 
-    private data class Batch(val scope: String, val sources: List<Path>, val roots: List<Path>, val classpath: List<String>)
     private data class PendingReference(
-        val id: String, val targetId: String, val location: Location, val enclosingId: String?, val sourceSet: String,
-        val kind: String, val sourceTarget: Boolean,
+        val id: String, val key: String, val type: DeclaringType, val location: Location,
+        val enclosingKey: String?, val enclosingType: String?, val compilation: JavaCompilationInput, val kind: String,
     )
 }

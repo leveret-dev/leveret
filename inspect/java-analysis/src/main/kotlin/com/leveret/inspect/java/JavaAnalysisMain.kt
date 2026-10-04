@@ -100,7 +100,7 @@ object JavaAnalysisMain {
                     }.toList()
             }
         }.sortedBy { it.toString() }
-        val data = JavaExtractor.extract(JavaAnalysisInput(
+        val data = JavaExtractor.extract(JavaAnalysisInput.cacheOnly(
             command.string("repositoryId"), command.string("revision"), pathRoot,
             sources(mainRoots), sources(testRoots), mainRoots, testRoots,
             command.string("javaLevel"), classpath, artifacts,

@@ -1,6 +1,7 @@
 package com.leveret.inspect.java
 
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.leveret.inspect.db.schema.Schema
@@ -196,7 +197,11 @@ class JavaFactStore(private val sessions: SessionFactory) {
 
     private fun position(root: JsonObject) = Position(root.number("line"), root.number("column"))
     private fun range(root: JsonObject) = Range(position(root.obj("start")), position(root.obj("end")))
-    private fun location(root: JsonObject) = Location(root.string("path"), range(root.obj("range")))
+    private fun location(root: JsonObject) = Location(root.string("path"), range(root.obj("range")), citation(root.get("buildArtifact")))
+
+    private fun citation(value: JsonElement?): BuildArtifactCitation? = value?.takeIf { !it.isJsonNull }?.asJsonObject?.let {
+        BuildArtifactCitation(it.string("manifestSha256"), it.string("artifactId"), it.string("origin"))
+    }
 
     private fun parseDetail(text: String): DetailRecord {
         val root = JsonParser.parseString(text).asJsonObject
