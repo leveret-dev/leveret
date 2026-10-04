@@ -1,7 +1,11 @@
+import { execFile } from "node:child_process";
+import { constants } from "node:buffer";
 import { createHash } from "node:crypto";
-import { cpSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { auditConfig, createAuditRun } from "../src/audit.js";
 import {
@@ -222,6 +226,61 @@ describe("secret policy", () => {
     ]);
     expect(seen).toEqual(["[REDACTED] only-in-two-2222", "only-in-one-1111 [REDACTED]"]);
   });
+
+  describe("private key blocks", () => {
+    // What counts as a block: from the leftmost BEGIN header to the nearest END footer after it. The expressions below
+    // state that meaning directly and serve as the reference for arbitrary mixes of headers and footers.
+    const LEGACY_BLOCK = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g;
+    const FRAGMENTS = [
+      "-----BEGIN PRIVATE KEY-----", "-----BEGIN RSA PRIVATE KEY-----", "-----BEGIN EC PRIVATE KEY-----", "-----BEGIN OPENSSH PRIVATE KEY-----",
+      "-----BEGIN DSA PRIVATE KEY-----", "-----BEGIN PRIVATE KEY", "-----END PRIVATE KEY-----", "-----END RSA PRIVATE KEY-----",
+      "-----END OPENSSH PRIVATE KEY-----", "END PRIVATE KEY-----", "-----", "\n", "\r\n", "MIIBVgIBADANBg", " body ", "",
+    ];
+
+    it("keeps the multi-line semantics of the earlier rule on every mix of markers", async () => {
+      const { policy } = await readyPolicy();
+      let seed = 20_261_004;
+      const next = (bound: number) => { seed = (Math.imul(seed, 1_103_515_245) + 12_345) >>> 0; return seed % bound; };
+      for (let round = 0; round < 4_000; round++) {
+        const input = Array.from({ length: 1 + next(10) }, () => FRAGMENTS[next(FRAGMENTS.length)]!).join(next(2) === 0 ? "" : "\n");
+        expect(redactAuditText(input), JSON.stringify(input)).toBe(input.replace(LEGACY_BLOCK, "[REDACTED]"));
+        expect(screenText(input, policy).state, JSON.stringify(input)).toBe(input.search(LEGACY_BLOCK) >= 0 ? "withheld" : "available");
+      }
+    });
+
+    it("redacts a whole block across lines and leaves an unterminated header alone", () => {
+      const key = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\nabc\n-----END RSA PRIVATE KEY-----";
+      expect(redactAuditText(`a\n${key}\nb`)).toBe("a\n[REDACTED]\nb");
+      expect(redactAuditText(`${key} then ${key}`)).toBe("[REDACTED] then [REDACTED]");
+      expect(redactAuditText("-----BEGIN PRIVATE KEY-----\nbody only")).toBe("-----BEGIN PRIVATE KEY-----\nbody only");
+      expect(redactAuditText("-----BEGIN PRIVATE KEY-----\nx\n-----BEGIN EC PRIVATE KEY-----\ny\n-----END PRIVATE KEY-----\nz")).toBe("[REDACTED]\nz");
+    });
+
+    it("screens hostile input in linear time: a quarter million unterminated headers neither stall nor leak a match", async () => {
+      // The input has no footer at all, so nothing may be redacted, and screening time must grow linearly with its length:
+      // a quadratic scan would run for minutes here. The child's wall-clock kill is only a backstop with orders of magnitude
+      // of margin, so a regression is a clean failure rather than a flaky threshold.
+      const root = fileURLToPath(new URL("..", import.meta.url));
+      const program = [
+        `import { redactAuditText, refreshSecretPolicy, screenText } from ${JSON.stringify(pathToFileURL(join(root, "src/secret-screening.ts")).href)};`,
+        "const policy = { id: 'hostile', available: false, knownValues: new Set(), refreshKnownValues: async () => [], additionalRules: [], nonSecretValues: new Set() };",
+        "await refreshSecretPolicy(policy);",
+        "const open = '-----BEGIN PRIVATE KEY-----\\n'.repeat(250000);",
+        "const closed = open + '-----END PRIVATE KEY-----';",
+        "process.stdout.write(JSON.stringify({",
+        "  openScreen: screenText(open, policy), openUnchanged: redactAuditText(open) === open,",
+        "  closedScreen: screenText(closed, policy), closedRedacted: redactAuditText(closed),",
+        "}));",
+      ].join("\n");
+      const { stdout } = await promisify(execFile)(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", program], {
+        cwd: root, env: process.env, maxBuffer: 1 << 20, timeout: 40_000,
+      });
+      expect(JSON.parse(stdout)).toEqual({
+        openScreen: { state: "available" }, openUnchanged: true,
+        closedScreen: { state: "withheld", reason: "secret-detected" }, closedRedacted: "[REDACTED]",
+      });
+    }, 120_000);
+  });
 });
 
 describe("admission of a configured export", () => {
@@ -370,15 +429,39 @@ describe("failure matrix: the whole export is rejected", () => {
     }
   });
 
-  it("verifies nothing it was not asked to: unpinned profiles and variant leave an unknown context verified", async () => {
+  // Unknown profiles or an unknown variant leave the context unverified whatever the host additionally pins:
+  // the host cannot confirm what the exporter did not know, and a known unset variant is valid.
+  const unknownContexts: Array<[string, (c: Case) => void, BuildEvidencePin["expectedContext"]]> = [
+    ["unknown profiles, nothing pinned beyond the id", (c) => { c.manifest.context.profiles = null; }, { id: "fixture-main" }],
+    ["an unknown variant, nothing pinned beyond the id", (c) => { c.manifest.context.variant = { state: "unknown", value: null }; }, { id: "fixture-main" }],
+    ["unknown profiles and variant, nothing pinned beyond the id", (c) => { c.manifest.context.profiles = null; c.manifest.context.variant = { state: "unknown", value: null }; }, { id: "fixture-main" }],
+    ["unknown profiles while a matching variant is pinned", (c) => { c.manifest.context.profiles = null; }, { id: "fixture-main", variant: { state: "unset", value: null } }],
+    ["an unknown variant while matching profiles are pinned", (c) => { c.manifest.context.variant = { state: "unknown", value: null }; }, { id: "fixture-main", profiles: [] }],
+  ];
+
+  it.each(unknownContexts)("marks %s unverified and selects no preferred environment", async (_name, arrange, expectedContext) => {
     const c = setup(valid);
-    c.manifest.context.profiles = null;
-    c.manifest.context.variant = { state: "unknown", value: null };
+    arrange(c);
     publish(c);
-    withPin(c, { expectedContext: { id: "fixture-main" } });
+    withPin(c, { expectedContext });
     const admission = admitted(await admitBuildEvidence(c.request, makePolicy().policy));
-    expect(admission.contextVerified).toBe(true);
-    expect(admission.degraded.size).toBe(0);
+    expect(admission.contextVerified).toBe(false);
+    expect([...admission.degraded].sort()).toEqual(["prod", "test"]);
+    expect(admission.frozen.sourceRoots.size).toBe(0);
+    const summary = buildEvidenceSummary(admission);
+    expect(summary).toMatchObject({ outcome: "admitted", contextVerified: false });
+    for (const role of ["production", "test"] as const) {
+      expect(scopeOf(summary, role)).toMatchObject({ state: "degraded", reasons: ["context-unverified"] });
+    }
+  });
+
+  it("verifies a known empty profile list and a known unset variant, pinned or not", async () => {
+    for (const expectedContext of [{ id: "fixture-main" }, { id: "fixture-main", profiles: [], variant: { state: "unset" as const, value: null } }]) {
+      const c = withPin(setup(valid), { expectedContext });
+      const admission = admitted(await admitBuildEvidence(c.request, makePolicy().policy));
+      expect(admission.contextVerified).toBe(true);
+      expect(admission.degraded.size).toBe(0);
+    }
   });
 });
 
@@ -654,6 +737,43 @@ describe("secret screening before exposure", () => {
     expect(text).not.toContain(KNOWN);
     expect(text).not.toContain("credential store");
     expect(existsSync(c.runtime)).toBe(false);
+  });
+
+  describe("text longer than the engine's string ceiling", () => {
+    // A decoded string never has more UTF-16 units than the text has bytes, so the engine's own string limit is the one
+    // length past which a single decoded string may not exist. It is not a client capacity policy: nothing shorter is
+    // withheld for its size, and the failure stays typed instead of ending the whole admission.
+    const CEILING = constants.MAX_STRING_LENGTH;
+
+    it("withholds such an artifact as screening-unavailable, degrades its scopes and still admits the export", async () => {
+      const c = setup(valid);
+      const size = CEILING + 1;
+      mkdirSync(join(c.payload, "huge"), { recursive: true });
+      writeFileSync(join(c.payload, "huge/blob.txt"), "");
+      truncateSync(join(c.payload, "huge/blob.txt"), size); // sparse: no disk is used for the source
+      const zeros = Buffer.alloc(1 << 22);
+      const hash = createHash("sha256");
+      for (let left = size; left > 0; left -= zeros.length) hash.update(left >= zeros.length ? zeros : zeros.subarray(0, left));
+      c.manifest.artifacts.push({
+        id: "huge-resource", kind: "file", role: "resource", origin: "external", repositoryPath: null, availability: "available",
+        content: { location: { kind: "payload", path: "huge/blob.txt" }, sha256: hash.digest("hex"), sizeBytes: size }, encoding: null,
+      });
+      c.manifest.compilations.find((compilation: Json) => compilation.id === "prod").resourceArtifactIds.push("huge-resource");
+      publish(c);
+      try {
+        const admission = admitted(await admitBuildEvidence(c.request, makePolicy().policy));
+        expect(admission.artifacts.get("huge-resource")).toEqual({ state: "withheld", reason: "screening-unavailable", compilationIds: ["prod", "test"] });
+        expect(admission.frozen.available.has("huge-resource")).toBe(false);
+        expect(admission.artifacts.get("consumer-original")!.state).toBe("available");
+        expect(admission.exposureCheck).toBe("checked");
+        expect([...admission.degraded].sort()).toEqual(["prod", "test"]);
+        const summary = buildEvidenceSummary(admission);
+        expect(summary.artifacts).toMatchObject({ withheld: 1 });
+        expect(scopeOf(summary, "production")).toMatchObject({ state: "degraded", reasons: ["artifact-withheld"], gaps: { withheld: 1 } });
+      } finally {
+        rmSync(c.dir, { recursive: true, force: true }); // the private copy is as large as the artifact
+      }
+    }, 120_000);
   });
 });
 

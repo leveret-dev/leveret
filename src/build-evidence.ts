@@ -7,7 +7,7 @@ import {
   type BuildCompilation, type BuildDiagnostic, type BuildEvidenceManifest, type BuildEvidencePin, type BuildEvidenceRequest,
 } from "./build-evidence-contract.js";
 import { isSafeRelativePath } from "./git-objects.js";
-import { refreshSecretPolicy, screenText, type ExposureDecision, type SecretPolicy } from "./secret-screening.js";
+import { MAX_SCREENABLE_BYTES, refreshSecretPolicy, screenText, type ExposureDecision, type SecretPolicy } from "./secret-screening.js";
 
 /**
  * Consumer admission of an optional build-evidence export for one side of a review.
@@ -158,25 +158,24 @@ function validatePin(request: BuildEvidenceRequest, pin: BuildEvidencePin): void
   if (productionId === "" || testId === "") invalidHost("compilation selection");
 }
 
-/** Exact comparison of the optional host pins. Unknown manifest values cannot confirm a pin; known ones must equal it. */
+/**
+ * A context is verified only when the manifest knows its profiles and its variant; unknown ones stay unverified
+ * whatever the host additionally pins, because the host cannot confirm what the exporter did not know. Known
+ * values are compared exactly with the optional host pins, and a difference rejects the whole export.
+ */
 function matchContext(manifest: BuildEvidenceManifest, pin: BuildEvidencePin): "verified" | "unverified" | "mismatch" {
   const { context } = manifest;
   const expected = pin.expectedContext;
   if (context.id !== expected.id) return "mismatch";
-  let verified = true;
-  if (expected.profiles !== undefined) {
-    if (context.profiles === null) verified = false;
-    else {
-      const actual = [...context.profiles].sort();
-      const wanted = [...expected.profiles].sort();
-      if (actual.length !== wanted.length || actual.some((profile, index) => profile !== wanted[index])) return "mismatch";
-    }
+  if (expected.profiles !== undefined && context.profiles !== null) {
+    const actual = [...context.profiles].sort();
+    const wanted = [...expected.profiles].sort();
+    if (actual.length !== wanted.length || actual.some((profile, index) => profile !== wanted[index])) return "mismatch";
   }
-  if (expected.variant !== undefined) {
-    if (context.variant.state === "unknown") verified = false;
-    else if (context.variant.state !== expected.variant.state || context.variant.value !== expected.variant.value) return "mismatch";
+  if (expected.variant !== undefined && context.variant.state !== "unknown") {
+    if (context.variant.state !== expected.variant.state || context.variant.value !== expected.variant.value) return "mismatch";
   }
-  return verified ? "verified" : "unverified";
+  return context.profiles !== null && context.variant.state !== "unknown" ? "verified" : "unverified";
 }
 
 function* stringsIn(value: unknown): Generator<string> {
@@ -190,9 +189,8 @@ function* stringsIn(value: unknown): Generator<string> {
  * paths, names, coordinates) cannot be rewritten to remove a secret, so one hit rejects exposure of the export.
  */
 function metadataLeaks(manifest: BuildEvidenceManifest, policy: SecretPolicy): boolean {
-  const { diagnostics, ...rest } = manifest;
-  const references = diagnostics.map((item) => [item.compilationId, item.artifactIds]);
-  for (const text of stringsIn([rest, references])) if (screenText(text, policy).state !== "available") return true;
+  const { diagnostics: _screenedItemByItem, ...rest } = manifest;
+  for (const text of stringsIn(rest)) if (screenText(text, policy).state !== "available") return true;
   return false;
 }
 
@@ -246,6 +244,8 @@ export async function admitBuildEvidence(request: BuildEvidenceRequest, policy: 
 
   await refreshSecretPolicy(policy);
   signal?.throwIfAborted();
+  // Fail closed: a policy that is not available (never refreshed, or its refresh failed) cannot call anything clean,
+  // so the export is not exposed at all and the check is reported unavailable rather than skipped.
   if (!policy.available) return reject("screening-unavailable", undefined, "unavailable");
   if (metadataLeaks(manifest, policy)) return reject("secret-in-metadata", undefined, "checked");
 
@@ -266,11 +266,17 @@ async function decide(
 
   // Text-bearing artifacts are screened from the frozen bytes the model could later be shown. Binary roles
   // (compiled classes, dependency jars) are never served as text and have no screening state.
+  // A text that cannot be decoded into one string is withheld as screening-unavailable for that artifact and the
+  // scopes that depend on it, never read and never allowed to fail the whole admission (see MAX_SCREENABLE_BYTES).
   // ponytail: whole-file screening; chunked screening would need overlap handling for multi-line rules.
   const withheld = new Map<string, "secret-detected" | "screening-unavailable">();
   for (const [id, { artifact, path }] of frozen.available) {
     signal?.throwIfAborted();
-    if (artifact.kind !== "file" || artifact.role === "classes" || artifact.role === "dependency") continue;
+    if (artifact.availability !== "available" || artifact.kind !== "file" || artifact.role === "classes" || artifact.role === "dependency") continue;
+    if (artifact.content.sizeBytes > MAX_SCREENABLE_BYTES) {
+      withheld.set(id, "screening-unavailable");
+      continue;
+    }
     const decision: ExposureDecision = screenText((await readFile(path)).toString("utf8"), policy);
     if (decision.state === "withheld") withheld.set(id, decision.reason);
   }

@@ -402,7 +402,8 @@ and compaction remain disabled; any observed retry or compaction event is visibl
 the trace.
 
 Credential fields, authorization headers, private keys, known token formats, and
-secret-bearing command arguments are redacted before persistence. Environment
+secret-bearing command arguments are redacted before persistence, in object keys as
+well as values; field paths in `redacted_fields` use the redacted key. Environment
 values are never captured; subprocess records contain only environment variable
 names. Raw trace content is never written to operational stdout. The default stdout
 stream contains structured metadata keyed by run ID.

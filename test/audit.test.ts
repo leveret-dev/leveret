@@ -475,6 +475,70 @@ describe("run trace with an active secret policy", () => {
     expect(categories.subprocess.state).toBe("redacted");
   });
 
+  describe("object keys", () => {
+    const SECOND = "corp-vault-credential-b81c04";
+    const policyOf = (...values: string[]) => ({
+      id: "policy-keys", available: true, knownValues: new Set(values), refreshKnownValues: async () => [], additionalRules: [], nonSecretValues: new Set<string>(),
+    });
+
+    it("removes known values from keys wherever a payload is persisted and never lists a raw key in redacted_fields", async () => {
+      const data = await root();
+      const config = auditConfig(data, { LEVERET_TRACE_ROOT: join(data, "traces"), LEVERET_TRACE_SINKS: "private" });
+      const audit = (await createAuditRun(config, "run-secret-keys"))!;
+      const runDir = await withSecretPolicy(policyOf(KNOWN, SECOND), async () => {
+        await audit.record("tools", "execution_end", {
+          [`env-${KNOWN}`]: "value-one",
+          nested: { [KNOWN]: { [`deep-${SECOND}`]: "value-two" } },
+          list: [{ [`item-${KNOWN}`]: "value-three" }],
+          output_tokens_estimate: 7,
+        });
+        await audit.persistNativeSession([{ [`role-${KNOWN}`]: "value-four" }], "review-attempt-1.jsonl");
+        await audit.writeCapabilities({ [`cap-${KNOWN}`]: "value-five" });
+        await audit.writeResult({ [`res-${SECOND}`]: "value-six" });
+        return (await audit.finalize("complete")).runDir!;
+      });
+      const bytes = await bytesUnder(runDir);
+      expect(bytes).not.toContain(KNOWN);
+      expect(bytes).not.toContain(SECOND);
+      for (const kept of ["value-one", "value-two", "value-three", "value-four", "value-five", "value-six", '"output_tokens_estimate":7']) expect(bytes).toContain(kept);
+      const manifest = JSON.parse(await readFile(join(runDir, "manifest.json"), "utf8"));
+      expect(manifest.redacted_fields).toEqual(expect.arrayContaining([
+        "payload.env-[REDACTED]", "payload.nested.[REDACTED]", "payload.nested.[REDACTED].deep-[REDACTED]", "payload.list[0].item-[REDACTED]",
+        "payload.role-[REDACTED]", "payload.cap-[REDACTED]", "payload.res-[REDACTED]",
+      ]));
+      expect(manifest.categories.tools.state).toBe("redacted");
+    });
+
+    it("keeps every entry when several secret keys collapse to the same text", async () => {
+      const data = await root();
+      const config = auditConfig(data, { LEVERET_TRACE_ROOT: join(data, "traces"), LEVERET_TRACE_SINKS: "private" });
+      const audit = (await createAuditRun(config, "run-colliding-keys"))!;
+      const runDir = await withSecretPolicy(policyOf(KNOWN, SECOND), async () => {
+        await audit.record("tools", "execution_end", { [KNOWN]: "first-value", [SECOND]: "second-value", plain: "third-value" });
+        return (await audit.finalize("complete")).runDir!;
+      });
+      const event = JSON.parse((await readFile(join(runDir, "app.ndjson"), "utf8")).split("\n")[0]!);
+      expect(Object.values(event.payload).sort()).toEqual(["first-value", "second-value", "third-value"]);
+      expect(Object.keys(event.payload)).toHaveLength(3);
+      expect(event.payload.plain).toBe("third-value");
+      expect(event.redacted).toBe(true);
+      expect(await bytesUnder(runDir)).not.toContain(KNOWN);
+    });
+
+    it("removes a built-in credential shape from a key outside any policy scope", async () => {
+      const data = await root();
+      const config = auditConfig(data, { LEVERET_TRACE_ROOT: join(data, "traces"), LEVERET_TRACE_SINKS: "private" });
+      const audit = (await createAuditRun(config, "run-builtin-key"))!;
+      await audit.record("tools", "execution_end", { "Bearer ghp_abcdefghijklmnopqrstuvwxyz": "kept-value" });
+      const runDir = (await audit.finalize("complete")).runDir!;
+      const bytes = await bytesUnder(runDir);
+      expect(bytes).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz");
+      expect(bytes).toContain("kept-value");
+      const manifest = JSON.parse(await readFile(join(runDir, "manifest.json"), "utf8"));
+      expect(manifest.redacted_fields).toContain("payload.[REDACTED]");
+    });
+  });
+
   it("leaves a run outside any policy scope with built-in redaction only", async () => {
     const data = await root();
     const config = auditConfig(data, { LEVERET_TRACE_ROOT: join(data, "traces"), LEVERET_TRACE_SINKS: "private" });

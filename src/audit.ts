@@ -278,12 +278,18 @@ function sanitize(value: unknown, redacted: Set<string>, path = "payload"): unkn
   if (value && typeof value === "object") {
     const result: Record<string, unknown> = {};
     for (const [key, child] of Object.entries(value)) {
-      const childPath = `${path}.${key}`;
+      // A key is persisted text like any value. Entries that collapse to the same redacted text stay distinct, and
+      // the field path uses the stored name, so neither the key nor redacted_fields can carry the raw credential.
+      const safeKey = redactAuditText(key);
+      let name = safeKey;
+      for (let n = 2; Object.hasOwn(result, name); n++) name = `${safeKey}#${n}`;
+      const childPath = `${path}.${name}`;
+      if (safeKey !== key) redacted.add(childPath);
       if (SECRET_FIELD.test(key)) {
-        result[key] = REDACTED;
+        result[name] = REDACTED;
         redacted.add(childPath);
       } else {
-        result[key] = sanitize(child, redacted, childPath);
+        result[name] = sanitize(child, redacted, childPath);
       }
     }
     return result;
