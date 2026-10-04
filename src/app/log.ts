@@ -1,4 +1,4 @@
-import { redactAuditText } from "../audit.js";
+import { redactAuditText } from "../secret-screening.js";
 
 // Cloud-ready structured logging: one JSON object per line. Every review run gets
 // a UUID bound into its logger; app-mode runs also bind the PR URL — any

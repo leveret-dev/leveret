@@ -41,6 +41,8 @@ export type FrozenBuildArtifacts = {
   readonly rejected: readonly ArtifactRejection[];
   /** Compilation id to verified roots. Compilations degraded by a rejection have no entry. */
   readonly sourceRoots: ReadonlyMap<string, readonly FrozenSourceRoot[]>;
+  /** Private directory that holds every path above. The caller that consumes the result releases it; nothing here removes it after success. */
+  readonly scratch: string;
 };
 
 type Available = Extract<BuildArtifact, { availability: "available" }>;
@@ -392,9 +394,10 @@ function forEachReference(compilation: BuildCompilation, visit: (artifactId: str
  * Maps an artifact to the compilations it degrades: direct references, transformation lineage (an output
  * is only as good as its inputs), then every consumer of an upstream compilation. The graph is built on
  * first use, so an admission without rejections never pays for it; each transformation is expanded once
- * per compilation however many inputs and outputs it lists.
+ * per compilation however many inputs and outputs it lists. Exported so consumer-side withholding reuses
+ * this one traversal instead of walking the graph again.
  */
-function scopeResolver(manifest: BuildEvidenceManifest): (artifactId: string) => string[] {
+export function scopeResolver(manifest: Pick<BuildEvidenceManifest, "compilations" | "transformations">): (artifactId: string) => string[] {
   let graph: { reaches: Map<string, Set<string>>; consumers: Map<string, string[]> } | undefined;
   const build = () => {
     const producers = new Map<string, number[]>();
@@ -565,7 +568,7 @@ async function admit(request: BuildEvidenceRequest, manifest: BuildEvidenceManif
     const frozen = built.get(compilation.id);
     if (frozen) sourceRoots.set(compilation.id, frozen.roots);
   }
-  return { available, rejected, sourceRoots };
+  return { available, rejected, sourceRoots, scratch };
 }
 
 /**

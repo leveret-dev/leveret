@@ -22,6 +22,7 @@ import { hostname, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { pathIsInside } from "./path.js";
+import { REDACTED, redactAuditText } from "./secret-screening.js";
 
 export const AUDIT_SCHEMA_VERSION = 1;
 export const AUDIT_CATEGORIES = [
@@ -106,6 +107,8 @@ export interface AuditEvent {
   payload?: unknown;
   payload_ref?: { sha256: string; bytes: number; media_type: string; encoding: "json" };
   metadata?: { sha256: string; bytes: number; kind: string };
+  /** Set when sanitation changed this payload, whether it is stored inline, in a blob, or only hashed. */
+  redacted?: true;
 }
 
 export function validateAuditEvent(value: unknown, runId: string): asserts value is AuditEvent {
@@ -150,14 +153,6 @@ const exec = promisify(execFile);
 const storage = new AsyncLocalStorage<AuditWriter>();
 const SECRET_FIELD = /^(?:api.?key|authorization|credentials?|password|private.?keys?|secret|signature|token|access.?token|refresh.?token|webhook.?secret|cookie|set.?cookie)$/i;
 const SECRET_ARGUMENT = /^--?(?:api[-_]?key|token|secret|password|authorization)$/i;
-const SECRET_TEXT = [
-  /\bBearer\s+[^\s"']+/gi,
-  /(--?(?:api[-_]?key|token|secret|password|authorization)=)[^\s]+/gi,
-  /(--?(?:api[-_]?key|token|secret|password|authorization)\s+)[^\s]+/gi,
-  /(https?:\/\/)[^\s/@:]+:[^\s/@]+@/gi,
-  /\b(?:gh[opsu]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,})\b/g,
-  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g,
-];
 
 function bool(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined) return fallback;
@@ -256,12 +251,6 @@ export function auditConfig(dataDir: string, env: NodeJS.ProcessEnv = process.en
   };
 }
 
-export function redactAuditText(value: string): string {
-  let result = value;
-  for (const pattern of SECRET_TEXT) result = result.replace(pattern, "[REDACTED]");
-  return result;
-}
-
 function sanitize(value: unknown, redacted: Set<string>, path = "payload"): unknown {
   if (value instanceof Error) {
     const raw = value.stack ?? String(value);
@@ -280,7 +269,7 @@ function sanitize(value: unknown, redacted: Set<string>, path = "payload"): unkn
       if (redactNext) {
         redactNext = false;
         redacted.add(`${path}[${index}]`);
-        return "[REDACTED]";
+        return REDACTED;
       }
       if (typeof item === "string" && SECRET_ARGUMENT.test(item)) redactNext = true;
       return sanitize(item, redacted, `${path}[${index}]`);
@@ -291,7 +280,7 @@ function sanitize(value: unknown, redacted: Set<string>, path = "payload"): unkn
     for (const [key, child] of Object.entries(value)) {
       const childPath = `${path}.${key}`;
       if (SECRET_FIELD.test(key)) {
-        result[key] = "[REDACTED]";
+        result[key] = REDACTED;
         redacted.add(childPath);
       } else {
         result[key] = sanitize(child, redacted, childPath);
@@ -509,7 +498,7 @@ export class AuditWriter {
       seenEvents.add(key);
       const category = categories[event.category];
       category.events++;
-      const next = event.completeness === "complete" ? line.includes("[REDACTED]") ? "redacted" : "captured" : "incomplete";
+      const next = event.completeness === "complete" ? event.redacted === true || line.includes(REDACTED) ? "redacted" : "captured" : "incomplete";
       if (category.state !== "incomplete" && (category.state !== "redacted" || next === "incomplete")) category.state = next;
     }
     const rawError = error === undefined ? undefined : String(error);
@@ -554,7 +543,9 @@ export class AuditWriter {
     if (context.completeness && context.completeness !== "complete") this.gaps.add(`${category}/${event} was ${context.completeness}`);
     const sequence = ++this.sequence;
     return this.queue(async () => {
-      const clean = sanitize(payload ?? {}, this.redacted);
+      const touched = new Set<string>();
+      const clean = sanitize(payload ?? {}, touched);
+      for (const field of touched) this.redacted.add(field);
       const encoded = JSON.stringify(clean);
       const policy = this.config.policies[category];
       const envelope: AuditEvent = {
@@ -574,6 +565,7 @@ export class AuditWriter {
         ...(context.evidenceId ? { evidence_id: context.evidenceId } : {}),
         completeness: context.completeness ?? "complete",
         content_policy: policy,
+        ...(touched.size > 0 ? { redacted: true as const } : {}),
       };
       if (policy === "full" && Buffer.byteLength(encoded) > this.config.blobThresholdBytes) {
         const sha256 = digest(encoded);

@@ -4,7 +4,8 @@ import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/pro
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { auditConfig, createAuditRun, redactAuditText, withAuditTrace } from "../audit.js";
+import { auditConfig, createAuditRun, withAuditTrace } from "../audit.js";
+import { redactAuditText } from "../secret-screening.js";
 import { materializeChangeEvidence, openChangeEvidence, type ChangeManifest } from "../change-evidence.js";
 import { createEvidencePack, writeEvidencePack, type EvidencePack } from "../evidence-pack.js";
 import { createGuidanceResult, writeGuidanceResult, SEMANTIC_DATA_SHA256, SEMANTIC_RULE_SET_SHA256, type GuidanceResult } from "../semantic-checks.js";

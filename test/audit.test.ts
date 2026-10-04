@@ -1,9 +1,10 @@
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { auditConfig, createAuditRun, openRunnerAudit, verifyChecksums } from "../src/audit.js";
 import { inspectAudit, readAuditEvents } from "../src/audit-inspect.js";
+import { withSecretPolicy } from "../src/secret-screening.js";
 import { classifyToolOutcome, runPhase } from "../src/runner/pi.js";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -413,6 +414,76 @@ describe("run trace", () => {
     expect(events).toContain("attempt_submission_missing");
     expect(events).toContain("malformed-1");
     expect(events).toContain("malformed-2");
+  });
+});
+
+describe("run trace with an active secret policy", () => {
+  const KNOWN = "corp-vault-credential-7f3a91"; // no built-in pattern recognizes it
+
+  async function bytesUnder(dir: string): Promise<string> {
+    const parts: string[] = [];
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      parts.push(entry.isDirectory() ? await bytesUnder(join(dir, entry.name)) : await readFile(join(dir, entry.name), "latin1"));
+    }
+    return parts.join("\n");
+  }
+
+  it("removes exact known values from events, blobs, native sessions, capabilities, results and the manifest", async () => {
+    const policy = { id: "policy-audit", available: true, knownValues: new Set([KNOWN]), refreshKnownValues: async () => [], additionalRules: [], nonSecretValues: new Set<string>() };
+    const data = await root();
+    const config = auditConfig(data, { LEVERET_TRACE_ROOT: join(data, "traces"), LEVERET_TRACE_SINKS: "private", LEVERET_TRACE_BLOB_BYTES: "40" });
+    const audit = (await createAuditRun(config, "run-known-values"))!;
+    const runDir = await withSecretPolicy(policy, async () => {
+      await audit.record("tools", "execution_end", {
+        stdout: `connected with ${KNOWN} ok`,
+        argv: ["tool", "--endpoint", `https://host.example/${KNOWN}`],
+        error: new Error(`failed ${KNOWN}`),
+        nested: { items: [{ text: KNOWN }], big: `${KNOWN} ${"x".repeat(200)}` },
+        output_tokens_estimate: 7,
+      });
+      await audit.persistNativeSession([{ role: "user", content: `use ${KNOWN}` }], "review-attempt-1.jsonl");
+      await audit.writeCapabilities({ note: `seen ${KNOWN}` });
+      await audit.writeResult({ summary: `done ${KNOWN}` });
+      return (await audit.finalize("failed", new Error(`stopped near ${KNOWN}`))).runDir!;
+    });
+    const bytes = await bytesUnder(runDir);
+    expect(bytes).not.toContain(KNOWN);
+    expect(bytes).toContain("[REDACTED]");
+    expect(bytes).toContain('"output_tokens_estimate":7');
+    const manifest = JSON.parse(await readFile(join(runDir, "manifest.json"), "utf8"));
+    expect(manifest.redacted_fields).toEqual(expect.arrayContaining(["payload.stdout", "payload.error", "manifest.error"]));
+    expect(manifest.categories.tools.state).toBe("redacted");
+  });
+
+  it("reports a category as redacted from what sanitation did, whether the payload is inline, blobbed or hash-only", async () => {
+    const data = await root();
+    const config = auditConfig(data, {
+      LEVERET_TRACE_ROOT: join(data, "traces"), LEVERET_TRACE_SINKS: "private", LEVERET_TRACE_BLOB_BYTES: "40",
+      LEVERET_TRACE_POLICY: '{"subprocess":"hash"}',
+    });
+    const audit = (await createAuditRun(config, "run-redaction-state"))!;
+    const filler = "x".repeat(200);
+    await audit.record("tools", "execution_end", { stdout: `Bearer ghp_abcdefghijklmnopqrstuvwxyz ${filler}` }); // blobbed, redacted
+    await audit.record("assistant", "message_end", { text: `plain text ${filler}` }); // blobbed, nothing to redact
+    await audit.record("prompts", "prompt", { text: "a Bearer ghp_abcdefghijklmnopqrstuvwxyz" }); // inline, redacted
+    await audit.record("subprocess", "exit", { stderr: "Bearer ghp_abcdefghijklmnopqrstuvwxyz" }); // hash only, redacted
+    const runDir = (await audit.finalize("complete")).runDir!;
+    const { categories } = JSON.parse(await readFile(join(runDir, "manifest.json"), "utf8"));
+    expect(categories.tools.state).toBe("redacted");
+    expect(categories.assistant.state).toBe("captured");
+    expect(categories.prompts.state).toBe("redacted");
+    expect(categories.subprocess.state).toBe("redacted");
+  });
+
+  it("leaves a run outside any policy scope with built-in redaction only", async () => {
+    const data = await root();
+    const config = auditConfig(data, { LEVERET_TRACE_ROOT: join(data, "traces"), LEVERET_TRACE_SINKS: "private" });
+    const audit = (await createAuditRun(config, "run-no-policy"))!;
+    await audit.record("tools", "execution_end", { stdout: `connected with ${KNOWN}`, token: "Bearer ghp_abcdefghijklmnopqrstuvwxyz" });
+    const runDir = (await audit.finalize("complete")).runDir!;
+    const bytes = await bytesUnder(runDir);
+    expect(bytes).toContain(KNOWN);
+    expect(bytes).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz");
   });
 });
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatLine, makeLogger } from "../src/app/log.js";
+import { withSecretPolicy } from "../src/secret-screening.js";
 
 // Cloud-ready logging: one JSON object per line, every line carrying the run's
 // UUID — and in app mode the PR URL — so any aggregator can slice by run.
@@ -23,6 +24,14 @@ describe("formatLine", () => {
     const line = formatLine("error", "job failed", { runId: "r" }, { err: new Error("Authorization: Bearer ghp_abcdefghijklmnopqrstuvwxyz") });
     expect(line).toContain("[REDACTED]");
     expect(line).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz");
+  });
+
+  it("removes host-known credential values inside an active secret policy scope", async () => {
+    const known = "corp-vault-credential-7f3a91";
+    const policy = { id: "policy-log", available: true, knownValues: new Set([known]), refreshKnownValues: async () => [], additionalRules: [], nonSecretValues: new Set<string>() };
+    const line = await withSecretPolicy(policy, async () => formatLine("error", "job failed", { runId: "r" }, { err: new Error(`pull failed with ${known}`), detail: known }));
+    expect(line).toContain("[REDACTED]");
+    expect(line).not.toContain(known);
   });
 });
 

@@ -478,6 +478,9 @@ A custom harness opts into the protocol by appending complete JSON lines to
 `run_id`, `producer: "runner"`, a producer-local `sequence`, ISO `wall_time`,
 monotonic milliseconds, `category`, `event`, `completeness`, `content_policy`, and
 either `payload`, `payload_ref`, or hash/size `metadata`; phase, attempt, session,
-turn, tool-call, and evidence IDs are included when applicable. It may also write
+turn, tool-call, and evidence IDs are included when applicable. An event whose
+payload was sanitized carries `redacted: true` (a literal `[REDACTED]` in the line
+also counts), so the manifest reports the category as redacted whether the payload
+is inline, in a blob, or hash-only. A harness may also write
 `runner-capabilities.json`. The App validates and checksums these files during
 finalization; malformed lines make the trace incomplete rather than disappearing.
