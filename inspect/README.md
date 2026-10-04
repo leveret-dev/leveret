@@ -108,13 +108,17 @@ SHA-256 digests, `jdkHome` and `jdkFiles` digests for `bin/java`, `release`,
 one `module`, `build` (`maven` or `gradle`), one `mainRoots` and one
 `testRoots` entry, `javaLevel`, and `limits`. It may also pin independent
 `buildEvidence.base` and `buildEvidence.head` exports plus host-only screening
-rules and nonsecret placeholder values. A complete supported selected export is
-preferred even when compilation was not run; a rejected or unsupported side uses
-coherent cache-only discovery without merging export fragments. Only screened
-source members and required dependencies enter the prepared read-only mount.
-No target repository or export file chooses an executable, cache, mounts, or
-worker limits. Cache-only artifacts already in the cache are copied into private
-scratch; provisioning and target builds are not worker operations.
+rules and nonsecret placeholder values. A complete supported selected compilation
+is preferred even when its build step was not run. Production and test decide
+independently: if only one role needs fallback, schema-2 `cache-only` resolution
+normalizes that role and composes it with the other role's complete prepared
+compilation in one analysis. Each compilation retains its own resolution domain,
+roots, settings and ordered classpath; exported fragments are never merged into
+the fallback compilation. Only screened source members and required dependencies
+enter the prepared read-only mounts. No target repository or export file chooses
+an executable, cache, mounts, or worker limits. Cache-only artifacts already in
+the cache are copied into private scratch; provisioning and target builds are not
+worker operations.
 
 The reviewer accepts only the paired `LEVERET_INSPECT_JAVA_CONFIG` (absolute
 path outside the checkout) and `LEVERET_INSPECT_JAVA_CONFIG_SHA256` (digest of

@@ -67,12 +67,18 @@ object JavaAnalysisMain {
     }
 
     private fun analyzeCacheOnly(command: JsonObject, input: JsonObject): FrozenAnalysis {
-        input.fields("kind", "snapshot", "pathRoot", "repositoryId", "revision", "javaLevel", "build", "mainRoots", "testRoots", "cache", "artifacts", "skippedFiles")
+        input.fields("kind", "snapshot", "pathRoot", "cachePathRoot", "artifactRoot", "repositoryId", "revision",
+            "javaLevel", "build", "mainRoots", "testRoots", "cache", "artifacts", "skippedFiles",
+            "preparedCompilations", "fallbackRoles", "diagnostics", "buildIdentity")
         val root = absolute(input.string("snapshot"))
         val pathRoot = absolute(input.string("pathRoot"))
-        require(root.startsWith(pathRoot) && Files.isDirectory(pathRoot)) { "Invalid repository snapshot root" }
+        val cachePathRoot = absolute(input.string("cachePathRoot"))
+        val artifactRoot = absolute(input.string("artifactRoot"))
+        require(root.startsWith(cachePathRoot) && cachePathRoot.startsWith(pathRoot) &&
+            Files.isDirectory(pathRoot) && Files.isDirectory(cachePathRoot)) { "Invalid repository snapshot root" }
         val cache = absolute(input.string("cache"))
         val artifacts = absolute(input.string("artifacts"))
+        require(artifacts.startsWith(artifactRoot)) { "Invalid cache artifact root" }
         val classpath = when (input.string("build")) {
             "maven" -> CacheOnlyClasspathWorker.analyze(root.resolve("pom.xml"), cache)
             "gradle" -> GradleLockfileClasspathWorker.analyze(root, cache)
@@ -110,22 +116,35 @@ object JavaAnalysisMain {
                     }.toList()
             }
         }.sortedBy { it.toString() }
-        val data = JavaExtractor.extract(JavaAnalysisInput.cacheOnly(
-            input.string("repositoryId"), input.string("revision"), pathRoot,
+        val cacheInput = JavaAnalysisInput.cacheOnly(
+            input.string("repositoryId"), input.string("revision"), cachePathRoot,
             sources(mainRoots), sources(testRoots), mainRoots, testRoots,
             input.string("javaLevel"), classpath, artifacts, skipped(input),
-        ))
+        )
+        val prepared = preparedCompilations(input.array("preparedCompilations"), pathRoot, artifactRoot)
+        val fallbackRoles = input.array("fallbackRoles").map { it.asString }.toSet()
+        require(fallbackRoles.all { it == "production" || it == "test" }) { "Invalid fallback role" }
+        val fallback = cacheInput.compilations.filter {
+            it.sourceSet == "main" && "production" in fallbackRoles || it.sourceSet == "test" && "test" in fallbackRoles
+        }
+        val normalized = if (prepared.isEmpty() && fallbackRoles == setOf("production", "test")) cacheInput else {
+            val compilations = (prepared + fallback).sortedBy { if (it.sourceSet == "main") 0 else 1 }
+            require(compilations.isNotEmpty()) { "No Java compilation is available" }
+            require(compilations.map { it.sourceSet }.distinct().size == compilations.size) { "More than one compilation selected for a role" }
+            JavaAnalysisInput(
+                input.string("repositoryId"), input.string("revision"), pathRoot, artifactRoot, compilations,
+                cacheInput.skippedFiles, cacheInput.diagnostics + input.array("diagnostics").map { it.asString },
+                input.string("buildIdentity") + ":" + cacheInput.buildIdentity,
+            )
+        }
+        val data = JavaExtractor.extract(normalized)
         return store(command).use { (_, sessions) ->
             FrozenAnalysis(JavaFactStore(sessions).publish(data), hashes)
         }
     }
 
-    private fun analyzePrepared(command: JsonObject, input: JsonObject): FrozenAnalysis {
-        input.fields("kind", "repositoryId", "revision", "pathRoot", "artifactRoot", "compilations", "skippedFiles", "diagnostics", "buildIdentity")
-        val pathRoot = absolute(input.string("pathRoot"))
-        val artifactRoot = absolute(input.string("artifactRoot"))
-        require(Files.isDirectory(pathRoot) && Files.isDirectory(artifactRoot) && artifactRoot.startsWith(pathRoot)) { "Invalid prepared roots" }
-        val compilations = input.array("compilations").map { value ->
+    private fun preparedCompilations(values: JsonArray, pathRoot: Path, artifactRoot: Path): List<JavaCompilationInput> =
+        values.map { value ->
             val item = value.asJsonObject.also {
                 it.fields("id", "resolutionDomain", "sourceSet", "files", "roots", "sourcePath", "classpath", "compiler", "origins")
             }
@@ -140,9 +159,9 @@ object JavaAnalysisMain {
                 it.fields("sourceLevel", "targetLevel", "encoding", "preview", "release", "platform", "usedModuleOptions")
             }
             val release = compiler.obj("release").also { it.fields("state", "value") }
-            val platform = compiler.obj("platform").entrySet().associate { (name, value) ->
-                require(value.isJsonPrimitive && value.asJsonPrimitive.isString) { "Invalid platform fingerprint" }
-                name to value.asString
+            val platform = compiler.obj("platform").entrySet().associate { (name, item) ->
+                require(item.isJsonPrimitive && item.asJsonPrimitive.isString) { "Invalid platform fingerprint" }
+                name to item.asString
             }
             val origins = item.array("origins").map { raw ->
                 val origin = raw.asJsonObject.also { it.fields("path", "artifact", "ownerCompilationId") }
@@ -163,6 +182,13 @@ object JavaAnalysisMain {
                 origins,
             )
         }
+
+    private fun analyzePrepared(command: JsonObject, input: JsonObject): FrozenAnalysis {
+        input.fields("kind", "repositoryId", "revision", "pathRoot", "artifactRoot", "compilations", "skippedFiles", "diagnostics", "buildIdentity")
+        val pathRoot = absolute(input.string("pathRoot"))
+        val artifactRoot = absolute(input.string("artifactRoot"))
+        require(Files.isDirectory(pathRoot) && Files.isDirectory(artifactRoot) && artifactRoot.startsWith(pathRoot)) { "Invalid prepared roots" }
+        val compilations = preparedCompilations(input.array("compilations"), pathRoot, artifactRoot)
         require(compilations.isNotEmpty()) { "Prepared input has no supported compilations" }
         val data = JavaExtractor.extract(JavaAnalysisInput(
             input.string("repositoryId"), input.string("revision"), pathRoot, artifactRoot, compilations,

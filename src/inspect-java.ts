@@ -270,7 +270,7 @@ async function snapshot(
 }
 
 async function sandbox(
-  config: InspectJavaConfig, inputs: { snapshotDir?: string; preparedDir?: string },
+  config: InspectJavaConfig, inputs: { snapshotDir?: string; preparedDir?: string; mixed?: boolean },
   storeDir: string, work: string, command: object,
 ): Promise<unknown> {
   await mkdir(work, { recursive: true, mode: 0o700 });
@@ -279,10 +279,23 @@ async function sandbox(
   const jvm = `-Xmx${Math.floor(limits.heapBytes / (1024 * 1024))}m -XX:MaxMetaspaceSize=256m -XX:MaxDirectMemorySize=128m -XX:ReservedCodeCacheSize=128m`;
   const tools = ["dash", "uname", "ls", "xargs", "echo", "sed", "tr"];
   const mounts = tools.flatMap((name) => ["--ro-bind", `/usr/bin/${name}`, `/usr/bin/${name}`]);
-  const inputMounts = [
-    ...(inputs.snapshotDir ? ["--ro-bind", inputs.snapshotDir, "/source", "--ro-bind", config.cache, "/cache"] : []),
-    ...(inputs.preparedDir ? ["--ro-bind", inputs.preparedDir, "/prepared"] : []),
-  ];
+  let inputMounts: string[];
+  if (inputs.mixed) {
+    if (!inputs.snapshotDir || !inputs.preparedDir) throw new InspectJavaError("invalid-input", "Mixed Java inputs are incomplete");
+    const fallbackArtifacts = join(work, "fallback-artifacts");
+    await mkdir(fallbackArtifacts);
+    inputMounts = [
+      "--dir", "/inputs", "--ro-bind", inputs.snapshotDir, "/inputs/fallback",
+      "--ro-bind", inputs.preparedDir, "/inputs/prepared", "--ro-bind", config.cache, "/cache",
+      "--dir", "/artifacts", "--ro-bind", join(inputs.preparedDir, "artifacts"), "/artifacts/prepared",
+      "--bind", fallbackArtifacts, "/artifacts/fallback",
+    ];
+  } else {
+    inputMounts = [
+      ...(inputs.snapshotDir ? ["--ro-bind", inputs.snapshotDir, "/source", "--ro-bind", config.cache, "/cache"] : []),
+      ...(inputs.preparedDir ? ["--ro-bind", inputs.preparedDir, "/prepared"] : []),
+    ];
+  }
   const args = [
     `--as=${limits.addressSpaceBytes}:${limits.addressSpaceBytes}`, "--", "/usr/bin/bwrap",
     "--unshare-all", "--die-with-parent", "--new-session", "--clearenv",
@@ -417,28 +430,24 @@ function preparedCommand(
   };
 }
 
+function mixedCompilation(compilation: PreparedJavaCompilation): PreparedJavaCompilation {
+  const remap = (path: string) => path.startsWith("/prepared/artifacts/")
+    ? path.replace("/prepared/artifacts/", "/artifacts/prepared/")
+    : path.replace("/prepared/", "/inputs/prepared/");
+  return {
+    ...compilation,
+    files: compilation.files.map((file) => ({ ...file, physicalPath: remap(file.physicalPath) })),
+    roots: compilation.roots.map(remap),
+    sourcePath: compilation.sourcePath.map(remap),
+    classpath: compilation.classpath.map(remap),
+    origins: compilation.origins.map((origin) => ({ ...origin, path: remap(origin.path) })),
+  };
+}
+
 function withheldPaths(decision: BuildJavaDecision): ReadonlySet<string> {
   return new Set(decision.scopes.flatMap((scope) => scope.outcome === "fallback" ? scope.withheldRepositoryPaths : []));
 }
 
-function coherentDecision(decision: BuildJavaDecision): BuildJavaDecision {
-  if (!decision.scopes.some((scope) => scope.outcome === "fallback")) return decision;
-  const first = decision.scopes[0];
-  const second = decision.scopes[1];
-  return {
-    workerView: decision.workerView,
-    scopes: [
-      first.outcome === "prepared"
-        ? { role: first.role, compilationId: first.compilationId, withheldRepositoryPaths: first.withheldRepositoryPaths,
-          outcome: "fallback", reason: "coherent-side-fallback" }
-        : first,
-      second.outcome === "prepared"
-        ? { role: second.role, compilationId: second.compilationId, withheldRepositoryPaths: second.withheldRepositoryPaths,
-          outcome: "fallback", reason: "coherent-side-fallback" }
-        : second,
-    ],
-  };
-}
 
 function javaEvidenceSummary(admission: BuildEvidenceAdmission, decision: BuildJavaDecision): InspectJavaBuildEvidence {
   return {
@@ -482,7 +491,7 @@ export async function openInspectJava(
     const admissions = {} as Record<"base" | "head", BuildEvidenceAdmission>;
     const decisions = {} as Record<"base" | "head", BuildJavaDecision>;
     const artifacts = {} as Record<"base" | "head", Record<string, string>>;
-    const modes = {} as Record<"base" | "head", "cache-only" | "prepared">;
+    const modes = {} as Record<"base" | "head", "cache-only" | "prepared" | "mixed">;
     const preparedCompilations = {} as Record<"base" | "head", readonly PreparedJavaCompilation[]>;
     const identities = {} as Record<"base" | "head", string>;
     for (const side of ["base", "head"] as const) {
@@ -492,10 +501,11 @@ export async function openInspectJava(
         runtimeDir: join(scratch, `admission-${side}`),
       }, policy);
       admissions[side] = admission;
-      const decision = coherentDecision(await prepareBuildJavaInputs(admission, config));
+      const decision = await prepareBuildJavaInputs(admission, config);
       decisions[side] = decision;
       const prepared = decision.scopes.filter((scope) => scope.outcome === "prepared");
-      const mode = prepared.length > 0 && decision.scopes.every((scope) => scope.outcome !== "fallback") ? "prepared" : "cache-only";
+      const hasFallback = decision.scopes.some((scope) => scope.outcome === "fallback");
+      const mode = prepared.length > 0 ? hasFallback ? "mixed" : "prepared" : "cache-only";
       modes[side] = mode;
       identities[side] = `${mode}:${admission.outcome === "admitted" ? admission.manifestSha256 : admission.outcome}`;
       if (side === "head" && revision === manifest.base && identities.head === identities.base) {
@@ -521,6 +531,32 @@ export async function openInspectJava(
           storeDir, join(scratch, `work-${side}`), {
             schema: 2, kind: "analyze", store: "/store/refs", input: command.input,
           });
+      } else if (mode === "mixed" && admission.outcome === "admitted") {
+        await verifyAdmission(admission);
+        const folder = join(scratch, `source-${side}`);
+        await mkdir(folder);
+        const fallbackPolicy = config.buildEvidence?.[side] ? policy : undefined;
+        if (fallbackPolicy) await refreshSecretPolicy(fallbackPolicy);
+        const skippedFiles = await snapshot(repo, revision, folder, config, side === "head", withheldPaths(decision), fallbackPolicy);
+        const command = preparedCommand(admission, decision, skippedFiles);
+        preparedCompilations[side] = command.compilations;
+        const imported = command.compilations.map(mixedCompilation);
+        const fallbackRoles = decision.scopes.filter((scope) => scope.outcome === "fallback").map((scope) => scope.role);
+        const diagnostics = admission.diagnostics.flatMap((item) => item.state === "available" ? [`${item.code}: ${item.message}`] : []);
+        result = await sandbox(config, {
+          snapshotDir: folder, preparedDir: join(admission.frozen.scratch, "java-worker-view"), mixed: true,
+        }, storeDir, join(scratch, `work-${side}`), {
+          schema: 2, kind: "analyze", store: "/store/refs",
+          input: {
+            kind: "cache-only",
+            snapshot: config.module === "." ? "/inputs/fallback" : `/inputs/fallback/${config.module}`,
+            pathRoot: "/inputs", cachePathRoot: "/inputs/fallback", artifactRoot: "/artifacts",
+            repositoryId: config.repositoryId, revision, javaLevel: config.javaLevel, build: config.build,
+            mainRoots: config.mainRoots, testRoots: config.testRoots, cache: "/cache", artifacts: "/artifacts/fallback",
+            skippedFiles, preparedCompilations: imported, fallbackRoles, diagnostics,
+            buildIdentity: `mixed:${admission.manifestSha256}`,
+          },
+        });
       } else {
         const folder = join(scratch, `source-${side}`);
         await mkdir(folder);
@@ -531,9 +567,13 @@ export async function openInspectJava(
         result = await sandbox(config, { snapshotDir: folder }, storeDir, join(scratch, `work-${side}`), {
           schema: 2, kind: "analyze", store: "/store/refs",
           input: {
-            kind: "cache-only", snapshot: config.module === "." ? "/source" : `/source/${config.module}`, pathRoot: "/source",
+            kind: "cache-only", snapshot: config.module === "." ? "/source" : `/source/${config.module}`,
+            pathRoot: "/source", cachePathRoot: "/source", artifactRoot: "/work/artifacts",
             repositoryId: config.repositoryId, revision, javaLevel: config.javaLevel, build: config.build,
             mainRoots: config.mainRoots, testRoots: config.testRoots, cache: "/cache", artifacts: "/work/artifacts", skippedFiles,
+            preparedCompilations: [],
+            fallbackRoles: decision.scopes.filter((scope) => scope.outcome === "fallback").map((scope) => scope.role),
+            diagnostics: [], buildIdentity: "cache-only",
           },
         });
       }
@@ -560,7 +600,7 @@ export async function openInspectJava(
         return { path: target.path, position, buildArtifact: null };
       }
       if (Object.keys(target).sort().join(",") !== "artifactId,position" || !target.artifactId ||
-        modes[side] !== "prepared" || admissions[side].outcome !== "admitted") {
+        admissions[side].outcome !== "admitted") {
         throw new InspectJavaError("invalid-input", "Artifact targets require the pinned imported view");
       }
       const file = preparedCompilations[side].flatMap((compilation) => compilation.files)
@@ -579,7 +619,7 @@ export async function openInspectJava(
       await verifyAdmission(admissions.head);
       await verifyFrozenArtifacts(config, artifacts.base);
       await verifyFrozenArtifacts(config, artifacts.head);
-      if (modes[side] === "cache-only") {
+      if (modes[side] !== "prepared") {
         const baseline = withheldPaths(decisions[side]);
         const fallbackPolicy = config.buildEvidence?.[side] ? policy : undefined;
         if (fallbackPolicy) await refreshSecretPolicy(fallbackPolicy);
@@ -587,7 +627,8 @@ export async function openInspectJava(
         if (skipped.some((item) => item.reason === "withheld by build-evidence policy" && !baseline.has(item.path))) {
           throw new InspectJavaError("analysis-unavailable", "Fallback Java inputs became withheld");
         }
-      } else {
+      }
+      if (modes[side] !== "cache-only") {
         await verifyPreparedScreening(admissions[side], preparedCompilations[side], policy);
       }
     };

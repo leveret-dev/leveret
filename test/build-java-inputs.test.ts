@@ -253,6 +253,60 @@ describe("installed optional build-evidence bridge", () => {
     }
   }, 240_000);
 
+  it("keeps supported exported production queryable while test resolves independent fallback", async () => {
+    const request = republish(valid, "head", (exported) => {
+      const testCompilation = exported.compilations.find((item) => item.id === "test");
+      if (!testCompilation || testCompilation.compiler.platform.state !== "identified") throw new Error("fixture test platform is missing");
+      const modules = testCompilation.compiler.platform.fingerprints.find((item) => item.name === "modules");
+      if (!modules) throw new Error("fixture test modules fingerprint is missing");
+      modules.sha256 = "e".repeat(64);
+    });
+    const loaded = await installedConfig(valid, { base: valid.pins.base, head: request.pin! }, `mixed-test-${++serial}`);
+    const manifest = await buildChangeManifest(valid.repo, valid.base);
+    const bridge = await openInspectJava(valid.repo, manifest, loaded, join(home, `mixed-test-run-${++serial}`), policy());
+    try {
+      expect(bridge.buildEvidence.head.javaScopes).toEqual([
+        expect.objectContaining({ role: "production", outcome: "prepared", compilationId: "prod" }),
+        expect.objectContaining({ role: "test", outcome: "fallback", compilationId: "test", reason: "unsupported-platform" }),
+      ]);
+      const page = await bridge.references({
+        analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
+        manifest, side: "head", target: { artifactId: "pricing-output", position: { line: 4, column: 22 } }, referenceScope: "all",
+      });
+      expect(page.target.location.buildArtifact).toMatchObject({ artifactId: "pricing-output", origin: "materialized" });
+      expect(page.items.some((item) => item.reference?.location.path === "src/main/java/example/Consumer.java")).toBe(true);
+    } finally {
+      await bridge.close();
+    }
+  }, 240_000);
+
+  it("keeps supported exported test queryable while production resolves independent fallback", async () => {
+    const request = republish(valid, "head", (exported) => {
+      const production = exported.compilations.find((item) => item.id === "prod");
+      if (!production || production.compiler.platform.state !== "identified") throw new Error("fixture production platform is missing");
+      const modules = production.compiler.platform.fingerprints.find((item) => item.name === "modules");
+      if (!modules) throw new Error("fixture production modules fingerprint is missing");
+      modules.sha256 = "d".repeat(64);
+    });
+    const loaded = await installedConfig(valid, { base: valid.pins.base, head: request.pin! }, `mixed-production-${++serial}`);
+    const manifest = await buildChangeManifest(valid.repo, valid.base);
+    const bridge = await openInspectJava(valid.repo, manifest, loaded, join(home, `mixed-production-run-${++serial}`), policy());
+    try {
+      expect(bridge.buildEvidence.head.javaScopes).toEqual([
+        expect.objectContaining({ role: "production", outcome: "fallback", compilationId: "prod", reason: "unsupported-platform" }),
+        expect.objectContaining({ role: "test", outcome: "prepared", compilationId: "test" }),
+      ]);
+      const page = await bridge.references({
+        analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
+        manifest, side: "head", target: { artifactId: "pricing-test", position: { line: 4, column: 10 } }, referenceScope: "all",
+      });
+      expect(page.target.location.buildArtifact).toMatchObject({ artifactId: "pricing-test", origin: "authored" });
+      expect(page.target.sourceSet).toBe("test");
+    } finally {
+      await bridge.close();
+    }
+  }, 240_000);
+
   it("serves the authored bytes through the bridge after an in-place transformation", async () => {
     const fixture = await createBuildFixture(join(home, `installed-in-place-${++serial}`), "in-place");
     const loaded = await installedConfig(fixture, fixture.pins, `in-place-config-${++serial}`);
