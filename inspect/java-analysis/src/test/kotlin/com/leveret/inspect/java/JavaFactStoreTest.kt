@@ -1,5 +1,6 @@
 package com.leveret.inspect.java
 
+import com.google.gson.JsonParser
 import com.leveret.inspect.db.config.DatabaseSettings
 import com.leveret.inspect.db.config.DatabaseKeys
 import com.leveret.inspect.db.pool.Database
@@ -348,6 +349,37 @@ class JavaFactStoreTest {
                 store.query(request(generated.copy(location = generated.location.copy(buildArtifact = wrongOrigin)), "all"))
             }
             assertThat(error.code).isEqualTo("target-missing")
+        }
+    }
+
+    @Test
+    fun `schema 4 stored locations require explicit null provenance instead of treating omission as original`(@TempDir home: Path) {
+        val data = fixture("head", "stored-provenance", "price(int)")
+        val manifest = ChangeManifest("head", "head", emptyList())
+        val request = ReferenceRequest(
+            data.summary.analysisId, data.summary.configurationSha256, manifest, "head",
+            TargetSelector(data.methods.single().location.path, Position(3, 17), null), "outside-diff",
+        )
+        opened(home) { sessions ->
+            val store = JavaFactStore(sessions)
+            store.publish(data)
+            assertThat(store.query(request).items.mapNotNull { it.reference?.diffStatus })
+                .containsExactly("outside-diff")
+            sessions.open().use { session ->
+                val payload = session.select(
+                    "select payload from refs where analysis_id=?",
+                    { it.setString(1, data.summary.analysisId) },
+                ) { it.getString(1) }.single()
+                val root = JsonParser.parseString(payload).asJsonObject
+                root.getAsJsonObject("reference").getAsJsonObject("location").remove("buildArtifact")
+                session.update("update refs set payload=? where analysis_id=?") {
+                    it.setString(1, root.toString())
+                    it.setString(2, data.summary.analysisId)
+                }
+                session.commit()
+            }
+            val error = org.junit.jupiter.api.assertThrows<InspectException> { store.query(request.copy(referenceScope = "all")) }
+            assertThat(error.code).isEqualTo("analysis-unavailable")
         }
     }
 

@@ -227,10 +227,20 @@ class JavaFactStore(private val sessions: SessionFactory) {
 
     private fun position(root: JsonObject) = Position(root.number("line"), root.number("column"))
     private fun range(root: JsonObject) = Range(position(root.obj("start")), position(root.obj("end")))
-    private fun location(root: JsonObject) = Location(root.string("path"), range(root.obj("range")), citation(root.get("buildArtifact")))
+    private fun location(root: JsonObject): Location {
+        val artifact = root.get("buildArtifact")
+            ?: throw InspectException("analysis-unavailable", "Stored Java location omitted buildArtifact")
+        return Location(root.string("path"), range(root.obj("range")), citation(artifact))
+    }
 
-    private fun citation(value: JsonElement?): BuildArtifactCitation? = value?.takeIf { !it.isJsonNull }?.asJsonObject?.let {
-        BuildArtifactCitation(it.string("manifestSha256"), it.string("artifactId"), it.string("origin"))
+    private fun citation(value: JsonElement): BuildArtifactCitation? {
+        if (value.isJsonNull) return null
+        if (!value.isJsonObject) throw InspectException("analysis-unavailable", "Invalid stored Java artifact citation")
+        val root = value.asJsonObject
+        fun field(name: String): String = root.get(name)?.takeIf {
+            it.isJsonPrimitive && it.asJsonPrimitive.isString
+        }?.asString ?: throw InspectException("analysis-unavailable", "Invalid stored Java artifact citation")
+        return BuildArtifactCitation(field("manifestSha256"), field("artifactId"), field("origin"))
     }
 
     private fun parseDetail(text: String): DetailRecord {

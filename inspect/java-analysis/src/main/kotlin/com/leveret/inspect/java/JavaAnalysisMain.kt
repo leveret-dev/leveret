@@ -135,9 +135,12 @@ object JavaAnalysisMain {
                 }, file.boolean("truncated"), file.array("errors").map { it.asString })
         }
         val rawArtifact = target.get("buildArtifact") ?: throw IllegalArgumentException("Missing buildArtifact")
-        val artifact = if (rawArtifact.isJsonNull) null else rawArtifact.asJsonObject.also {
-            it.fields("manifestSha256", "artifactId", "origin")
-        }.let { BuildArtifactCitation(it.string("manifestSha256"), it.string("artifactId"), it.string("origin")) }
+        val artifact = if (rawArtifact.isJsonNull) null else {
+            require(rawArtifact.isJsonObject) { "Invalid buildArtifact" }
+            rawArtifact.asJsonObject.also {
+                it.fields("manifestSha256", "artifactId", "origin")
+            }.let { BuildArtifactCitation(it.string("manifestSha256"), it.string("artifactId"), it.string("origin")) }
+        }
         val request = ReferenceRequest(source.string("analysisId"), source.string("configurationSha256"),
             ChangeManifest(manifest.string("base"), manifest.string("head"), files,
                 manifest.boolean("truncated"), manifest.array("errors").map { it.asString }),
