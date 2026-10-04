@@ -383,6 +383,50 @@ class JavaFactStoreTest {
         }
     }
 
+    @Test
+    fun `schema 4 rejects semantically invalid stored artifact citations`(@TempDir home: Path) {
+        val citation = BuildArtifactCitation("c".repeat(64), "caller-original", "authored")
+        val mutations = listOf(
+            "invalid-hash" to ("manifestSha256" to "bad"),
+            "blank-id" to ("artifactId" to ""),
+            "unknown-origin" to ("origin" to "unknown"),
+        )
+        opened(home) { sessions ->
+            val store = JavaFactStore(sessions)
+            for ((analysisId, mutation) in mutations) {
+                val original = fixture("head", analysisId, "price(int)")
+                val reference = original.references.single().let {
+                    it.copy(location = it.location.copy(buildArtifact = citation))
+                }
+                val data = original.copy(references = listOf(reference))
+                val request = ReferenceRequest(
+                    data.summary.analysisId, data.summary.configurationSha256,
+                    ChangeManifest("head", "head", emptyList()), "head",
+                    TargetSelector(data.methods.single().location.path, Position(3, 17), null), "all",
+                )
+                store.publish(data)
+                assertThat(store.query(request).items.mapNotNull { it.reference?.diffStatus })
+                    .containsExactly("outside-diff")
+                sessions.open().use { session ->
+                    val payload = session.select(
+                        "select payload from refs where analysis_id=?",
+                        { it.setString(1, analysisId) },
+                    ) { it.getString(1) }.single()
+                    val root = JsonParser.parseString(payload).asJsonObject
+                    root.getAsJsonObject("reference").getAsJsonObject("location")
+                        .getAsJsonObject("buildArtifact").addProperty(mutation.first, mutation.second)
+                    session.update("update refs set payload=? where analysis_id=?") {
+                        it.setString(1, root.toString())
+                        it.setString(2, analysisId)
+                    }
+                    session.commit()
+                }
+                val error = org.junit.jupiter.api.assertThrows<InspectException> { store.query(request) }
+                assertThat(error.code).describedAs(analysisId).isEqualTo("analysis-unavailable")
+            }
+        }
+    }
+
     private fun cacheOnly(root: Path, main: List<Path>, test: List<Path>) = JavaAnalysisInput.cacheOnly(
         "fixture", "head", root, main, test,
         listOf(root.resolve("src/main/java")), listOf(root.resolve("src/test/java")), "21",

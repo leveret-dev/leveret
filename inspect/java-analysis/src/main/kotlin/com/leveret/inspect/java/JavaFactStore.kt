@@ -240,7 +240,9 @@ class JavaFactStore(private val sessions: SessionFactory) {
         fun field(name: String): String = root.get(name)?.takeIf {
             it.isJsonPrimitive && it.asJsonPrimitive.isString
         }?.asString ?: throw InspectException("analysis-unavailable", "Invalid stored Java artifact citation")
-        return BuildArtifactCitation(field("manifestSha256"), field("artifactId"), field("origin"))
+        val citation = BuildArtifactCitation(field("manifestSha256"), field("artifactId"), field("origin"))
+        if (!valid(citation)) throw InspectException("analysis-unavailable", "Invalid stored Java artifact citation")
+        return citation
     }
 
     private fun parseDetail(text: String): DetailRecord {
