@@ -441,6 +441,78 @@ describe("installed optional build-evidence bridge", () => {
     }
   }, 240_000);
 
+  it("keeps UTF-8 Java queries and unrelated reads available beside a Latin-1 in-scope resource", async () => {
+    const latin1 = Buffer.concat([
+      Buffer.from("endpoint=https://billing.example.test\nregion=eu\nmarker=latin1-rotation-marker\ncaf"),
+      Buffer.from([0xe9]), Buffer.from("\n"),
+    ]);
+    const request = republish(valid, "head", (exported) => {
+      const resource = exported.artifacts.find((item) => item.id === "app-resource-output");
+      if (!resource || resource.availability !== "available" || resource.kind !== "file") throw new Error("fixture resource is missing");
+      resource.content.sha256 = sha256(latin1);
+      resource.content.sizeBytes = latin1.length;
+      resource.encoding = "ISO-8859-1";
+    });
+    const resourcePath = join(request.pin!.payloadRoot, "resources/main/application.properties");
+    writeFileSync(resourcePath, latin1);
+    const loaded = await installedConfig(valid, { base: valid.pins.base, head: request.pin! }, `latin1-resource-${++serial}`);
+    const manifest = await buildChangeManifest(valid.repo, valid.base);
+    const bridge = await openInspectJava(valid.repo, manifest, loaded, join(home, `latin1-resource-run-${++serial}`), policy());
+    try {
+      expect(bridge.buildEvidence.head.javaScopes[0]).toMatchObject({ role: "production", outcome: "prepared" });
+      const page = await bridge.references({
+        analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
+        manifest, side: "head", target: { artifactId: "pricing-output", position: { line: 4, column: 22 } },
+      });
+      expect(page.target.location.buildArtifact).toMatchObject({ artifactId: "pricing-output" });
+      await expect(bridge.readArtifact("head", {
+        manifestSha256: request.pin!.manifestSha256, artifactId: "consumer-original", range: null, byteBudget: 65_536,
+      })).resolves.toMatchObject({ ok: true });
+      await expect(bridge.readArtifact("head", {
+        manifestSha256: request.pin!.manifestSha256, artifactId: "app-resource-output", range: null, byteBudget: 65_536,
+      })).resolves.toMatchObject({ ok: false, error: { code: "unsupported-encoding" } });
+    } finally {
+      await bridge.close();
+    }
+  }, 240_000);
+
+  it("still invalidates facts when a rotated ASCII marker appears in a non-UTF-8 in-scope resource", async () => {
+    const latin1 = Buffer.concat([
+      Buffer.from("endpoint=https://billing.example.test\nregion=eu\nmarker=latin1-rotation-marker\ncaf"),
+      Buffer.from([0xe9]), Buffer.from("\n"),
+    ]);
+    const request = republish(valid, "head", (exported) => {
+      const resource = exported.artifacts.find((item) => item.id === "app-resource-output");
+      if (!resource || resource.availability !== "available" || resource.kind !== "file") throw new Error("fixture resource is missing");
+      resource.content.sha256 = sha256(latin1);
+      resource.content.sizeBytes = latin1.length;
+      resource.encoding = null;
+    });
+    writeFileSync(join(request.pin!.payloadRoot, "resources/main/application.properties"), latin1);
+    let values: readonly string[] = [];
+    const rotating: SecretPolicy = { ...policy(), refreshKnownValues: async () => values };
+    const loaded = await installedConfig(valid, { base: valid.pins.base, head: request.pin! }, `latin1-rotation-${++serial}`);
+    const manifest = await buildChangeManifest(valid.repo, valid.base);
+    const bridge = await openInspectJava(valid.repo, manifest, loaded, join(home, `latin1-rotation-run-${++serial}`), rotating);
+    try {
+      const clean = await bridge.references({
+        analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
+        manifest, side: "head", target: { artifactId: "pricing-output", position: { line: 4, column: 22 } },
+      });
+      expect(clean.target.location.buildArtifact).toMatchObject({ artifactId: "pricing-output" });
+      await expect(bridge.readArtifact("head", {
+        manifestSha256: request.pin!.manifestSha256, artifactId: "consumer-original", range: null, byteBudget: 65_536,
+      })).resolves.toMatchObject({ ok: true });
+      values = ["latin1-rotation-marker"];
+      await expect(bridge.references({
+        analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
+        manifest, side: "head", target: { artifactId: "pricing-output", position: { line: 4, column: 22 } },
+      })).rejects.toMatchObject({ code: "analysis-unavailable" });
+    } finally {
+      await bridge.close();
+    }
+  }, 240_000);
+
   it("serves the authored bytes through the bridge after an in-place transformation", async () => {
     const fixture = await createBuildFixture(join(home, `installed-in-place-${++serial}`), "in-place");
     const loaded = await installedConfig(fixture, fixture.pins, `in-place-config-${++serial}`);

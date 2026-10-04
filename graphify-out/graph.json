@@ -6139,7 +6139,7 @@
       "file_type": "code",
       "norm_label": "fallbackroleset()",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L478"
+      "source_location": "L484"
     },
     {
       "id": "src_inspect_java_fromgit",
@@ -6175,7 +6175,7 @@
       "file_type": "code",
       "norm_label": "javaevidencesummary()",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L483"
+      "source_location": "L489"
     },
     {
       "id": "src_inspect_java_loadinspectjavaconfig",
@@ -6199,7 +6199,7 @@
       "file_type": "code",
       "norm_label": "mixedcompilation()",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L460"
+      "source_location": "L466"
     },
     {
       "id": "src_inspect_java_modulepath",
@@ -6223,7 +6223,7 @@
       "file_type": "code",
       "norm_label": "openinspectjava()",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L493"
+      "source_location": "L499"
     },
     {
       "id": "src_inspect_java_preparedcommand",
@@ -6235,7 +6235,7 @@
       "file_type": "code",
       "norm_label": "preparedcommand()",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L443"
+      "source_location": "L449"
     },
     {
       "id": "src_inspect_java_saferelative",
@@ -6355,7 +6355,7 @@
       "file_type": "code",
       "norm_label": "withheldpaths()",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L474"
+      "source_location": "L480"
     },
     {
       "id": "src_change_evidence_ensurechangeevidence",
@@ -47978,7 +47978,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L485",
+      "source_location": "L491",
       "weight": 1.0
     },
     {
@@ -48050,7 +48050,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L496",
+      "source_location": "L502",
       "weight": 1.0
     },
     {
@@ -48062,7 +48062,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L497",
+      "source_location": "L503",
       "weight": 1.0
     },
     {
@@ -48074,7 +48074,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L501",
+      "source_location": "L507",
       "weight": 1.0
     },
     {
@@ -48086,7 +48086,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L503",
+      "source_location": "L509",
       "weight": 1.0
     },
     {
@@ -48098,7 +48098,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L516",
+      "source_location": "L522",
       "weight": 1.0
     },
     {
@@ -48110,7 +48110,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L529",
+      "source_location": "L535",
       "weight": 1.0
     },
     {
@@ -48122,7 +48122,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L534",
+      "source_location": "L540",
       "weight": 1.0
     },
     {
@@ -48134,7 +48134,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L542",
+      "source_location": "L548",
       "weight": 1.0
     },
     {
@@ -48146,7 +48146,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L545",
+      "source_location": "L551",
       "weight": 1.0
     },
     {
@@ -48158,7 +48158,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L545",
+      "source_location": "L551",
       "weight": 1.0
     },
     {
@@ -48170,7 +48170,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L551",
+      "source_location": "L557",
       "weight": 1.0
     },
     {
@@ -48182,7 +48182,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L553",
+      "source_location": "L559",
       "weight": 1.0
     },
     {
@@ -48194,7 +48194,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L562",
+      "source_location": "L568",
       "weight": 1.0
     },
     {
@@ -48206,7 +48206,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L563",
+      "source_location": "L569",
       "weight": 1.0
     },
     {
@@ -48218,7 +48218,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L564",
+      "source_location": "L570",
       "weight": 1.0
     },
     {
@@ -48230,7 +48230,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L565",
+      "source_location": "L571",
       "weight": 1.0
     },
     {
@@ -48242,7 +48242,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L626",
+      "source_location": "L632",
       "weight": 1.0
     },
     {
@@ -48254,7 +48254,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L648",
+      "source_location": "L654",
       "weight": 1.0
     },
     {
@@ -48266,7 +48266,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L654",
+      "source_location": "L660",
       "weight": 1.0
     },
     {
@@ -48278,7 +48278,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L670",
+      "source_location": "L676",
       "weight": 1.0
     },
     {
@@ -48290,7 +48290,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L682",
+      "source_location": "L688",
       "weight": 1.0
     },
     {
@@ -48302,7 +48302,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L715",
+      "source_location": "L721",
       "weight": 1.0
     },
     {
@@ -48614,7 +48614,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L431",
+      "source_location": "L437",
       "weight": 1.0
     },
     {
@@ -87801,7 +87801,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/inspect-java.ts",
-      "source_location": "L443",
+      "source_location": "L449",
       "weight": 1.0
     },
     {
@@ -87812,7 +87812,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/inspect-java.ts",
-      "source_location": "L460",
+      "source_location": "L466",
       "weight": 1.0
     },
     {
@@ -87823,7 +87823,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/inspect-java.ts",
-      "source_location": "L474",
+      "source_location": "L480",
       "weight": 1.0
     },
     {
@@ -87834,7 +87834,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/inspect-java.ts",
-      "source_location": "L478",
+      "source_location": "L484",
       "weight": 1.0
     },
     {
@@ -87845,7 +87845,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/inspect-java.ts",
-      "source_location": "L483",
+      "source_location": "L489",
       "weight": 1.0
     },
     {
@@ -87856,7 +87856,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/inspect-java.ts",
-      "source_location": "L493",
+      "source_location": "L499",
       "weight": 1.0
     },
     {
@@ -99824,7 +99824,7 @@
       "confidence_score": 0.85,
       "context": "argument",
       "source_file": "src/inspect-java.ts",
-      "source_location": "L569",
+      "source_location": "L575",
       "weight": 1.0
     },
     {
@@ -106657,5 +106657,5 @@
       "source_file": "docs/reports/2026-08-24-pi-quality-vs-omp-coderabbit.md"
     }
   ],
-  "built_at_commit": "53aca373e47fe5c231e82c0b6f6a70b93ad1a5ea"
+  "built_at_commit": "1c57be5171a0ae65288507d43944b2c0d28b9f6f"
 }

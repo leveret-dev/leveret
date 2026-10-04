@@ -418,16 +418,22 @@ async function verifyPreparedScreening(
   const ids = new Set(admission.manifest.artifacts
     .filter((artifact) => scopesOf(artifact.id).some((id) => preparedIds.has(id)))
     .map((artifact) => artifact.id));
-  for (const compilation of compilations) {
-    for (const file of compilation.files) ids.add(file.buildArtifact.artifactId);
-  }
+  const compiledSources = new Set(compilations.flatMap((compilation) => compilation.files.map((file) => file.buildArtifact.artifactId)));
+  for (const id of compiledSources) ids.add(id);
   for (const id of ids) {
     const frozen = admission.frozen.available.get(id);
     if (!frozen || frozen.artifact.availability !== "available" || frozen.artifact.kind !== "file" ||
       frozen.artifact.role === "classes" || frozen.artifact.role === "dependency") continue;
+    const bytes = await readFile(frozen.path);
+    // Compiler sources must be exact UTF-8. Other text-like inputs are screened exactly like admission screens them:
+    // an internal best-effort byte view is used only for detection and is never exposed or treated as the artifact text.
     let text: string;
-    try { text = decoder.decode(await readFile(frozen.path)); }
-    catch { throw new InspectJavaError("analysis-unavailable", "Prepared semantic input encoding became unavailable"); }
+    if (compiledSources.has(id)) {
+      try { text = decoder.decode(bytes); }
+      catch { throw new InspectJavaError("analysis-unavailable", "Prepared semantic input encoding became unavailable"); }
+    } else {
+      text = bytes.toString("utf8");
+    }
     if (screenText(text, policy).state === "withheld") {
       throw new InspectJavaError("analysis-unavailable", "Prepared semantic input became withheld");
     }
