@@ -7,6 +7,7 @@ import { validateChangeManifestCheckout, type ChangeManifest } from "./change-ev
 import { GitObjectError, gitBytes, isSafeRelativePath, readGitBlobs, readGitTree } from "./git-objects.js";
 import { runStreaming } from "./exec.js";
 import { pathIsInside } from "./path.js";
+import { scopeResolver } from "./build-artifacts.js";
 import { readBuildArtifact, type BuildArtifactReadReply, type BuildArtifactReadRequest } from "./build-artifact-reader.js";
 import { prepareBuildJavaInputs, type BuildJavaDecision, type PreparedJavaCompilation } from "./build-java-inputs.js";
 import type { BuildEvidencePin } from "./build-evidence-contract.js";
@@ -204,13 +205,27 @@ function selected(path: string, config: InspectJavaConfig): boolean {
     ["pom.xml", "gradle.lockfile", "settings.gradle", "settings.gradle.kts", "gradle/libs.versions.toml"].includes(moduleRelative);
 }
 
+function configuredRole(path: string, config: InspectJavaConfig): "production" | "test" | null {
+  const relative = modulePath(path, config.module);
+  if (relative === null || !relative.endsWith(".java")) return null;
+  if (config.mainRoots.some((root) => relative.startsWith(`${root}/`))) return "production";
+  if (config.testRoots.some((root) => relative.startsWith(`${root}/`))) return "test";
+  return null;
+}
+
 async function snapshot(
   repo: string, revision: string, destination: string, config: InspectJavaConfig, live: boolean,
   withheld: ReadonlySet<string> = EMPTY_PATHS, policy?: SecretPolicy,
+  fallbackRoles?: ReadonlySet<"production" | "test">, observedWithheld?: Set<string>,
 ): Promise<Array<{ path: string; sourceSet: "main" | "test"; reason: string }>> {
   const treeEntries = await fromGit(readGitTree(repo, revision));
   const held = new Set(withheld);
-  const candidates = treeEntries.filter((item) => selected(item.path, config) && !held.has(item.path));
+  const candidates = treeEntries.filter((item) => {
+    if (!selected(item.path, config) || held.has(item.path)) return false;
+    const role = configuredRole(item.path, config);
+    if (role === null || !fallbackRoles) return true;
+    return role === "production" ? fallbackRoles.has("production") || fallbackRoles.has("test") : fallbackRoles.has("test");
+  });
   if (config.maxJavaFiles !== undefined) {
     const count = treeEntries.reduce((total, item) => total + Number(item.path.endsWith(".java")), 0);
     if (count > config.maxJavaFiles) {
@@ -224,14 +239,18 @@ async function snapshot(
   const root = await realpath(repo);
   for (const entry of candidates) {
     const data = contents.get(entry.path)!;
+    const role = configuredRole(entry.path, config);
     let text: string | undefined;
     if (entry.path.endsWith(".java") || entry.path.endsWith(".xml") || entry.path.endsWith(".gradle") ||
       entry.path.endsWith(".kts") || entry.path.endsWith(".lockfile") || entry.path.endsWith(".toml")) {
       try { text = decoder.decode(data); }
       catch { throw new InspectJavaError("invalid-input", `Analyzed input is not UTF-8: ${entry.path}`); }
     }
-    if (policy && text !== undefined && screenText(text, policy).state === "withheld") held.add(entry.path);
-    if (live) {
+    if (policy && text !== undefined && screenText(text, policy).state === "withheld") {
+      held.add(entry.path);
+      observedWithheld?.add(entry.path);
+    }
+    if (live && (role === null || !fallbackRoles || fallbackRoles.has(role))) {
       const livePath = join(root, entry.path);
       const file = await lstat(livePath).catch(() => null);
       const actual = await realpath(livePath).catch(() => null);
@@ -387,22 +406,30 @@ async function verifyAdmission(admission: BuildEvidenceAdmission): Promise<void>
 }
 
 async function verifyPreparedScreening(
-  admission: BuildEvidenceAdmission, compilations: readonly PreparedJavaCompilation[], policy: SecretPolicy,
+  admission: BuildEvidenceAdmission, compilations: readonly PreparedJavaCompilation[],
+  decision: BuildJavaDecision, policy: SecretPolicy,
 ): Promise<void> {
   if (admission.outcome !== "admitted") return;
   await refreshSecretPolicy(policy);
   if (!policy.available) throw new InspectJavaError("analysis-unavailable", "Build-evidence screening became unavailable");
-  const ids = new Set(compilations.flatMap((compilation) => compilation.files.map((file) => file.buildArtifact.artifactId)));
+  const preparedIds = new Set(decision.scopes.flatMap((scope) =>
+    scope.outcome === "prepared" && scope.compilationId !== null ? [scope.compilationId] : []));
+  const scopesOf = scopeResolver(admission.manifest);
+  const ids = new Set(admission.manifest.artifacts
+    .filter((artifact) => scopesOf(artifact.id).some((id) => preparedIds.has(id)))
+    .map((artifact) => artifact.id));
+  for (const compilation of compilations) {
+    for (const file of compilation.files) ids.add(file.buildArtifact.artifactId);
+  }
   for (const id of ids) {
     const frozen = admission.frozen.available.get(id);
-    if (!frozen || frozen.artifact.availability !== "available" || frozen.artifact.kind !== "file") {
-      throw new InspectJavaError("snapshot-mismatch", "Prepared source disappeared after admission");
-    }
+    if (!frozen || frozen.artifact.availability !== "available" || frozen.artifact.kind !== "file" ||
+      frozen.artifact.role === "classes" || frozen.artifact.role === "dependency") continue;
     let text: string;
     try { text = decoder.decode(await readFile(frozen.path)); }
-    catch { throw new InspectJavaError("analysis-unavailable", "Prepared source encoding became unavailable"); }
+    catch { throw new InspectJavaError("analysis-unavailable", "Prepared semantic input encoding became unavailable"); }
     if (screenText(text, policy).state === "withheld") {
-      throw new InspectJavaError("analysis-unavailable", "Prepared Java input became withheld");
+      throw new InspectJavaError("analysis-unavailable", "Prepared semantic input became withheld");
     }
   }
   for (const diagnostic of admission.diagnostics) {
@@ -446,6 +473,10 @@ function mixedCompilation(compilation: PreparedJavaCompilation): PreparedJavaCom
 
 function withheldPaths(decision: BuildJavaDecision): ReadonlySet<string> {
   return new Set(decision.scopes.flatMap((scope) => scope.outcome === "fallback" ? scope.withheldRepositoryPaths : []));
+}
+
+function fallbackRoleSet(decision: BuildJavaDecision): ReadonlySet<"production" | "test"> {
+  return new Set(decision.scopes.filter((scope) => scope.outcome === "fallback").map((scope) => scope.role));
 }
 
 
@@ -493,7 +524,6 @@ export async function openInspectJava(
     const artifacts = {} as Record<"base" | "head", Record<string, string>>;
     const modes = {} as Record<"base" | "head", "cache-only" | "prepared" | "mixed">;
     const preparedCompilations = {} as Record<"base" | "head", readonly PreparedJavaCompilation[]>;
-    const identities = {} as Record<"base" | "head", string>;
     for (const side of ["base", "head"] as const) {
       const revision = manifest[side];
       const admission = await admitBuildEvidence({
@@ -507,13 +537,6 @@ export async function openInspectJava(
       const hasFallback = decision.scopes.some((scope) => scope.outcome === "fallback");
       const mode = prepared.length > 0 ? hasFallback ? "mixed" : "prepared" : "cache-only";
       modes[side] = mode;
-      identities[side] = `${mode}:${admission.outcome === "admitted" ? admission.manifestSha256 : admission.outcome}`;
-      if (side === "head" && revision === manifest.base && identities.head === identities.base) {
-        summaries.head = summaries.base;
-        artifacts.head = artifacts.base;
-        preparedCompilations.head = preparedCompilations.base;
-        continue;
-      }
       let result: unknown;
       if (mode === "prepared" && admission.outcome === "admitted") {
         await verifyAdmission(admission);
@@ -537,11 +560,14 @@ export async function openInspectJava(
         await mkdir(folder);
         const fallbackPolicy = config.buildEvidence?.[side] ? policy : undefined;
         if (fallbackPolicy) await refreshSecretPolicy(fallbackPolicy);
-        const skippedFiles = await snapshot(repo, revision, folder, config, side === "head", withheldPaths(decision), fallbackPolicy);
+        const roles = fallbackRoleSet(decision);
+        const skippedFiles = await snapshot(
+          repo, revision, folder, config, side === "head", withheldPaths(decision), fallbackPolicy, roles,
+        );
         const command = preparedCommand(admission, decision, skippedFiles);
         preparedCompilations[side] = command.compilations;
         const imported = command.compilations.map(mixedCompilation);
-        const fallbackRoles = decision.scopes.filter((scope) => scope.outcome === "fallback").map((scope) => scope.role);
+        const fallbackRoles = [...roles];
         const diagnostics = admission.diagnostics.flatMap((item) => item.state === "available" ? [`${item.code}: ${item.message}`] : []);
         result = await sandbox(config, {
           snapshotDir: folder, preparedDir: join(admission.frozen.scratch, "java-worker-view"), mixed: true,
@@ -562,7 +588,10 @@ export async function openInspectJava(
         await mkdir(folder);
         const fallbackPolicy = config.buildEvidence?.[side] ? policy : undefined;
         if (fallbackPolicy) await refreshSecretPolicy(fallbackPolicy);
-        const skippedFiles = await snapshot(repo, revision, folder, config, side === "head", withheldPaths(decision), fallbackPolicy);
+        const roles = fallbackRoleSet(decision);
+        const skippedFiles = await snapshot(
+          repo, revision, folder, config, side === "head", withheldPaths(decision), fallbackPolicy, roles,
+        );
         preparedCompilations[side] = [];
         result = await sandbox(config, { snapshotDir: folder }, storeDir, join(scratch, `work-${side}`), {
           schema: 2, kind: "analyze", store: "/store/refs",
@@ -597,7 +626,12 @@ export async function openInspectJava(
         if (Object.keys(target).sort().join(",") !== "path,position" || !isSafeRelativePath(target.path)) {
           throw new InspectJavaError("invalid-input", "Invalid Java path target");
         }
-        return { path: target.path, position, buildArtifact: null };
+        const authored = new Map(preparedCompilations[side].flatMap((compilation) => compilation.files)
+          .filter((file) => file.displayPath === target.path && file.buildArtifact.origin === "authored")
+          .map((file) => [`${file.buildArtifact.manifestSha256}:${file.buildArtifact.artifactId}`, file] as const));
+        if (authored.size > 1) throw new InspectJavaError("target-indeterminate", "Git path matches more than one imported authored target");
+        const file = authored.values().next().value;
+        return { path: target.path, position, buildArtifact: file?.buildArtifact ?? null };
       }
       if (Object.keys(target).sort().join(",") !== "artifactId,position" || !target.artifactId ||
         admissions[side].outcome !== "admitted") {
@@ -623,13 +657,17 @@ export async function openInspectJava(
         const baseline = withheldPaths(decisions[side]);
         const fallbackPolicy = config.buildEvidence?.[side] ? policy : undefined;
         if (fallbackPolicy) await refreshSecretPolicy(fallbackPolicy);
-        const skipped = await snapshot(repo, manifest[side], join(scratch, `source-${side}`), config, side === "head", baseline, fallbackPolicy);
-        if (skipped.some((item) => item.reason === "withheld by build-evidence policy" && !baseline.has(item.path))) {
+        const observedWithheld = new Set<string>();
+        await snapshot(
+          repo, manifest[side], join(scratch, `source-${side}`), config, side === "head", baseline, fallbackPolicy,
+          fallbackRoleSet(decisions[side]), observedWithheld,
+        );
+        if ([...observedWithheld].some((path) => !baseline.has(path))) {
           throw new InspectJavaError("analysis-unavailable", "Fallback Java inputs became withheld");
         }
       }
       if (modes[side] !== "cache-only") {
-        await verifyPreparedScreening(admissions[side], preparedCompilations[side], policy);
+        await verifyPreparedScreening(admissions[side], preparedCompilations[side], decisions[side], policy);
       }
     };
 

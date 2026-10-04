@@ -80,7 +80,7 @@ describe("prepareBuildJavaInputs", () => {
       const production = role(decision, "production");
       const test = role(decision, "test");
       expect(production).toMatchObject({ outcome: "prepared", compilationId: "prod", compilation: {
-        id: "prod", resolutionDomain: `build:${admission.manifestSha256}:prod`, sourceSet: "main",
+        id: `export:${admission.manifestSha256}:prod`, resolutionDomain: `build:${admission.manifestSha256}:prod`, sourceSet: "main",
         files: expect.arrayContaining([
           expect.objectContaining({ displayPath: "src/main/java/example/Consumer.java", encoding: "UTF-8",
             buildArtifact: { manifestSha256: admission.manifestSha256, artifactId: "consumer-original", origin: "authored" } }),
@@ -89,7 +89,11 @@ describe("prepareBuildJavaInputs", () => {
         ]),
       } });
       expect(test).toMatchObject({ outcome: "prepared", compilationId: "test", compilation: {
-        id: "test", sourceSet: "test", classpath: expect.arrayContaining([expect.stringMatching(/^\/prepared\/artifacts\//)]),
+        id: `export:${admission.manifestSha256}:test`, sourceSet: "test",
+        classpath: expect.arrayContaining([expect.stringMatching(/^\/prepared\/artifacts\//)]),
+        origins: expect.arrayContaining([expect.objectContaining({
+          ownerCompilationId: `export:${admission.manifestSha256}:prod`,
+        })]),
       } });
       const serialized = JSON.stringify(decision);
       expect(serialized).not.toContain(admission.frozen.scratch);
@@ -212,6 +216,13 @@ describe("installed optional build-evidence bridge", () => {
       });
       expect(page.items.filter((item) => item.reference).map((item) => item.reference!.location.path))
         .toEqual(expect.arrayContaining(["src/main/java/example/Consumer.java", "src/test/java/example/PricingTest.java"]));
+      const authored = await bridge.references({
+        analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
+        manifest, side: "head", target: { path: "src/main/java/example/Consumer.java", position: { line: 4, column: 16 } },
+      });
+      expect(authored.target.location.buildArtifact).toEqual({
+        manifestSha256: valid.pins.head.manifestSha256, artifactId: "consumer-original", origin: "authored",
+      });
     } finally {
       await bridge.close();
     }
@@ -304,6 +315,129 @@ describe("installed optional build-evidence bridge", () => {
       expect(page.target.sourceSet).toBe("test");
     } finally {
       await bridge.close();
+    }
+  }, 240_000);
+
+  it("keeps exporter compilation IDs disjoint from fallback IDs", async () => {
+    const request = republish(valid, "head", (exported) => {
+      const production = exported.compilations.find((item) => item.id === "prod");
+      const testCompilation = exported.compilations.find((item) => item.id === "test");
+      if (!production || !testCompilation || testCompilation.compiler.platform.state !== "identified") {
+        throw new Error("fixture compilations are missing");
+      }
+      production.id = "test";
+      testCompilation.id = "fixture-test";
+      for (const compilation of exported.compilations) {
+        for (const entry of compilation.compileClasspath.entries) {
+          if (entry.upstreamCompilationId === "prod") entry.upstreamCompilationId = "test";
+        }
+      }
+      const modules = testCompilation.compiler.platform.fingerprints.find((item) => item.name === "modules");
+      if (!modules) throw new Error("fixture test modules fingerprint is missing");
+      modules.sha256 = "b".repeat(64);
+    });
+    request.pin = { ...request.pin!, select: { moduleDir: ".", productionId: "test", testId: "fixture-test" } };
+    const loaded = await installedConfig(valid, { base: valid.pins.base, head: request.pin }, `id-collision-${++serial}`);
+    const manifest = await buildChangeManifest(valid.repo, valid.base);
+    const bridge = await openInspectJava(valid.repo, manifest, loaded, join(home, `id-collision-run-${++serial}`), policy());
+    try {
+      const page = await bridge.references({
+        analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
+        manifest, side: "head", target: { artifactId: "pricing-output", position: { line: 4, column: 22 } },
+      });
+      expect(page.target.location.buildArtifact).toMatchObject({ artifactId: "pricing-output" });
+    } finally {
+      await bridge.close();
+    }
+  }, 240_000);
+
+  it("does not reuse same-revision analyses across different explicit selections", async () => {
+    const request = republish(valid, "head", (exported) => {
+      const production = exported.compilations.find((item) => item.id === "prod");
+      if (!production) throw new Error("fixture production compilation is missing");
+      exported.compilations.push({ ...structuredClone(production), id: "prod-alt", name: "alternate-main" });
+    });
+    const basePin = { ...request.pin!, select: { moduleDir: ".", productionId: "prod", testId: "test" } };
+    const headPin = { ...request.pin!, select: { moduleDir: ".", productionId: "prod-alt", testId: "test" } };
+    const loaded = await installedConfig(valid, { base: basePin, head: headPin }, `same-revision-${++serial}`);
+    const manifest = await buildChangeManifest(valid.repo, valid.head);
+    const bridge = await openInspectJava(valid.repo, manifest, loaded, join(home, `same-revision-run-${++serial}`), policy());
+    try {
+      expect(bridge.buildEvidence.base.selection?.productionId).toBe("prod");
+      expect(bridge.buildEvidence.head.selection?.productionId).toBe("prod-alt");
+      expect(bridge.summaries.base.analysisId).not.toBe(bridge.summaries.head.analysisId);
+      const page = await bridge.references({
+        analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
+        manifest, side: "head", target: { artifactId: "pricing-output", position: { line: 4, column: 22 } },
+      });
+      expect(page.target.id).toContain(":prod-alt:");
+      expect(page.target.location.buildArtifact).toMatchObject({ artifactId: "pricing-output" });
+    } finally {
+      await bridge.close();
+    }
+  }, 240_000);
+
+  it("mixed fallback validates only consumed live roots while prepared in-place production stays immutable", async () => {
+    const fixture = await createBuildFixture(join(home, `mixed-in-place-${++serial}`), "in-place");
+    const request = republish(fixture, "head", (exported) => {
+      const testCompilation = exported.compilations.find((item) => item.id === "test");
+      if (!testCompilation || testCompilation.compiler.platform.state !== "identified") throw new Error("fixture test platform is missing");
+      const modules = testCompilation.compiler.platform.fingerprints.find((item) => item.name === "modules");
+      if (!modules) throw new Error("fixture test modules fingerprint is missing");
+      modules.sha256 = "c".repeat(64);
+    });
+    const generated = fixture.outputBytes.get("pricing-output");
+    if (!generated) throw new Error("fixture generated output is missing");
+    writeFileSync(join(fixture.repo, "src/main/java/example/Pricing.java"), generated);
+    const loaded = await installedConfig(fixture, { base: fixture.pins.base, head: request.pin! }, `mixed-in-place-${++serial}`);
+    const manifest = await buildChangeManifest(fixture.repo, fixture.base);
+    const bridge = await openInspectJava(fixture.repo, manifest, loaded, join(home, `mixed-in-place-run-${++serial}`), policy());
+    try {
+      const page = await bridge.references({
+        analysisId: bridge.summaries.head.analysisId, configurationSha256: bridge.summaries.head.configurationSha256,
+        manifest, side: "head", target: { artifactId: "pricing-output", position: { line: 4, column: 22 } },
+      });
+      expect(page.target.location.buildArtifact).toMatchObject({ artifactId: "pricing-output", origin: "materialized" });
+      const original = await bridge.readArtifact("head", {
+        manifestSha256: request.pin!.manifestSha256, artifactId: "pricing-original", range: null, byteBudget: 65_536,
+      });
+      expect(original).toMatchObject({ ok: true, result: { text: expect.stringContaining("@FACTOR@") } });
+    } finally {
+      await bridge.close();
+    }
+  }, 240_000);
+
+  it("rotated policy invalidates prepared lineage inputs and consumed fallback build metadata", async () => {
+    let values: readonly string[] = [];
+    const changing: SecretPolicy = { ...policy(), refreshKnownValues: async () => values };
+    const preparedConfig = await installedConfig(valid, valid.pins, `rotated-prepared-${++serial}`);
+    const manifest = await buildChangeManifest(valid.repo, valid.base);
+    const preparedBridge = await openInspectJava(valid.repo, manifest, preparedConfig, join(home, `rotated-prepared-run-${++serial}`), changing);
+    try {
+      values = ["endpoint=https://billing.example.test"];
+      await expect(preparedBridge.references({
+        analysisId: preparedBridge.summaries.head.analysisId,
+        configurationSha256: preparedBridge.summaries.head.configurationSha256,
+        manifest, side: "head", target: { artifactId: "pricing-output", position: { line: 4, column: 22 } },
+      })).rejects.toMatchObject({ code: "analysis-unavailable" });
+    } finally {
+      await preparedBridge.close();
+    }
+    values = [];
+    changing.available = false;
+    changing.knownValues.clear();
+    const absentHead = { ...valid.pins.head, manifestPath: join(home, `absent-rotated-${++serial}.json`) };
+    const fallbackConfig = await installedConfig(valid, { base: valid.pins.base, head: absentHead }, `rotated-fallback-${++serial}`);
+    const fallbackBridge = await openInspectJava(valid.repo, manifest, fallbackConfig, join(home, `rotated-fallback-run-${++serial}`), changing);
+    try {
+      values = ["empty=compileClasspath,testCompileClasspath"];
+      await expect(fallbackBridge.references({
+        analysisId: fallbackBridge.summaries.head.analysisId,
+        configurationSha256: fallbackBridge.summaries.head.configurationSha256,
+        manifest, side: "head", target: { path: "src/main/java/example/Consumer.java", position: { line: 4, column: 16 } },
+      })).rejects.toMatchObject({ code: "analysis-unavailable" });
+    } finally {
+      await fallbackBridge.close();
     }
   }, 240_000);
 

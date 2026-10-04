@@ -63,6 +63,10 @@ function citation(admission: AdmittedBuildEvidence, artifact: BuildArtifact): Pr
   return { manifestSha256: admission.manifestSha256, artifactId: artifact.id, origin: artifact.origin };
 }
 
+function exportCompilationId(admission: AdmittedBuildEvidence, compilationId: string): string {
+  return `export:${admission.manifestSha256}:${compilationId}`;
+}
+
 function usedModuleOptions(compilation: BuildCompilation): string[] | null {
   const options = compilation.compiler.moduleOptions;
   if (options === null) return null;
@@ -243,7 +247,10 @@ export async function prepareBuildJavaInputs(admission: BuildEvidenceAdmission, 
     for (const entry of compilation.compileClasspath.entries) {
       const copied = await copyArtifact(admission, entry, artifactIndex, staged, stagingRoot);
       classpath.push(copied.path);
-      origins.push({ path: copied.path, artifact: citation(admission, copied.artifact), ownerCompilationId: entry.upstreamCompilationId });
+      origins.push({
+        path: copied.path, artifact: citation(admission, copied.artifact),
+        ownerCompilationId: entry.upstreamCompilationId === null ? null : exportCompilationId(admission, entry.upstreamCompilationId),
+      });
     }
     const compiler = compilation.compiler;
     const environment = {
@@ -254,7 +261,7 @@ export async function prepareBuildJavaInputs(admission: BuildEvidenceAdmission, 
     return {
       ...common, outcome: "prepared", compilationId: compilation.id,
       compilation: {
-        id: compilation.id, resolutionDomain: `build:${admission.manifestSha256}:${compilation.id}`,
+        id: exportCompilationId(admission, compilation.id), resolutionDomain: `build:${admission.manifestSha256}:${compilation.id}`,
         sourceSet: role === "production" ? "main" : "test", files, roots: preparedRoots,
         sourcePath: preparedRoots, classpath, compiler: environment, origins,
       },

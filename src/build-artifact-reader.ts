@@ -41,7 +41,7 @@ const TEXT_ROLES: Readonly<Record<BuildArtifact["role"], boolean>> = {
   classes: false, dependency: false,
 };
 const MAX_BUDGET = 262_144;
-const utf8 = new TextDecoder("utf-8", { fatal: true });
+const utf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 function failure(code: BuildArtifactReadErrorCode, message: string, requiredBytes?: number): BuildArtifactReadReply {
   return { ok: false, error: requiredBytes === undefined ? { code, message } : { code, message, requiredBytes } };
@@ -151,11 +151,23 @@ export async function readBuildArtifact(
   const lines = linesOf(text);
   const requestedStart = request.range?.startLine ?? 1;
   const requestedEnd = Math.min(request.range?.endLine ?? lines.length, lines.length);
+  const provenance = lineage(admission, manifestArtifact.id);
+  const exposedMetadata = [
+    admission.manifestSha256, manifestArtifact.id, manifestArtifact.origin,
+    ...(manifestArtifact.repositoryPath === null ? [] : [manifestArtifact.repositoryPath]),
+    ...provenance.flatMap((item) => [
+      item.transformationId, item.kind, item.basis, item.direction, ...item.relatedArtifactIds,
+    ]),
+  ];
+  const metadataExposure = exposedMetadata.map((value) => screenText(value, policy))
+    .find((decision) => decision.state === "withheld");
+  if (metadataExposure?.state === "withheld") {
+    return failure(metadataExposure.reason, "Build artifact metadata is withheld by the secret policy");
+  }
   if (requestedStart > lines.length) return failure("invalid-input", "Requested line range is outside the build artifact");
   const key = cursorKey(admission, manifestArtifact, request, policy);
   const start = request.cursor === undefined ? requestedStart : decodeCursor(request.cursor, key);
   if (start === null || start < requestedStart || start > requestedEnd) return failure("invalid-cursor", "Build artifact cursor does not match this read");
-  const provenance = lineage(admission, manifestArtifact.id);
   const build = (end: number, chunk: string, complete: boolean): BuildArtifactReadResult => ({
     citation: { manifestSha256: admission.manifestSha256, artifactId: manifestArtifact.id, range: { startLine: start, endLine: end } },
     origin: manifestArtifact.origin, repositoryPath: manifestArtifact.repositoryPath, text: chunk,

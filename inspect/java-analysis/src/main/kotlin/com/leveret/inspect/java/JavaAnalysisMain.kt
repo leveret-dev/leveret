@@ -126,7 +126,7 @@ object JavaAnalysisMain {
         require(fallbackRoles.all { it == "production" || it == "test" }) { "Invalid fallback role" }
         val fallback = cacheInput.compilations.filter {
             it.sourceSet == "main" && "production" in fallbackRoles || it.sourceSet == "test" && "test" in fallbackRoles
-        }
+        }.map { it.copy(id = "fallback:${it.sourceSet}") }
         val normalized = if (prepared.isEmpty() && fallbackRoles == setOf("production", "test")) cacheInput else {
             val compilations = (prepared + fallback).sortedBy { if (it.sourceSet == "main") 0 else 1 }
             require(compilations.isNotEmpty()) { "No Java compilation is available" }
