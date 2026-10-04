@@ -93,7 +93,7 @@ object JavaExtractor {
                                 if (binding != null && !binding.isRecovered && !recoveredSignature(binding)) {
                                     val id = methodId(domain, binding.key)
                                     val method = JavaMethod(
-                                        id, signature(binding), location(ast, file, node),
+                                        id, binding.key, signature(binding), location(ast, file, node),
                                         range(ast, node.name.startPosition, node.name.length), scope,
                                     )
                                     val destination = if (node.isConstructor) constructors else methods
@@ -138,7 +138,7 @@ object JavaExtractor {
                             }
                             private fun record(node: ASTNode, binding: IMethodBinding?, kind: String, expressions: List<Expression>) {
                                 val site = location(ast, file, node)
-                                val siteId = "${file.displayPath}:${node.startPosition}:${node.length}:$kind"
+                                val siteId = siteId(compilation, file, node, kind)
                                 val errors = problems.filter { it.sourceStart < node.startPosition + node.length && it.sourceEnd >= node.startPosition }
                                 val suspect = binding == null || binding.isRecovered || recoveredSignature(binding) ||
                                     expressions.any { expression -> recoveredType(expression.resolveTypeBinding()) } || errors.isNotEmpty()
@@ -279,6 +279,22 @@ object JavaExtractor {
 
     /** Length-delimited domain plus the JDT binding key: equal keys in different resolution domains stay different methods. */
     private fun methodId(domain: String, bindingKey: String) = "${domain.length}:$domain:$bindingKey"
+
+    private fun siteId(compilation: JavaCompilationInput, file: JavaSourceInput, node: ASTNode, kind: String) = buildString {
+        fun part(value: String?) {
+            if (value == null) append('-') else append(value.length).append(':').append(value)
+            append('|')
+        }
+        part(compilation.resolutionDomain)
+        part(compilation.id)
+        part(file.buildArtifact?.manifestSha256)
+        part(file.buildArtifact?.artifactId)
+        part(file.buildArtifact?.origin)
+        part(file.displayPath)
+        part(node.startPosition.toString())
+        part(node.length.toString())
+        part(kind)
+    }
 
     private fun topLevelTypes(unit: CompilationUnit): List<String> {
         val prefix = unit.getPackage()?.name?.fullyQualifiedName?.let { "$it." } ?: ""

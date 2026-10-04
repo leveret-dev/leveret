@@ -15,10 +15,11 @@ data class ChangeManifest(
     val truncated: Boolean = false, val errors: List<String> = emptyList(),
     val schema: Int = 1,
 )
-data class TargetSelector(val path: String, val position: Position)
+data class TargetSelector(val path: String, val position: Position, val buildArtifact: BuildArtifactCitation?)
 data class ReferenceRequest(
     val analysisId: String, val configurationSha256: String, val manifest: ChangeManifest,
-    val side: String, val target: TargetSelector, val byteBudget: Int = 65536, val cursor: String? = null,
+    val side: String, val target: TargetSelector, val referenceScope: String,
+    val byteBudget: Int = 65536, val cursor: String? = null,
 )
 data class DetailRecord(
     val kind: String, val reference: JavaReference? = null, val unresolved: UnresolvedSite? = null,
@@ -33,11 +34,11 @@ data class DetailRecord(
 }
 data class Delivery(val complete: Boolean, val truncated: Boolean, val omittedRecords: Int, val nextCursor: String?)
 data class ReferencePage(
-    val summary: AnalysisSummary, val target: JavaMethod, val side: String,
+    val summary: AnalysisSummary, val target: JavaMethod, val side: String, val referenceScope: String,
     val items: List<DetailRecord>, val delivery: Delivery,
 )
 data class PageContext(
-    val summary: AnalysisSummary, val target: JavaMethod, val side: String,
+    val summary: AnalysisSummary, val target: JavaMethod, val side: String, val referenceScope: String,
     val manifestDigest: String, val totalRecords: Int,
 )
 class InspectException(val code: String, message: String, val requiredBytes: Int? = null) : IllegalArgumentException(message)
@@ -45,9 +46,18 @@ class InspectException(val code: String, message: String, val requiredBytes: Int
 object JavaReferences {
     private val json = GsonBuilder().serializeNulls().create()
 
-    fun outsideDiff(location: Location, manifest: ChangeManifest, side: String): Boolean {
+    fun diffStatus(location: Location, manifest: ChangeManifest, side: String): String {
         validate(manifest, side)
+        return diffStatusValidated(location, manifest, side)
+    }
+
+    internal fun diffStatusValidated(location: Location, manifest: ChangeManifest, side: String): String {
         require(location.range.start.line >= 1 && location.range.end.line >= location.range.start.line)
+        when (location.buildArtifact?.origin) {
+            "materialized", "external" -> return "generated"
+            null, "authored" -> Unit
+            else -> throw InspectException("analysis-unavailable", "Stored Java location has an invalid artifact origin")
+        }
         val end = location.range.end.line - if (location.range.end.column == 0) 1 else 0
         for (file in manifest.files) {
             val path = if (side == "base") file.oldPath else file.newPath
@@ -55,10 +65,10 @@ object JavaReferences {
             for (hunk in file.hunks) {
                 val start = if (side == "base") hunk.oldStart else hunk.newStart
                 val lines = if (side == "base") hunk.oldLines else hunk.newLines
-                if (lines > 0 && location.range.start.line < start + lines && end >= start) return false
+                if (lines > 0 && location.range.start.line < start + lines && end >= start) return "in-diff"
             }
         }
-        return true
+        return "outside-diff"
     }
 
     fun validate(manifest: ChangeManifest, side: String) {
@@ -74,6 +84,9 @@ object JavaReferences {
     fun digest(manifest: ChangeManifest): String = sha(json.toJson(manifest))
 
     fun page(records: Iterator<DetailRecord>, context: PageContext, byteBudget: Int, cursor: String?): ReferencePage {
+        if (context.referenceScope != "outside-diff" && context.referenceScope != "all") {
+            throw InspectException("invalid-input", "Unknown Java reference scope")
+        }
         if (byteBudget !in 1..262144) throw InspectException("invalid-input", "Byte budget must be between 1 and 262144")
         val offset = if (cursor == null) 0 else decode(cursor, context)
         if (offset > context.totalRecords) throw InspectException("invalid-cursor", "Cursor exceeds query records")
@@ -85,8 +98,9 @@ object JavaReferences {
                 if (remaining == 0) null else encode(offset + count, context))
         }
         val emptyDelivery = Delivery(true, false, 0, null)
-        val fixedBytes = bytes(ReferencePage(context.summary, context.target, context.side, emptyList(), emptyDelivery)) -
-            bytes(emptyDelivery)
+        val fixedBytes = bytes(ReferencePage(
+            context.summary, context.target, context.side, context.referenceScope, emptyList(), emptyDelivery,
+        )) - bytes(emptyDelivery)
         fun required(count: Int, recordBytes: Int): Int =
             fixedBytes + bytes(delivery(count)) + recordBytes + maxOf(0, count - 1)
         val headerBytes = required(0, 0)
@@ -104,13 +118,15 @@ object JavaReferences {
             items += next
             recordBytes += encodedBytes
         }
-        return ReferencePage(context.summary, context.target, context.side, items, delivery(items.size))
+        return ReferencePage(context.summary, context.target, context.side, context.referenceScope, items, delivery(items.size))
     }
 
     private fun bytes(value: Any): Int = json.toJson(value).toByteArray(StandardCharsets.UTF_8).size
 
     private fun encode(offset: Int, context: PageContext): String {
-        val payload = "$offset:${context.summary.analysisId}:${context.target.id}:${context.side}:${context.manifestDigest}"
+        val origin = json.toJson(context.target.location.buildArtifact)
+        val payload = "$offset:${context.summary.analysisId}:${context.target.id}:$origin:${context.side}:" +
+            "${context.referenceScope}:${context.manifestDigest}"
         val data = "$offset:${sha(payload)}"
         return Base64.getUrlEncoder().withoutPadding().encodeToString(data.toByteArray(StandardCharsets.UTF_8))
     }
@@ -124,7 +140,7 @@ object JavaReferences {
             if (offset <= 0 || encode(offset, context) != cursor) throw IllegalArgumentException()
             return offset
         } catch (_: IllegalArgumentException) {
-            throw InspectException("invalid-cursor", "Cursor does not match this analysis, target, side, and manifest")
+            throw InspectException("invalid-cursor", "Cursor does not match this analysis, target origin, side, scope, and manifest")
         }
     }
 

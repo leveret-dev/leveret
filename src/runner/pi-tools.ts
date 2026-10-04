@@ -396,7 +396,8 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
         try {
           const result = await bridge.references({
             analysisId: summary.analysisId, configurationSha256: summary.configurationSha256,
-            manifest: options.evidence.manifest, side: params.side, target: params.target,
+            manifest: options.evidence.manifest, side: params.side,
+            target: { ...params.target, buildArtifact: null },
             ...(params.byteBudget !== undefined ? { byteBudget: params.byteBudget } : {}),
             ...(params.cursor !== undefined ? { cursor: params.cursor } : {}),
           });

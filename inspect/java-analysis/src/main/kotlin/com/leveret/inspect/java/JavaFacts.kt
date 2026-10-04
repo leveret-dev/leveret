@@ -11,6 +11,7 @@ data class BuildArtifactCitation(val manifestSha256: String, val artifactId: Str
 data class Location(val path: String, val range: Range, val buildArtifact: BuildArtifactCitation? = null)
 data class JavaMethod(
     val id: String,
+    val bindingKey: String,
     val signature: String,
     val location: Location,
     val nameRange: Range,
@@ -24,6 +25,7 @@ data class JavaReference(
     val sourceSet: String,
     val kind: String,
     val basis: String = "checked",
+    val diffStatus: String? = null,
 )
 data class UnresolvedCandidate(val targetId: String, val basis: String)
 data class UnresolvedSite(

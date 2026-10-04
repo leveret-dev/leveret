@@ -312,7 +312,10 @@ export async function openInspectJava(repo: string, manifest: ChangeManifest, co
           await snapshot(repo, manifest.head, join(scratch, "head"), config, true);
           return await sandbox(config, join(scratch, side), storeDir, join(scratch, `work-query-${++calls}`), {
             schema: 1, kind: "references", store: "/store/refs",
-            request: { ...request, byteBudget: request.byteBudget ?? 65536, cursor: request.cursor ?? null },
+            request: {
+              ...request, referenceScope: request.referenceScope ?? "outside-diff",
+              byteBudget: request.byteBudget ?? 65536, cursor: request.cursor ?? null,
+            },
           }) as ReferencePage;
         };
         const next = serial.then(action);

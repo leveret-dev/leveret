@@ -8,20 +8,26 @@ import { traceConsumption } from "../bench/inspect-java.mjs";
 const at = (line: number, start: number, end: number) => ({ start: { line, column: start }, end: { line, column: end } });
 const caller = "src/test/java/example/PricingTest.java";
 
-function reply(options: { complete: boolean; side?: "base" | "head"; targetId?: string }) {
-  const location = { path: caller, range: at(3, 27, 43) };
+function reply(options: { complete: boolean; side?: "base" | "head"; targetBindingKey?: string }) {
+  const bindingKey = options.targetBindingKey ?? "Lexample/Pricing;.price(I)I";
+  const targetId = `13:shared-module:${bindingKey}`;
+  const location = { path: caller, range: at(3, 27, 43), buildArtifact: null };
   return { ok: true, result: {
     summary: { analysisId: "a", repositoryId: "r", revision: "h", configurationSha256: "c", coverage: {
       complete: options.complete, mainExamined: 1, testExamined: 1, mainSkipped: 0, testSkipped: 0,
       mainUnresolved: 0, testUnresolved: options.complete ? 0 : 2, diagnosticCount: options.complete ? 0 : 1 } },
-    target: { id: options.targetId ?? "Lexample/Pricing;.price(I)I", signature: "example.Pricing.price(int)",
-      location: { path: "src/main/java/example/Pricing.java", range: at(3, 4, 60) }, nameRange: at(3, 15, 20), sourceSet: "main" },
+    target: { id: targetId, bindingKey, signature: "example.Pricing.price(int)",
+      location: { path: "src/main/java/example/Pricing.java", range: at(3, 4, 60), buildArtifact: null },
+      nameRange: at(3, 15, 20), sourceSet: "main" },
     side: options.side ?? "head",
+    referenceScope: "outside-diff",
     items: [
       { kind: "reference", unresolved: null, file: null, diagnostic: null, reference: {
-        id: "ref", targetId: "Lexample/Pricing;.price(I)I", location, enclosing: null, sourceSet: "test", kind: "call", basis: "checked" } },
+        id: "ref", targetId, location, enclosing: null, sourceSet: "test", kind: "call", basis: "checked",
+        diffStatus: "outside-diff" } },
       ...options.complete ? [] : [{ kind: "unresolved", reference: null, file: null, diagnostic: null, unresolved: {
-        id: "gap", location: { path: caller, range: at(5, 30, 60) }, sourceSet: "test", reason: "missing-type", candidates: null } }],
+        id: "gap", location: { path: caller, range: at(5, 30, 60), buildArtifact: null },
+        sourceSet: "test", reason: "missing-type", candidates: null } }],
     ],
     delivery: { complete: true, truncated: false, omittedRecords: 0, nextCursor: null },
   } };
@@ -86,8 +92,8 @@ describe("Inspect Java evaluation", () => {
       ] }, true)).toMatchObject({ subsequentUse: true, disclosedGap: false });
       // Base-side calls, other targets, and complete coverage in the missing variant are not the expected evidence.
       expect((await verdict(reply({ complete: true }), finding(caller), false, "base")).evidenceReturned).toBe(false);
-      expect((await verdict(reply({ complete: true, targetId: "Lexample/Pricing;.price(Ljava/lang/String;)I" }), finding(caller), false))
-        .evidenceReturned).toBe(false);
+      expect((await verdict(reply({ complete: true, targetBindingKey: "Lexample/Pricing;.price(Ljava/lang/String;)I" }),
+        finding(caller), false)).evidenceReturned).toBe(false);
       expect((await verdict(reply({ complete: true }), finding(`${caller} unresolved`), true)).evidenceReturned).toBe(false);
     } finally {
       rmSync(home, { recursive: true, force: true });

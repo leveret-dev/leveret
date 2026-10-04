@@ -38,21 +38,56 @@ class JavaFactStoreTest {
             assertThat(store.summary("b")).isEqualTo(head.summary)
             assertThatThrownBy { store.summary("c") }
                 .isInstanceOf(InspectException::class.java)
-            assertThat(store.methodAt("a", "src/main/java/Pricing.java", Position(3, 17)).id).isEqualTo("method-a")
+            assertThat(store.methodAt("a", TargetSelector(
+                "src/main/java/Pricing.java", Position(3, 17), null,
+            )).id).isEqualTo("7:fixture:Lfixture/Pricing;.price(I)I")
             val manifest = ChangeManifest("base", "head", listOf(ChangeFile(
                 "src/main/java/Pricing.java", "src/main/java/Pricing.java", "src/main/java/Pricing.java",
                 "delete", listOf(ChangeHunk(3, 1, 3, 0)),
             )))
-            val selector = TargetSelector("src/main/java/Pricing.java", Position(3, 17))
-            val basePage = store.query(ReferenceRequest("a", "config", manifest, "base", selector))
+            val selector = TargetSelector("src/main/java/Pricing.java", Position(3, 17), null)
+            val basePage = store.query(ReferenceRequest("a", "config", manifest, "base", selector, "outside-diff"))
             assertThat(basePage.items.mapNotNull { it.reference?.id }).containsExactly("ref-a")
-            assertThatThrownBy { store.query(ReferenceRequest("b", "config", manifest, "base", selector)) }
+            assertThatThrownBy { store.query(ReferenceRequest("b", "config", manifest, "base", selector, "outside-diff")) }
                 .isInstanceOf(InspectException::class.java)
                 .hasMessageContaining("revision")
-            assertThatThrownBy { store.query(ReferenceRequest("a", "config", manifest.copy(truncated = true), "base", selector)) }
+            assertThatThrownBy {
+                store.query(ReferenceRequest("a", "config", manifest.copy(truncated = true), "base", selector, "outside-diff"))
+            }
                 .isInstanceOf(InspectException::class.java)
         }
     }
+
+    @Test
+    fun `renamed original targets resolve only through the selected side path`(@TempDir home: Path) {
+        fun renamed(revision: String, id: String, path: String): AnalysisData {
+            val data = fixture(revision, id, "price(int)")
+            return data.copy(methods = listOf(data.methods.single().copy(location = data.methods.single().location.copy(path = path))))
+        }
+        val base = renamed("base", "rename-base", "src/main/java/OldPricing.java")
+        val head = renamed("head", "rename-head", "src/main/java/NewPricing.java")
+        val manifest = ChangeManifest("base", "head", listOf(ChangeFile(
+            "src/main/java/NewPricing.java", "src/main/java/OldPricing.java", "src/main/java/NewPricing.java",
+            "rename", listOf(ChangeHunk(3, 1, 3, 1)),
+        )))
+        opened(home) { sessions ->
+            val store = JavaFactStore(sessions)
+            store.publish(base)
+            store.publish(head)
+            fun query(data: AnalysisData, side: String, path: String) = store.query(ReferenceRequest(
+                data.summary.analysisId, data.summary.configurationSha256, manifest, side,
+                TargetSelector(path, Position(3, 17), null), "outside-diff",
+            ))
+            assertThat(query(base, "base", "src/main/java/OldPricing.java").items.mapNotNull { it.reference?.id })
+                .containsExactly("ref-rename-base")
+            assertThat(query(head, "head", "src/main/java/NewPricing.java").items.mapNotNull { it.reference?.id })
+                .containsExactly("ref-rename-head")
+            assertThatThrownBy { query(base, "base", "src/main/java/NewPricing.java") }
+                .isInstanceOf(InspectException::class.java)
+                .hasMessageContaining("not found")
+        }
+    }
+
 
     @Test
     fun `query delivers checked reference with unresolved coverage on last page`(@TempDir home: Path) {
@@ -60,15 +95,24 @@ class JavaFactStoreTest {
         opened(home) { sessions ->
             val store = JavaFactStore(sessions)
             store.publish(data)
-            val manifest = ChangeManifest("base", "head", listOf(ChangeFile(
-                "src/main/java/Pricing.java", "src/main/java/Pricing.java", "src/main/java/Pricing.java",
-                "modify", listOf(ChangeHunk(3, 1, 3, 1)),
-            )))
+            val manifest = ChangeManifest("base", "head", listOf(
+                ChangeFile(
+                    "src/main/java/Pricing.java", "src/main/java/Pricing.java", "src/main/java/Pricing.java",
+                    "modify", listOf(ChangeHunk(3, 1, 3, 1)),
+                ),
+                ChangeFile(
+                    "src/test/java/PricingTest.java", "src/test/java/PricingTest.java", "src/test/java/PricingTest.java",
+                    "modify", listOf(ChangeHunk(7, 1, 7, 1)),
+                ),
+            ))
             val request = ReferenceRequest("b", "config", manifest, "head", TargetSelector(
-                "src/main/java/Pricing.java", Position(3, 17),
-            ), 65536)
+                "src/main/java/Pricing.java", Position(3, 17), null,
+            ), "outside-diff", 65536)
             val page = store.query(request)
-            assertThat(page.items.filter { it.kind == "reference" }.map { it.reference!!.id }).containsExactly("ref-b")
+            assertThat(page.items.mapNotNull { it.reference }).isEmpty()
+            val all = store.query(request.copy(referenceScope = "all"))
+            assertThat(all.items.mapNotNull { it.reference?.id }).containsExactly("ref-b")
+            assertThat(all.items.mapNotNull { it.reference?.diffStatus }).containsExactly("in-diff")
             assertThat(page.summary.coverage.complete).isFalse()
             assertThat(page.delivery.complete).isTrue()
             assertThatThrownBy { store.query(request.copy(configurationSha256 = "stale")) }
@@ -90,7 +134,7 @@ class JavaFactStoreTest {
             store.publish(data)
             val manifest = ChangeManifest("base", "head", emptyList())
             val request = ReferenceRequest("paged", "config", manifest, "head",
-                TargetSelector("src/main/java/Pricing.java", Position(3, 17)), 1700)
+                TargetSelector("src/main/java/Pricing.java", Position(3, 17), null), "outside-diff", 1700)
             val found = mutableListOf<String>()
             var cursor: String? = null
             do {
@@ -115,7 +159,7 @@ class JavaFactStoreTest {
             val store = JavaFactStore(sessions)
             store.publish(data)
             val page = store.query(ReferenceRequest("many-files", "config", ChangeManifest("head", "head", emptyList()),
-                "head", TargetSelector("src/main/java/Pricing.java", Position(3, 17)), 65536))
+                "head", TargetSelector("src/main/java/Pricing.java", Position(3, 17), null), "outside-diff", 65536))
             assertThat(page.items.mapNotNull { it.reference?.id }).containsExactly("ref-many-files")
             assertThat(page.delivery.truncated).isTrue()
             assertThat(page.summary.coverage.mainExamined).isEqualTo(401)
@@ -153,7 +197,7 @@ class JavaFactStoreTest {
                 "modify", listOf(ChangeHunk(3, 1, 3, 1)),
             )))
             val request = ReferenceRequest(data.summary.analysisId, data.summary.configurationSha256, manifest, "head",
-                TargetSelector("src/main/java/example/Pricing.java", Position(3, 15)))
+                TargetSelector("src/main/java/example/Pricing.java", Position(3, 15), null), "outside-diff")
             val page = store.query(request)
             assertThat(page.items.mapNotNull { it.reference?.location?.path })
                 .containsExactly("src/test/java/example/PricingTest.java")
@@ -185,7 +229,10 @@ class JavaFactStoreTest {
             val page = JavaFactStore(sessions).query(ReferenceRequest(
                 data.summary.analysisId, data.summary.configurationSha256,
                 ChangeManifest("head", "head", emptyList()), "head",
-                TargetSelector(declaration.location.path, declaration.nameRange.start.copy(column = declaration.nameRange.start.column + 1)),
+                TargetSelector(declaration.location.path,
+                    declaration.nameRange.start.copy(column = declaration.nameRange.start.column + 1),
+                    declaration.location.buildArtifact),
+                "outside-diff",
             ))
             assertThat(page.items.mapNotNull { it.reference?.targetId }).containsExactly(declaration.id)
             assertThat(page.items.mapNotNull { it.reference?.basis }).containsExactly("checked")
@@ -212,7 +259,8 @@ class JavaFactStoreTest {
                     JavaFactStore(sessions).query(ReferenceRequest(
                         data.summary.analysisId, data.summary.configurationSha256,
                         ChangeManifest("head", "head", emptyList()), "head",
-                        TargetSelector(path, declaration.nameRange.start.copy(column = declaration.nameRange.start.column + 1)),
+                        TargetSelector(path, declaration.nameRange.start.copy(column = declaration.nameRange.start.column + 1), null),
+                        "outside-diff",
                     ))
                 }
                 assertThat(error.code).describedAs(path).isEqualTo("target-indeterminate")
@@ -227,8 +275,79 @@ class JavaFactStoreTest {
         val target = base.methods.single().let { it.copy(location = it.location.copy(buildArtifact = citation)) }
         opened(home) { JavaFactStore(it).publish(base.copy(methods = listOf(target))) }
         opened(home) { sessions ->
-            val found = JavaFactStore(sessions).methodAt("cited", target.location.path, Position(3, 16))
+            val found = JavaFactStore(sessions).methodAt("cited", TargetSelector(
+                target.location.path, Position(3, 16), citation,
+            ))
             assertThat(found.location.buildArtifact).isEqualTo(citation)
+        }
+    }
+
+    @Test
+    fun `same path and offsets in two compilation variants publish and query by artifact identity`(@TempDir home: Path) {
+        val root = home.resolve("source")
+        val manifest = "b".repeat(64)
+        fun citation(id: String, origin: String) = BuildArtifactCitation(manifest, id, origin)
+        fun source(variant: String, name: String, text: String, artifact: String, origin: String): JavaSourceInput {
+            val file = root.resolve("$variant/example/$name.java")
+            Files.createDirectories(file.parent)
+            Files.writeString(file, text)
+            return JavaSourceInput(file, "src/main/java/example/$name.java", "UTF-8", citation(artifact, origin))
+        }
+        fun compilation(id: String, origin: String): JavaCompilationInput {
+            val pricing = source(id, "Pricing", """
+                package example;
+                class Pricing {
+                    static int price(int n) { return n; }
+                }
+            """.trimIndent(), "$id-pricing", origin)
+            val consumer = source(id, "Consumer", """
+                package example;
+                class Consumer {
+                    int call() { return Pricing.price(3); }
+                }
+            """.trimIndent(), "$id-consumer", origin)
+            val sourceRoot = root.resolve(id)
+            return JavaCompilationInput(id, id, "main", listOf(pricing, consumer), listOf(sourceRoot),
+                listOf(sourceRoot), emptyList(), JavaCompilationEnvironment.legacy("21"), emptyList())
+        }
+        val input = JavaAnalysisInput(
+            "fixture", "head", root, root.resolve("artifacts"),
+            listOf(compilation("variant-a", "authored"), compilation("variant-b", "materialized")),
+            emptyList(), emptyList(), "exported:$manifest",
+        )
+        val data = JavaExtractor.extract(input)
+        val targets = data.methods.filter { it.signature.contains(".price(int)") }
+        assertThat(targets.map { it.bindingKey }.distinct()).hasSize(1)
+        assertThat(targets.map { it.id }).doesNotHaveDuplicates()
+        assertThat(data.references.map { it.id }).doesNotHaveDuplicates()
+
+        opened(home) { JavaFactStore(it).publish(data) }
+        opened(home) { sessions ->
+            val store = JavaFactStore(sessions)
+            val change = ChangeManifest("head", "head", emptyList())
+            fun request(target: JavaMethod, scope: String) = ReferenceRequest(
+                data.summary.analysisId, data.summary.configurationSha256, change, "head",
+                TargetSelector(target.location.path,
+                    target.nameRange.start.copy(column = target.nameRange.start.column + 1),
+                    target.location.buildArtifact),
+                scope,
+            )
+            val authored = targets.single { it.location.buildArtifact?.origin == "authored" }
+            val generated = targets.single { it.location.buildArtifact?.origin == "materialized" }
+            val authoredPage = store.query(request(authored, "outside-diff"))
+            assertThat(authoredPage.target.id).isEqualTo(authored.id)
+            assertThat(authoredPage.items.mapNotNull { it.reference?.diffStatus }).containsExactly("outside-diff")
+            assertThat(store.query(request(generated, "outside-diff")).items.mapNotNull { it.reference }).isEmpty()
+            val generatedPage = store.query(request(generated, "all"))
+            assertThat(generatedPage.target.id).isEqualTo(generated.id)
+            assertThat(generatedPage.items.mapNotNull { it.reference?.diffStatus }).containsExactly("generated")
+            assertThat(generatedPage.items.single { it.reference != null }.reference!!.location.buildArtifact?.artifactId)
+                .isEqualTo("variant-b-consumer")
+            val wrongOrigin = generated.location.buildArtifact!!.copy(origin = "authored")
+            val error = org.junit.jupiter.api.assertThrows<InspectException> {
+                store.query(request(generated.copy(location = generated.location.copy(buildArtifact = wrongOrigin)), "all"))
+            }
+            assertThat(error.code).isEqualTo("target-missing")
         }
     }
 
@@ -243,7 +362,9 @@ class JavaFactStoreTest {
     )
 
     private fun fixture(revision: String, id: String, signature: String): AnalysisData {
-        val target = JavaMethod("method-$id", signature, Location("src/main/java/Pricing.java", Range(Position(3, 4), Position(3, 40))),
+        val bindingKey = "Lfixture/Pricing;.price(I)I"
+        val target = JavaMethod("7:fixture:$bindingKey", bindingKey, signature,
+            Location("src/main/java/Pricing.java", Range(Position(3, 4), Position(3, 40))),
             Range(Position(3, 15), Position(3, 20)), "main")
         val reference = JavaReference("ref-$id", target.id,
             Location("src/test/java/PricingTest.java", Range(Position(7, 12), Position(7, 28))), null, "test", "call")

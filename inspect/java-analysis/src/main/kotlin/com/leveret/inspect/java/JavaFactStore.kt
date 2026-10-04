@@ -15,10 +15,10 @@ class JavaFactStore(private val sessions: SessionFactory) {
     private val gson = GsonBuilder().serializeNulls().create()
 
     init {
-        Schema(sessions).ensure(3, listOf(
+        Schema(sessions).ensure(4, listOf(
             "create table analyses (id varchar(64) primary key, repository varchar(1024) not null, revision varchar(128) not null, configuration varchar(64) not null, digest varchar(64) not null, summary clob not null)",
-            "create table methods (analysis_id varchar(64) not null, id_hash varchar(64) not null, path varchar(4096) not null, start_line int not null, start_col int not null, end_line int not null, end_col int not null, payload clob not null, primary key (analysis_id, id_hash))",
-            "create index method_location on methods (analysis_id, path, start_line, start_col)",
+            "create table methods (analysis_id varchar(64) not null, id_hash varchar(64) not null, path varchar(4096) not null, artifact_hash varchar(64) not null, start_line int not null, start_col int not null, end_line int not null, end_col int not null, payload clob not null, primary key (analysis_id, id_hash))",
+            "create index method_location on methods (analysis_id, path, artifact_hash, start_line, start_col)",
             "create table refs (analysis_id varchar(64) not null, id_hash varchar(64) not null, target_hash varchar(64) not null, path varchar(4096) not null, start_line int not null, start_col int not null, payload clob not null, primary key (analysis_id, id_hash))",
             "create index ref_target on refs (analysis_id, target_hash, path, start_line, start_col)",
             "create table details (analysis_id varchar(64) not null, id_hash varchar(64) not null, path varchar(4096) not null, start_line int not null, start_col int not null, payload clob not null, primary key (analysis_id, id_hash))",
@@ -28,7 +28,16 @@ class JavaFactStore(private val sessions: SessionFactory) {
 
     fun publish(data: AnalysisData): AnalysisSummary {
         val id = data.summary.analysisId
-        require(id.isNotBlank() && data.methods.all { it.id.isNotBlank() })
+        if (id.isBlank() || data.methods.any { !canonical(it) } ||
+            (data.methods.map { it.location.buildArtifact } +
+                data.references.flatMap { listOf(it.location.buildArtifact, it.enclosing?.location?.buildArtifact) } +
+                data.unresolved.map { it.location.buildArtifact }).filterNotNull().any { !valid(it) }) {
+            throw InspectException("invalid-input", "Invalid Java fact identity or artifact citation")
+        }
+        val methodIds = data.methods.map { it.id }.toSet()
+        if (methodIds.size != data.methods.size || data.references.any {
+                it.id.isBlank() || it.targetId !in methodIds || it.diffStatus != null
+            }) throw InspectException("invalid-input", "Invalid Java fact relationship")
         val digest = sha(gson.toJson(data))
         sessions.open().use { session ->
             try {
@@ -45,15 +54,16 @@ class JavaFactStore(private val sessions: SessionFactory) {
                     it.setString(5, digest)
                     it.setString(6, gson.toJson(data.summary))
                 }
-                insert(session, "insert into methods (analysis_id,id_hash,path,start_line,start_col,end_line,end_col,payload) values (?,?,?,?,?,?,?,?)", data.methods) { statement, method ->
+                insert(session, "insert into methods (analysis_id,id_hash,path,artifact_hash,start_line,start_col,end_line,end_col,payload) values (?,?,?,?,?,?,?,?,?)", data.methods) { statement, method ->
                     statement.setString(1, id)
                     statement.setString(2, sha(method.id))
                     statement.setString(3, method.location.path)
-                    statement.setInt(4, method.nameRange.start.line)
-                    statement.setInt(5, method.nameRange.start.column)
-                    statement.setInt(6, method.nameRange.end.line)
-                    statement.setInt(7, method.nameRange.end.column)
-                    statement.setString(8, gson.toJson(method))
+                    statement.setString(4, artifactHash(method.location.buildArtifact))
+                    statement.setInt(5, method.nameRange.start.line)
+                    statement.setInt(6, method.nameRange.start.column)
+                    statement.setInt(7, method.nameRange.end.line)
+                    statement.setInt(8, method.nameRange.end.column)
+                    statement.setString(9, gson.toJson(method))
                 }
                 insert(session, "insert into refs (analysis_id,id_hash,target_hash,path,start_line,start_col,payload) values (?,?,?,?,?,?,?)", data.references) { statement, reference ->
                     statement.setString(1, id)
@@ -66,7 +76,10 @@ class JavaFactStore(private val sessions: SessionFactory) {
                 }
                 val details = buildList {
                     data.unresolved.forEach { add(Triple(it.id, it.location, DetailRecord.unresolved(it))) }
-                    data.files.forEach { add(Triple("file:${it.sourceSet}:${it.path}", Location(it.path, Range(Position(0, 0), Position(0, 0))), DetailRecord.file(it))) }
+                    data.files.forEachIndexed { index, file ->
+                        add(Triple("file:$index:${file.sourceSet}:${file.path}",
+                            Location(file.path, Range(Position(0, 0), Position(0, 0))), DetailRecord.file(file)))
+                    }
                     data.diagnostics.forEachIndexed { index, message ->
                         add(Triple("diagnostic:$index", Location("", Range(Position(0, 0), Position(0, 0))), DetailRecord.diagnostic(message)))
                     }
@@ -94,13 +107,16 @@ class JavaFactStore(private val sessions: SessionFactory) {
         }.singleOrNull() ?: throw InspectException("analysis-unavailable", "Analysis $analysisId is unavailable")
     }
 
-    fun methodAt(analysisId: String, path: String, position: Position): JavaMethod = sessions.open().use { session ->
-        methodAt(session, analysisId, path, position)
+    fun methodAt(analysisId: String, target: TargetSelector): JavaMethod = sessions.open().use { session ->
+        methodAt(session, analysisId, target)
     }
 
-    private fun methodAt(session: DbSession, analysisId: String, path: String, position: Position): JavaMethod {
-        if (path.startsWith('/') || path.split('/').any { it == ".." || it == "." } || position.line < 1 || position.column < 0) {
-            throw InspectException("invalid-input", "Invalid declaration path or position")
+    private fun methodAt(session: DbSession, analysisId: String, target: TargetSelector): JavaMethod {
+        val path = target.path
+        val position = target.position
+        if (path.startsWith('/') || path.split('/').any { it == ".." || it == "." } || position.line < 1 ||
+            position.column < 0 || target.buildArtifact?.let { !valid(it) } == true) {
+            throw InspectException("invalid-input", "Invalid declaration path, position, or artifact")
         }
         fun contains(range: Range): Boolean {
             val start = range.start
@@ -112,18 +128,31 @@ class JavaFactStore(private val sessions: SessionFactory) {
             "select payload from details where analysis_id=? and path=? and start_line=?",
             { it.setString(1, analysisId); it.setString(2, path); it.setInt(3, position.line) },
         ) { parseDetail(it.getString(1)) }.any { detail ->
-            detail.unresolved?.let { it.id.startsWith("duplicate:") && contains(it.location.range) } == true
+            detail.unresolved?.let {
+                it.id.startsWith("duplicate:") && it.location.buildArtifact == target.buildArtifact && contains(it.location.range)
+            } == true
         }
         if (duplicate) throw InspectException("target-indeterminate", "Declaration has conflicting source identities")
-        val matches = session.select("select payload from methods where analysis_id=? and path=? and start_line<=? and end_line>=?", {
-            it.setString(1, analysisId); it.setString(2, path); it.setInt(3, position.line); it.setInt(4, position.line)
-        }) { parseMethod(it.getString(1)) }.filter { contains(it.nameRange) }
+        val matches = session.select(
+            "select payload from methods where analysis_id=? and path=? and artifact_hash=? and start_line<=? and end_line>=?",
+            {
+                it.setString(1, analysisId)
+                it.setString(2, path)
+                it.setString(3, artifactHash(target.buildArtifact))
+                it.setInt(4, position.line)
+                it.setInt(5, position.line)
+            },
+        ) { parseMethod(it.getString(1)) }.filter { contains(it.nameRange) }
         if (matches.size > 1) throw InspectException("target-indeterminate", "Declaration selector matches multiple methods")
-        return matches.singleOrNull() ?: throw InspectException("target-missing", "Method declaration not found at $path:${position.line}:${position.column}")
+        return matches.singleOrNull()
+            ?: throw InspectException("target-missing", "Method declaration not found at $path:${position.line}:${position.column}")
     }
 
     fun query(request: ReferenceRequest): ReferencePage {
         JavaReferences.validate(request.manifest, request.side)
+        if (request.referenceScope != "outside-diff" && request.referenceScope != "all") {
+            throw InspectException("invalid-input", "Unknown Java reference scope")
+        }
         val revision = if (request.side == "base") request.manifest.base else request.manifest.head
         sessions.open().use { session ->
             val summary = session.select("select summary from analyses where id=?", { it.setString(1, request.analysisId) }) {
@@ -131,7 +160,7 @@ class JavaFactStore(private val sessions: SessionFactory) {
             }.singleOrNull() ?: throw InspectException("analysis-unavailable", "Analysis unavailable")
             if (summary.revision != revision) throw InspectException("snapshot-mismatch", "Manifest revision differs from analysis")
             if (summary.configurationSha256 != request.configurationSha256) throw InspectException("configuration-mismatch", "Analysis configuration differs from request")
-            val target = methodAt(session, request.analysisId, request.target.path, request.target.position)
+            val target = methodAt(session, request.analysisId, request.target)
             val sql = """
                 select payload from (
                   select 0 as detail_rank, path, start_line, start_col, id_hash, payload from refs where analysis_id=? and target_hash=?
@@ -143,12 +172,15 @@ class JavaFactStore(private val sessions: SessionFactory) {
                 statement.setString(1, request.analysisId)
                 statement.setString(2, sha(target.id))
                 statement.setString(3, request.analysisId)
+                fun scoped(item: DetailRecord): DetailRecord? {
+                    val reference = item.reference ?: return item
+                    val status = JavaReferences.diffStatusValidated(reference.location, request.manifest, request.side)
+                    if (request.referenceScope == "outside-diff" && status != "outside-diff") return null
+                    return DetailRecord.reference(reference.copy(diffStatus = status))
+                }
                 var total = 0
                 statement.executeQuery().use { result ->
-                    while (result.next()) {
-                        val item = parseDetail(result.getString(1))
-                        if (item.kind != "reference" || JavaReferences.outsideDiff(item.reference!!.location, request.manifest, request.side)) total++
-                    }
+                    while (result.next()) if (scoped(parseDetail(result.getString(1))) != null) total++
                 }
                 statement.executeQuery().use { result ->
                     val records = object : Iterator<DetailRecord> {
@@ -156,12 +188,8 @@ class JavaFactStore(private val sessions: SessionFactory) {
                         override fun hasNext(): Boolean {
                             if (next != null) return true
                             while (result.next()) {
-                                val item = parseDetail(result.getString(1))
-                                if (item.kind != "reference" ||
-                                    JavaReferences.outsideDiff(item.reference!!.location, request.manifest, request.side)) {
-                                    next = item
-                                    return true
-                                }
+                                next = scoped(parseDetail(result.getString(1)))
+                                if (next != null) return true
                             }
                             return false
                         }
@@ -170,7 +198,9 @@ class JavaFactStore(private val sessions: SessionFactory) {
                             return checkNotNull(next).also { next = null }
                         }
                     }
-                    val context = PageContext(summary, target, request.side, JavaReferences.digest(request.manifest), total)
+                    val context = PageContext(
+                        summary, target, request.side, request.referenceScope, JavaReferences.digest(request.manifest), total,
+                    )
                     return JavaReferences.page(records, context, request.byteBudget, request.cursor)
                 }
             }
@@ -191,7 +221,7 @@ class JavaFactStore(private val sessions: SessionFactory) {
     private fun parseMethod(text: String): JavaMethod = method(JsonParser.parseString(text).asJsonObject)
 
     private fun method(root: JsonObject): JavaMethod = JavaMethod(
-        root.string("id"), root.string("signature"), location(root.obj("location")),
+        root.string("id"), root.string("bindingKey"), root.string("signature"), location(root.obj("location")),
         range(root.obj("nameRange")), root.string("sourceSet"),
     )
 
@@ -211,7 +241,7 @@ class JavaFactStore(private val sessions: SessionFactory) {
                 DetailRecord.reference(JavaReference(
                     value.string("id"), value.string("targetId"), location(value.obj("location")),
                     value.get("enclosing").takeIf { !it.isJsonNull }?.asJsonObject?.let(::method),
-                    value.string("sourceSet"), value.string("kind"), value.string("basis"),
+                    value.string("sourceSet"), value.string("kind"), value.string("basis"), value.nullableString("diffStatus"),
                 ))
             }
             "unresolved" -> {
@@ -246,6 +276,28 @@ class JavaFactStore(private val sessions: SessionFactory) {
     private fun JsonObject.bool(name: String): Boolean = get(name)?.asJsonPrimitive?.also {
         require(it.isBoolean) { "Invalid stored Java boolean: $name" }
     }?.asBoolean ?: throw InspectException("analysis-unavailable", "Missing stored Java boolean: $name")
+
+    private fun JsonObject.nullableString(name: String): String? = get(name)?.takeIf { !it.isJsonNull }?.asJsonPrimitive?.also {
+        require(it.isString) { "Invalid stored Java string: $name" }
+    }?.asString
+
+
+    private fun valid(citation: BuildArtifactCitation): Boolean =
+        citation.manifestSha256.length == 64 && citation.manifestSha256.all { it in '0'..'9' || it in 'a'..'f' } &&
+            citation.artifactId.isNotBlank() &&
+            (citation.origin == "authored" || citation.origin == "materialized" || citation.origin == "external")
+
+    private fun canonical(method: JavaMethod): Boolean {
+        if (method.bindingKey.isBlank()) return false
+        val separator = method.id.indexOf(':')
+        val length = method.id.substring(0, separator.coerceAtLeast(0)).toIntOrNull() ?: return false
+        val domainStart = separator + 1
+        val bindingStart = domainStart + length + 1
+        return separator > 0 && length > 0 && bindingStart <= method.id.length &&
+            method.id.getOrNull(bindingStart - 1) == ':' && method.id.substring(bindingStart) == method.bindingKey
+    }
+
+    private fun artifactHash(citation: BuildArtifactCitation?): String = sha(gson.toJson(citation))
 
     private fun <T> insert(session: DbSession, sql: String, rows: List<T>, bind: (PreparedStatement, T) -> Unit) {
         session.prepare(sql).use { statement ->

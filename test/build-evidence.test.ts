@@ -15,6 +15,7 @@ import {
   BuildEvidenceHostError, admitBuildEvidence, buildEvidenceSummary, type BuildEvidenceAdmission, type PublicBuildEvidenceSummary,
 } from "../src/build-evidence.js";
 import { redactAuditText, refreshSecretPolicy, screenText, withSecretPolicy, type SecretPolicy } from "../src/secret-screening.js";
+import { referenceReplySchema } from "../src/inspect-java-contract.js";
 import {
   FIXTURE_SECRET_MARKER, createBuildFixture, fixtureRequest, type BuildFixture, type FixtureSide,
 } from "./build-evidence-fixture.js";
@@ -798,5 +799,66 @@ describe("audit capture of admitted evidence", () => {
     expect(bytes).toContain("[REDACTED]");
     expect(bytes).toContain("build_evidence");
     expect(bytes).toContain("artifact-withheld");
+  });
+});
+
+describe("artifact-aware Java reference contract", () => {
+  const pos = (line: number, column: number) => ({ line, column });
+  const span = (line: number, start: number, end: number) => ({ start: pos(line, start), end: pos(line, end) });
+  const citation = { manifestSha256: "a".repeat(64), artifactId: "pricing-generated", origin: "materialized" };
+  const success = {
+    ok: true,
+    result: {
+      summary: {
+        analysisId: "analysis", repositoryId: "repo", revision: "head", configurationSha256: "config",
+        coverage: {
+          complete: true, mainExamined: 1, testExamined: 1, mainSkipped: 0, testSkipped: 0,
+          mainUnresolved: 0, testUnresolved: 0, diagnosticCount: 0,
+        },
+      },
+      target: {
+        id: "4:prod:Lexample/Pricing;.price(I)I", bindingKey: "Lexample/Pricing;.price(I)I",
+        signature: "example.Pricing.price(int)",
+        location: { path: "src/main/java/example/Pricing.java", range: span(3, 4, 50), buildArtifact: null },
+        nameRange: span(3, 15, 20), sourceSet: "main",
+      },
+      side: "head",
+      referenceScope: "all",
+      items: [{
+        kind: "reference",
+        reference: {
+          id: "site", targetId: "4:prod:Lexample/Pricing;.price(I)I",
+          location: { path: "target/generated-sources/example/Caller.java", range: span(4, 24, 40), buildArtifact: citation },
+          enclosing: null, sourceSet: "test", kind: "call", basis: "checked", diffStatus: "generated",
+        },
+        unresolved: null, file: null, diagnostic: null,
+      }],
+      delivery: { complete: true, truncated: false, omittedRecords: 0, nextCursor: null },
+    },
+  };
+
+  it("decodes nullable legacy origins and generated artifact evidence through the single reply schema", () => {
+    const decoded = referenceReplySchema.parse(success);
+    expect(decoded.ok && decoded.result.target.location.buildArtifact).toBeNull();
+    expect(decoded.ok && decoded.result.target.bindingKey).toBe("Lexample/Pricing;.price(I)I");
+    expect(decoded.ok && decoded.result.referenceScope).toBe("all");
+    expect(decoded.ok && decoded.result.items[0]?.reference).toMatchObject({
+      diffStatus: "generated", location: { buildArtifact: citation },
+    });
+    expect(referenceReplySchema.parse({
+      ok: false, error: { code: "unsupported-exported-environment", message: "release is unsupported" },
+    })).toMatchObject({ ok: false, error: { code: "unsupported-exported-environment" } });
+  });
+
+  it.each([
+    ["a missing nullable location origin", (value: Json) => { delete value.result.target.location.buildArtifact; }],
+    ["a missing binding key", (value: Json) => { delete value.result.target.bindingKey; }],
+    ["a missing query scope", (value: Json) => { delete value.result.referenceScope; }],
+    ["a missing diff classification", (value: Json) => { delete value.result.items[0].reference.diffStatus; }],
+    ["an invented diff classification", (value: Json) => { value.result.items[0].reference.diffStatus = "unknown"; }],
+  ])("rejects %s", (_label, mutate) => {
+    const value = structuredClone(success);
+    mutate(value);
+    expect(referenceReplySchema.safeParse(value).success).toBe(false);
   });
 });

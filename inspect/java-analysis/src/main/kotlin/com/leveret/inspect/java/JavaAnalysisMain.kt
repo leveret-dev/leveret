@@ -120,9 +120,9 @@ object JavaAnalysisMain {
     private fun references(command: JsonObject): ReferencePage {
         command.fields("schema", "kind", "store", "request")
         val source = command.obj("request")
-        val allowed = setOf("analysisId", "configurationSha256", "manifest", "side", "target", "byteBudget", "cursor")
+        val allowed = setOf("analysisId", "configurationSha256", "manifest", "side", "target", "referenceScope", "byteBudget", "cursor")
         require(source.keySet().containsAll(allowed - setOf("cursor")) && source.keySet().all { it in allowed })
-        val target = source.obj("target").also { it.fields("path", "position") }
+        val target = source.obj("target").also { it.fields("path", "position", "buildArtifact") }
         val position = target.obj("position").also { it.fields("line", "column") }
         val manifest = source.obj("manifest")
         require(manifest.integer("schema") == 1)
@@ -134,11 +134,15 @@ object JavaAnalysisMain {
                     ChangeHunk(hunk.integer("oldStart"), hunk.integer("oldLines"), hunk.integer("newStart"), hunk.integer("newLines"))
                 }, file.boolean("truncated"), file.array("errors").map { it.asString })
         }
+        val rawArtifact = target.get("buildArtifact") ?: throw IllegalArgumentException("Missing buildArtifact")
+        val artifact = if (rawArtifact.isJsonNull) null else rawArtifact.asJsonObject.also {
+            it.fields("manifestSha256", "artifactId", "origin")
+        }.let { BuildArtifactCitation(it.string("manifestSha256"), it.string("artifactId"), it.string("origin")) }
         val request = ReferenceRequest(source.string("analysisId"), source.string("configurationSha256"),
             ChangeManifest(manifest.string("base"), manifest.string("head"), files,
                 manifest.boolean("truncated"), manifest.array("errors").map { it.asString }),
-            source.string("side"), TargetSelector(target.string("path"), Position(position.integer("line"), position.integer("column"))),
-            source.integer("byteBudget"), source.get("cursor")?.takeIf { !it.isJsonNull }?.asString)
+            source.string("side"), TargetSelector(target.string("path"), Position(position.integer("line"), position.integer("column")), artifact),
+            source.string("referenceScope"), source.integer("byteBudget"), source.get("cursor")?.takeIf { !it.isJsonNull }?.asString)
         return store(command).use { (_, sessions) ->
             JavaFactStore(sessions).query(request)
         }

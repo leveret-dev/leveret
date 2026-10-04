@@ -31,8 +31,8 @@ const templateSchema = z.object({
 }).passthrough();
 const checkedPath = "src/test/java/example/PricingTest.java";
 const targetPath = "src/main/java/example/Pricing.java";
-const target = { path: targetPath, position: { line: 3, column: 17 } };
-const targetId = "Lexample/Pricing;.price(I)I";
+const target = { path: targetPath, position: { line: 3, column: 17 }, buildArtifact: null };
+const targetBindingKey = "Lexample/Pricing;.price(I)I";
 const baseSource = "package example;\nfinal class Pricing {\n    static int price(int quantity) { return quantity * 10; }\n    static int price(String code) { return code.length(); }\n}\n";
 const headSource = baseSource.replace("quantity * 10", "quantity * 12");
 const testSource = "package example;\nfinal class PricingTest {\n    int numeric() { return Pricing.price(3); }\n    int textual() { return Pricing.price(\"ABC\"); }\n}\n";
@@ -115,8 +115,10 @@ async function pinnedConfig(template: z.infer<typeof templateSchema>, output: st
 
 function checked(page: ReferencePage, expected: number): void {
   const checked = page.items.filter((item) => item.kind === "reference").map((item) => item.reference!);
-  if (checked.length !== expected || checked.some((item) => item.basis !== "checked" || item.sourceSet !== "test" || item.kind !== "call")) {
-    throw new Error(`Expected ${expected} checked test calls, got ${checked.length}`);
+  if (checked.length !== expected || checked.some((item) =>
+    item.basis !== "checked" || item.sourceSet !== "test" || item.kind !== "call" ||
+    item.targetId !== page.target.id || item.diffStatus !== "outside-diff" || item.location.buildArtifact !== null)) {
+    throw new Error(`Expected ${expected} checked original test calls, got ${checked.length}`);
   }
 }
 
@@ -139,8 +141,10 @@ async function fixtureCases(fixed: Fixture, config: InspectJavaConfig, output: s
     const reference = baseline.items.find((item) => item.kind === "reference")?.reference;
     if (reference?.location.path !== checkedPath || JSON.stringify(reference.location.range) !== JSON.stringify({
       start: { line: 3, column: 27 }, end: { line: 3, column: 43 },
-    }) || reference.enclosing?.signature !== "example.PricingTest.numeric()" || !baseline.summary.coverage.complete) {
-      throw new Error("Exact fixture reference, range, caller, or coverage does not match the approved example");
+    }) || reference.enclosing?.signature !== "example.PricingTest.numeric()" ||
+      baseline.target.bindingKey !== targetBindingKey || baseline.target.location.buildArtifact !== null ||
+      reference.targetId !== baseline.target.id || !baseline.summary.coverage.complete) {
+      throw new Error("Exact fixture reference, binding, origin, range, caller, or coverage does not match the approved example");
     }
     await writeFile(join(repo, checkedPath), testSource.replace("Pricing.price(3)", "Pricing.price(4)"));
     try { await query(bridge, manifest, "head"); }
@@ -152,7 +156,9 @@ async function fixtureCases(fixed: Fixture, config: InspectJavaConfig, output: s
   const cases: Record<string, unknown> = {};
   cases.baseline = {
     base, head, analysis_id: baseline.summary.analysisId, configuration_sha256: baseline.summary.configurationSha256,
-    target_id: baseline.target.id, target_signature: baseline.target.signature, checked: baseline.items.filter((item) => item.kind === "reference"),
+    target_id: baseline.target.id, target_binding_key: baseline.target.bindingKey,
+    target_origin: baseline.target.location.buildArtifact, target_signature: baseline.target.signature,
+    checked: baseline.items.filter((item) => item.kind === "reference"),
     coverage: baseline.summary.coverage, stale_source_rejected: staleRejected, latency_ms: Math.round(performance.now() - started),
   };
 
@@ -356,21 +362,27 @@ async function evaluateCorpus(repo: string, cache: string, output: string, templ
       const before = performance.now();
       let inspect: Record<string, unknown>;
       try {
-        const first = await query(bridge, manifest, "head", { path, position: item.position });
+        const first = await query(bridge, manifest, "head", { path, position: item.position, buildArtifact: null });
         const details = [...first.items];
         let last = first;
         let pages = 1;
         while (last.delivery.nextCursor) {
           if (pages >= 256) throw new Error("Inspect pagination exceeded 256 pages");
-          last = await query(bridge, manifest, "head", { path, position: item.position }, undefined, last.delivery.nextCursor);
+          last = await query(bridge, manifest, "head",
+            { path, position: item.position, buildArtifact: null }, undefined, last.delivery.nextCursor);
           details.push(...last.items);
           pages++;
         }
-        inspect = { target_id: first.target.id, signature: first.target.signature,
+        inspect = {
+          target_id: first.target.id, target_binding_key: first.target.bindingKey,
+          target_origin: first.target.location.buildArtifact, signature: first.target.signature,
           checked: details.filter((detail) => detail.kind === "reference").map((detail) => ({
-            id: detail.reference!.id, path: detail.reference!.location.path, range: detail.reference!.location.range,
+            id: detail.reference!.id, target_id: detail.reference!.targetId,
+            path: detail.reference!.location.path, range: detail.reference!.location.range,
+            origin: detail.reference!.location.buildArtifact, diff_status: detail.reference!.diffStatus,
             kind: detail.reference!.kind, source_set: detail.reference!.sourceSet, basis: detail.reference!.basis,
-          })), coverage: first.summary.coverage, pages, delivery: last.delivery };
+          })), coverage: first.summary.coverage, pages, delivery: last.delivery,
+        };
       } catch (error) {
         inspect = { error: error instanceof InspectJavaError ? { code: error.code, message: error.message } : String(error) };
       }
@@ -505,8 +517,10 @@ export async function traceConsumption(trace: string, ids: string[], incomplete:
     // Select by what the tool resolved, not by the exact column the model chose inside the name token.
     if (incomplete) {
       if (result.summary.coverage.complete || !result.items.some((item) => item.kind === "unresolved")) continue;
-    } else if (result.target.id !== targetId || !result.items.some((item) => item.kind === "reference" &&
-      item.reference?.location.path === checkedPath && item.reference.basis === "checked")) continue;
+    } else if (result.target.bindingKey !== targetBindingKey || result.target.location.buildArtifact !== null ||
+      !result.items.some((item) => item.kind === "reference" && item.reference?.targetId === result.target.id &&
+      item.reference.location.path === checkedPath && item.reference.location.buildArtifact === null &&
+      item.reference.diffStatus === "outside-diff" && item.reference.basis === "checked")) continue;
     evidenceReturned = true;
     // Only submitted phase output counts as use; the citing record itself must name the caller file and, for an
     // incomplete analysis, disclose the gap. Thinking text and unrelated neighbouring records do not qualify.

@@ -3,11 +3,19 @@ import type { ChangeManifest } from "./change-evidence.js";
 
 const position = z.object({ line: z.number().int().positive(), column: z.number().int().nonnegative() }).strict();
 const range = z.object({ start: position, end: position }).strict();
-const location = z.object({ path: z.string().min(1), range }).strict();
-const method = z.object({ id: z.string().min(1), signature: z.string(), location, nameRange: range, sourceSet: z.enum(["main", "test"]) }).strict();
+const buildArtifact = z.object({
+  manifestSha256: z.string().regex(/^[0-9a-f]{64}$/), artifactId: z.string().min(1),
+  origin: z.enum(["authored", "materialized", "external"]),
+}).strict();
+const location = z.object({ path: z.string().min(1), range, buildArtifact: buildArtifact.nullable() }).strict();
+const method = z.object({
+  id: z.string().min(1), bindingKey: z.string().min(1), signature: z.string(), location,
+  nameRange: range, sourceSet: z.enum(["main", "test"]),
+}).strict();
 const reference = z.object({
   id: z.string().min(1), targetId: z.string().min(1), location, enclosing: method.nullable(),
   sourceSet: z.enum(["main", "test"]), kind: z.enum(["call", "method-reference"]), basis: z.literal("checked"),
+  diffStatus: z.enum(["outside-diff", "in-diff", "generated"]),
 }).strict();
 const unresolved = z.object({
   id: z.string().min(1), location, sourceSet: z.enum(["main", "test"]), reason: z.string().min(1),
@@ -33,12 +41,13 @@ const detail = z.object({
   }
 });
 export const referencePageSchema = z.object({
-  summary: analysisSummarySchema, target: method, side: z.enum(["base", "head"]), items: z.array(detail),
+  summary: analysisSummarySchema, target: method, side: z.enum(["base", "head"]),
+  referenceScope: z.enum(["outside-diff", "all"]), items: z.array(detail),
   delivery: z.object({ complete: z.boolean(), truncated: z.boolean(), omittedRecords: z.number().int().nonnegative(), nextCursor: z.string().nullable() }).strict(),
 }).strict();
 export const inspectErrorSchema = z.object({
   code: z.enum(["invalid-input", "snapshot-mismatch", "configuration-mismatch", "target-missing", "target-indeterminate",
-    "analysis-unavailable", "invalid-cursor", "worker-failed", "resource-exhausted", "budget-too-small"]),
+    "analysis-unavailable", "invalid-cursor", "worker-failed", "resource-exhausted", "budget-too-small", "unsupported-exported-environment"]),
   message: z.string().min(1), requiredBytes: z.number().int().positive().optional(),
 }).strict();
 export const referenceReplySchema = z.discriminatedUnion("ok", [
@@ -53,7 +62,8 @@ export type ReferenceRequest = {
   configurationSha256: string;
   manifest: ChangeManifest;
   side: "base" | "head";
-  target: { path: string; position: z.infer<typeof position> };
+  target: { path: string; position: z.infer<typeof position>; buildArtifact: z.infer<typeof buildArtifact> | null };
+  referenceScope?: "outside-diff" | "all";
   byteBudget?: number;
   cursor?: string;
 };
