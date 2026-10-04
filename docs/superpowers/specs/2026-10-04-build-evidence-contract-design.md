@@ -2,8 +2,9 @@
 
 Date: 2026-10-04
 
-Status: Written specification for maintainer review. The conversation approved the
-architecture below; this document must be approved before implementation planning.
+Status: The maintainer approved the written contract on 2026-10-04 and authorized
+implementation planning. The plan adds source-root layout and platform-fingerprint
+clarifications below; review those clarifications with the plan before execution.
 No exporter, plugin, command execution, or consumer change is implemented here.
 
 ## Objective and owner requirements
@@ -227,10 +228,11 @@ manifest content cannot authorize extracting arbitrary archive members.
 | `sourceSetRole` | `production`, `test`, or `other`, explicitly supplied; do not infer test semantics from task names |
 | `language` | `java` initially; future producers may require a new schema/capability decision for other languages |
 | `inputArtifactIds` | Full effective source-input inventory for this compilation, including generated/processed sources when available; not merely files recompiled this run |
+| `sourceRoots` | Records `{ id, repositoryPath, members }`; repositoryPath is a logical repository-relative root or null; members is an array of `{ artifactId, relativePath }` describing each effective source's position under its compiler source root |
 | `authoredArtifactIds` | Originals needed to review this compilation: source, templates, schemas, resources and relevant build/generator configuration |
 | `resourceArtifactIds`, `outputArtifactIds` | Effective processed/generated resources and available classes/output artifacts; no output is mandatory just to export metadata |
 | `inventory` | `{ state, reason }`; state is `complete`, `partial`, or `unknown`; reason is null when complete and otherwise a nonempty string; completeness describes inputArtifactIds only, not all originals/resources/outputs or repository review coverage |
-| `compiler` | `{ name, version, javaVersion, release, sourceLevel, targetLevel, encoding, preview, moduleOptions }`; strings are nullable when unknown; `release` has explicit set/unset/unknown state below; preview is boolean or null; moduleOptions is a recognized data-only option map or null |
+| `compiler` | `{ name, version, javaVersion, platform, release, sourceLevel, targetLevel, encoding, preview, moduleOptions }`; strings are nullable when unknown; platform fingerprints and release state are defined below; preview is boolean or null; moduleOptions is a recognized data-only option map or null |
 | `compileClasspath`, `modulePath`, `processorPath` | Each is `{ state, reason, entries }`; state is complete, partial or unknown; reason is null when complete and otherwise required; unknown implies empty entries; partial retains known entries plus diagnostics |
 | `generationState`, `resourceState`, `compilationState` | Independently `succeeded`, `failed`, `not-run`, or `unknown` per compilation; no manifest-wide checkpoint claims |
 
@@ -238,6 +240,15 @@ Within inputArtifactIds, at most one artifact may have each non-null repositoryP
 For an in-place transformation, the materialized result is the effective input and
 the authored original stays in authoredArtifactIds; listing both as effective inputs
 cannot bypass the lineage/coverage rules.
+
+Planning clarification: source roots describe layout, not new artifact directories.
+Every inputArtifactId must be a source file and appear exactly once across
+sourceRoots.members; root IDs and member relative paths within a root are unique.
+Member paths obey the same relative-path rules as artifacts. Preserve the observed
+package-relative filenames; do not infer roots from package declarations or flatten
+files with the same basename. Consumers construct one private source root per
+record from verified member bytes, retaining artifact-aware locations separately.
+This supports generated roots alongside original sources without invoking a build.
 
 Classpath/path entries are ordered records `{ artifactId, coordinates,
 upstreamCompilationId }`. Coordinates are `{ group, name, version, classifier,
@@ -268,6 +279,19 @@ An unknown release state makes source/API level unknown and the environment
 incomplete, even if sourceLevel happens to be reported. Consumer support must
 match or reproduce the selected platform APIs; a Java version string alone does
 not prove that the analysis worker uses the correct platform definitions.
+
+Planning clarification: `compiler.platform` is `{ state, fingerprints }`, with
+state `identified` or `unknown`. Fingerprints are `{ name, sha256 }`, using unique
+names from `release`, `modules`, `ct.sym`, `rt.jar`; hashes identify the selected
+compiler JDK's platform files without exporting executable paths. Unknown has an
+empty array. Identified requires `modules` or `rt.jar`; a release-selected platform
+also requires `ct.sym` when that compiler uses it. These remain exporter assertions.
+Before prepending its own VM platform, the consumer must match these fingerprints
+to the pinned worker platform; version-string equality alone is insufficient.
+Otherwise use verified explicitly supplied platform definitions where supported,
+or report unsupported-platform and coherent fallback. Unsupported release/JPMS
+semantics remain explicit gaps; matching hashes alone does not prove JDT honors
+every compiler setting.
 
 `moduleOptions` is null if unknown; otherwise its
 only allowed keys are `sourcePath`, `bootClasspath`, `addReads`, `addExports`,
