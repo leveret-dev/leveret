@@ -271,3 +271,30 @@ describe("build evidence in discovery", () => {
     expect(() => parseReviewOutput({ ...review, concerns: [{ ...review.concerns[0]!, build_citations: [{ ...citation, manifestSha256: "short" }] }] })).toThrow();
   });
 });
+
+describe("verifier rows without build citations", () => {
+  const lenses = ["correctness-hostile-inputs", "contract-conformance", "test-honesty", "blast-radius", "leads-triage"].map((lens) => ({ lens, outcome: "checked" }));
+  const output = (extra: object = {}) => ({
+    report: [{ id: "correctness:R1", file: "src/core.ts", line: 4, title: "t", tier: "major", severity: "warning", scope: "in-diff", evidence: "e", evidence_ids: [], ...extra }],
+    verdicts: [{ id: "correctness:R1", grade: "actionable" }],
+    coverage: { lenses, files: manifest.files.map((file) => ({ file: file.path, verdict: file.path === "src/core.ts" ? "findings" : "considered-fine" })) },
+    resolutions: [],
+  });
+  // The runner installs a resolver on every run; with no admitted export it can only answer "nothing was retrieved".
+  const noExportResolver = () => ({ ok: false as const, reason: "no build evidence was retrieved in this run" });
+  const expected = {
+    concerns: [{ id: "correctness:R1", file: "src/core.ts" }], leads: [], changedFiles: manifest.files.map((file) => file.path), priorThreadIds: [],
+    resolveBuildCitations: noExportResolver,
+  };
+
+  it("publishes a legacy actionable finding with no citations and no anchor when no export exists", () => {
+    expect(verifySchemaGaps(output(), expected)).toEqual([]);
+  });
+
+  it("still gaps a forged anchor or forged citation that nothing resolves", () => {
+    expect(verifySchemaGaps(output({ build_anchor: { kind: "output-only" } }), expected).join(" ")).toContain("build_citations:unresolved");
+    expect(verifySchemaGaps(output({ build_anchor: { kind: "original", basis: "independent-read" } }), expected).join(" ")).toContain("build_citations:unresolved");
+    const forged = { manifestSha256: "a".repeat(64), artifactId: "x", side: "head", range: { startLine: 1, endLine: 1 }, origin: "authored", repositoryPath: "src/core.ts", basis: "retrieved" };
+    expect(verifySchemaGaps(output({ build_citations: [forged] }), expected).join(" ")).toContain("build_citations:unresolved");
+  });
+});

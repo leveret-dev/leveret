@@ -156,7 +156,9 @@ export class BuildEvidenceLedger {
     // the base revision (whose bytes at the same path and line may differ) stays supporting until a head read verifies it.
     const at = (item: ResolvedBuildCitation) => item.origin === "authored" && item.repositoryPath === finding.file
       && item.range.startLine <= finding.line && finding.line <= item.range.endLine;
-    const original = citations.find((item) => item.side === "head" && at(item));
+    // An independent read of the same location outranks a mapped citation, whatever order the model listed them in.
+    const original = citations.find((item) => item.side === "head" && item.basis === "retrieved" && at(item))
+      ?? citations.find((item) => item.side === "head" && at(item));
     const anchor: BuildAnchor | null = original
       ? { kind: "original", basis: original.basis === "retrieved" ? "independent-read" : "validated-map" }
       : citations.some((item) => item.side === "base" && at(item))

@@ -352,9 +352,10 @@ describe("build evidence rendering", () => {
     expect(inline[0]!.body).toContain("generated `pricing-output` L4");
   });
 
-  it("lists a finding whose build citations do not verify its location as unanchored, never inline", () => {
+  it("lists a finding whose build citations do not verify its location as unanchored with its evidence and fix, never inline", () => {
     const unanchored = {
-      ...row, id: "R4", file: "templates/Pricing.java.tpl", line: 4, title: "Template divides",
+      ...row, id: "R4", file: "templates/Pricing.java.tpl", line: 4, title: "Template divides", suggested_fix: "multiply by the factor again",
+      evidence: "the generated source reads quantity / 10 where the contract multiplies",
       build_citations: [cite("pricing-output", "materialized", "build/generated/example/Pricing.java")],
       build_anchor: { kind: "unanchored" as const },
     };
@@ -362,6 +363,12 @@ describe("build evidence rendering", () => {
     const md = renderWalkthrough(withReport(unanchored), scanResult);
     expect(md).toContain("build evidence does not verify this location");
     expect(md).toContain("generated `pricing-output` L4");
+    expect(md).toContain("evidence: the generated source reads quantity / 10 where the contract multiplies");
+    expect(md).toContain("suggested fix: multiply by the factor again");
+    expect(md).not.toMatch(/^\s*- \*\*\[major\]\*\* `templates\/Pricing\.java\.tpl:4`\s*$/m);
+    // an unanchored finding with markdown-bearing prose cannot break out of its list item
+    const hostile = { ...unanchored, evidence: "x\n# injected heading", suggested_fix: undefined };
+    expect(renderWalkthrough(withReport(hostile), scanResult)).not.toMatch(/^# injected heading/m);
   });
 
   it("never publishes base-side evidence as an inline head position, even for the same path and line", () => {

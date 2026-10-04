@@ -107,7 +107,7 @@ function cursorKey(
 ): string {
   return digest(JSON.stringify({
     schema: 1, manifestSha256: admission.manifestSha256, artifactId: artifact.id, artifactSha256: artifact.content.sha256,
-    range: request.range, policyId: policy.id,
+    range: request.range === null ? null : { startLine: request.range.startLine, endLine: request.range.endLine }, policyId: policy.id,
   }));
 }
 
@@ -474,4 +474,81 @@ export async function readBuildArtifact(
     result = finish(end);
   }
   return { ok: true, result };
+}
+
+// ── paged inventory ────────────────────────────────────────────────────────────────────────────
+
+export type BuildArtifactListRequest = { side: "base" | "head"; manifestSha256: string; byteBudget: number; cursor?: string };
+export type BuildArtifactListResult = {
+  side: "base" | "head";
+  manifestSha256: string;
+  /** Listed artifacts across all pages; screened-out descriptors are counted in `withheld`, never listed. */
+  total: number;
+  withheld: number;
+  artifacts: readonly BuildArtifactDescriptor[];
+  delivery: { complete: boolean; truncated: boolean; nextCursor: string | null };
+};
+export type BuildArtifactListReply =
+  | { ok: true; result: BuildArtifactListResult }
+  | { ok: false; error: BuildArtifactReadError };
+
+/**
+ * Read-only inventory of every retrievable text artifact of one admitted manifest, in manifest order, paged by bytes with
+ * a cursor bound to the manifest, the policy and the inventory size. Descriptors are identifiers and labels only (never
+ * content), re-screened against the refreshed policy on every call; a withheld descriptor is counted, not listed. A list
+ * reply is never citable evidence. No count limit applies: every admitted ID is reachable by following the cursor.
+ */
+export async function listBuildArtifacts(
+  admission: BuildEvidenceAdmission, request: BuildArtifactListRequest, policy: SecretPolicy,
+): Promise<BuildArtifactListReply> {
+  if (!request || typeof request !== "object" || (request.side !== "base" && request.side !== "head") ||
+    typeof request.manifestSha256 !== "string" || !/^[0-9a-f]{64}$/.test(request.manifestSha256) ||
+    !validInteger(request.byteBudget, 1) || request.byteBudget > MAX_BUDGET || (request.cursor !== undefined && typeof request.cursor !== "string")) {
+    return failure("invalid-input", "Invalid build artifact list request");
+  }
+  if (admission.outcome !== "admitted") return failure("artifact-unavailable", "Build evidence is not admitted for this side");
+  if (request.manifestSha256 !== admission.manifestSha256) return failure("snapshot-mismatch", "Build artifact manifest differs from the admitted snapshot");
+  await refreshSecretPolicy(policy);
+  const manifestDecision = screenText(admission.manifestSha256, policy);
+  if (manifestDecision.state === "withheld") return failure(manifestDecision.reason, "Build artifact listing is withheld by the secret policy");
+  const listed: BuildArtifactDescriptor[] = [];
+  let withheld = 0;
+  for (const item of describeBuildArtifacts(admission).artifacts) {
+    const scalars = [item.id, item.role, item.origin, item.state, item.provenance, ...(item.repositoryPath === null ? [] : [item.repositoryPath])];
+    if (scalars.some((value) => screenText(value, policy).state === "withheld")) withheld += 1;
+    else listed.push(item);
+  }
+  const key = digest(JSON.stringify({ schema: 1, list: true, side: request.side, manifestSha256: admission.manifestSha256, policyId: policy.id, total: listed.length, withheld }));
+  const decoded = request.cursor === undefined ? 0 : decodeCursor(request.cursor, key);
+  if (decoded === null || decoded - 1 > listed.length) return failure("invalid-cursor", "Build artifact listing cursor does not match this listing");
+  const from = request.cursor === undefined ? 0 : decoded - 1;
+  const reply = (end: number, complete: boolean): BuildArtifactListResult => ({
+    side: request.side, manifestSha256: admission.manifestSha256, total: listed.length, withheld, artifacts: listed.slice(from, end),
+    delivery: { complete, truncated: !complete, nextCursor: complete ? null : encodeCursor(key, end + 1) },
+  });
+  const bytes = (end: number, complete: boolean): number => Buffer.byteLength(JSON.stringify({ ok: true, result: reply(end, complete) }), "utf8");
+  const itemBytes = (index: number): number => Buffer.byteLength(JSON.stringify(listed[index]), "utf8");
+
+  // Completing drops the cursor, so the whole remainder can cost less than a shorter incomplete page. Sizes are tracked additively
+  // and serialized exactly only for a candidate that the running total says fits.
+  const header = bytes(from, false);
+  let sum = 0;
+  let end = from;
+  while (end < listed.length && header + sum + itemBytes(end) + (end > from ? 1 : 0) <= request.byteBudget) {
+    sum += itemBytes(end) + (end > from ? 1 : 0);
+    end += 1;
+  }
+  const fits = (last: number, complete: boolean): boolean => bytes(last, complete) <= request.byteBudget;
+  if (end >= listed.length) {
+    if (fits(listed.length, true)) return { ok: true, result: reply(listed.length, true) };
+    end = listed.length - 1; // an incomplete page must leave something for its cursor to continue to
+  }
+  while (end > from && !fits(end, false)) end -= 1;
+  if (end > from) return { ok: true, result: reply(end, false) };
+  if (from === listed.length) return { ok: true, result: reply(listed.length, true) };
+  const wholeBound = Buffer.byteLength(JSON.stringify({ ok: true, result: reply(from, true) }), "utf8") +
+    Array.from({ length: listed.length - from }, (_, n) => itemBytes(from + n) + (n > 0 ? 1 : 0)).reduce((a, b) => a + b, 0);
+  const firstExact = bytes(from + 1, listed.length === from + 1);
+  const smallest = Math.min(firstExact, wholeBound <= firstExact ? bytes(listed.length, true) : firstExact);
+  return failure("budget-too-small", "Build artifact listing page exceeds byte budget", smallest);
 }

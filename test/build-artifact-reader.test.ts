@@ -1246,3 +1246,98 @@ describe("registered leveret_build_artifact availability", () => {
     });
   });
 });
+
+describe("canonical artifact tool inventory and cursor identity", () => {
+  it("accepts a reordered range key on the next page and rejects a cursor minted under another policy", async () => {
+    const text = Array.from({ length: 30 }, (_, n) => `line ${n}\n`).join("");
+    const secretPolicy = policy();
+    const admission = await admitted(republishedOutput(Buffer.from(text, "utf8")), secretPolicy);
+    try {
+      const base = { manifestSha256: admission.manifestSha256, artifactId: "pricing-output" };
+      const header = await readBuildArtifact(admission, { ...base, range: { startLine: 1, endLine: 30 }, byteBudget: 1 }, secretPolicy);
+      if (header.ok || header.error.requiredBytes === undefined) throw new Error("expected a budget error");
+      const byteBudget = header.error.requiredBytes + 40;
+      const first = await readBuildArtifact(admission, { ...base, range: { startLine: 1, endLine: 30 }, byteBudget }, secretPolicy);
+      if (!first.ok || !first.result.delivery.nextCursor) throw new Error("expected a first page with a cursor");
+      const cursor = first.result.delivery.nextCursor;
+      const reordered = { endLine: 30, startLine: 1 };
+      await expect(readBuildArtifact(admission, { ...base, range: reordered, byteBudget, cursor }, secretPolicy))
+        .resolves.toMatchObject({ ok: true, result: { range: { startLine: first.result.range.endLine + 1 } } });
+      await expect(readBuildArtifact(admission, { ...base, range: { startLine: 1, endLine: 30 }, byteBudget, cursor }, { ...secretPolicy, id: "another-policy" }))
+        .resolves.toMatchObject({ ok: false, error: { code: "invalid-cursor" } });
+    } finally {
+      rmSync(admission.frozen.scratch, { recursive: true, force: true });
+    }
+  });
+
+  describe("a large export", () => {
+    let tools: PiToolsBundle;
+    let pin: BuildEvidencePin;
+    const bulk = Array.from({ length: 600 }, (_, n) => `bulk-report-${n}`);
+    const list = (id: string, extra: object = {}, selected: BuildEvidencePin = pin, side: "base" | "head" = "head") =>
+      invoke(tools, "leveret_build_artifact", id, { action: "list", side, manifestSha256: selected.manifestSha256, byteBudget: 4096, ...extra });
+
+    beforeAll(async () => {
+      pin = republishHead(defect, (manifest) => {
+        const source = manifest.artifacts.find((item) => item.id === "app-resource-output");
+        if (!source || source.availability !== "available" || source.kind !== "file") throw new Error("fixture resource output is missing");
+        // Same payload path and identical bytes: a legal many-artifact export without 600 payload files.
+        for (const id of bulk) manifest.artifacts.push({ ...structuredClone(source), id, role: "report", repositoryPath: null });
+      });
+      tools = await openTools(defect, { base: defect.pins.base, head: pin }, policy());
+    }, 480_000);
+    afterAll(async () => { await tools?.close(); });
+
+    it("bounds the prompt-visible inventory by bytes with disclosed totals and omissions", () => {
+      const capability = tools.capabilities.build_evidence;
+      if (capability.availability !== "available") throw new Error("build evidence capability is unavailable");
+      expect(Buffer.byteLength(JSON.stringify(capability.head.artifacts))).toBeLessThanOrEqual(16_384);
+      expect(capability.head.artifactTotal).toBeGreaterThanOrEqual(bulk.length + 4);
+      expect(capability.head.artifactsOmitted).toBe(capability.head.artifactTotal - capability.head.artifacts.length);
+      expect(capability.head.artifactsOmitted).toBeGreaterThan(0);
+      // an export that fits is still listed in full with nothing omitted
+      expect(capability.base.artifactsOmitted).toBe(0);
+      expect(capability.base.artifactTotal).toBe(capability.base.artifacts.length);
+    });
+
+    it("pages every admitted artifact ID through the read-only list action within each byte budget", async () => {
+      const seen: string[] = [];
+      let cursor: string | undefined;
+      let pages = 0;
+      do {
+        const page = await list(`inv-${pages}`, cursor ? { cursor } : {});
+        expect(page.reply.ok, page.raw).toBe(true);
+        expect(Buffer.byteLength(page.raw)).toBeLessThanOrEqual(4096);
+        expect(page.reply.result).toMatchObject({ side: "head", manifestSha256: pin.manifestSha256 });
+        seen.push(...page.reply.result.artifacts.map((item: { id: string }) => item.id));
+        cursor = page.reply.result.delivery.nextCursor ?? undefined;
+        pages += 1;
+      } while (cursor);
+      expect(pages).toBeGreaterThan(3);
+      expect(new Set(seen).size).toBe(seen.length);
+      expect(new Set(seen)).toEqual(new Set([...bulk, "pricing-template", "pricing-output", "pricing-generator-config", "app-resource-output",
+        "app-resource-original", "consumer-original", "pricing-test"].filter((id) => seen.includes(id) || bulk.includes(id))));
+      for (const id of bulk) expect(seen, id).toContain(id);
+      expect(seen).not.toContain("prod-classes");
+    });
+
+    it("keeps list and read requests distinct and binds list cursors to side, manifest and budget limits", async () => {
+      const first = await list("inv-first");
+      const cursor = first.reply.result.delivery.nextCursor as string;
+      expect(cursor).toEqual(expect.any(String));
+      await expect(list("inv-bad", { cursor: "not-a-cursor" })).resolves.toMatchObject({ reply: { ok: false, error: { code: "invalid-cursor" } } });
+      await expect(list("inv-side", { cursor }, defect.pins.base, "base")).resolves.toMatchObject({ reply: { ok: false, error: { code: "invalid-cursor" } } });
+      await expect(list("inv-crossed", {}, defect.pins.head, "base")).resolves.toMatchObject({ reply: { ok: false, error: { code: "snapshot-mismatch" } } });
+      await expect(list("inv-with-artifact", { artifactId: "pricing-output" })).resolves.toMatchObject({ reply: { ok: false, error: { code: "invalid-input" } } });
+      await expect(list("inv-with-range", { range: { startLine: 1, endLine: 2 } })).resolves.toMatchObject({ reply: { ok: false, error: { code: "invalid-input" } } });
+      const tiny = await list("inv-tiny", { byteBudget: 1 });
+      expect(tiny.reply).toMatchObject({ ok: false, error: { code: "budget-too-small", requiredBytes: expect.any(Number) } });
+      const need = tiny.reply.error.requiredBytes as number;
+      await expect(list("inv-fits", { byteBudget: need })).resolves.toMatchObject({ reply: { ok: true } });
+      await expect(list("inv-short", { byteBudget: need - 1 })).resolves.toMatchObject({ reply: { ok: false, error: { code: "budget-too-small", requiredBytes: need } } });
+      // a read request cannot be turned into a list by omitting the artifact
+      await expect(invoke(tools, "leveret_build_artifact", "inv-read-nothing", { side: "head", manifestSha256: pin.manifestSha256 }))
+        .resolves.toMatchObject({ reply: { ok: false, error: { code: "invalid-input" } } });
+    });
+  });
+});

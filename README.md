@@ -156,16 +156,21 @@ When the same host configuration pins an optional build-evidence export for a
 side, the reviewer also gets `leveret_build_artifact`: bounded, cursor-paged
 reads of the exact text of an authored original (source, template, resource,
 schema, build configuration) and of the generated or processed output it
-produced, addressed by manifest hash and artifact ID, never by path. Replies
-label provenance (authored, exporter-recorded, inferred, unknown), return only
-exporter-recorded source maps that validated against both texts, and are
-re-screened against the host secret policy on every read. Non-UTF-8, binary,
-withheld and unavailable artifacts return typed errors. A finding may carry
-`build_citations`; the host resolves each against what that phase actually read,
-and a generated location is never published as an inline Git anchor: only an
-authored original the phase read (or a validated whole-line map reaching it) can
-anchor a finding, otherwise it is listed in the walkthrough with attribution
-marked uncertain. Exported lineage is exporter-asserted: it does not prove
+produced, addressed by manifest hash and artifact ID, never by path. A
+read-only `action: "list"` pages every retrievable artifact ID within a byte
+budget; the prompt carries only a byte-bounded preview with `artifactTotal` and
+`artifactsOmitted`. Replies label provenance (authored, exporter-recorded,
+inferred, unknown), return only exporter-recorded source maps that validated
+against both texts, and are re-screened against the host secret policy on every
+read. Non-UTF-8, binary, withheld and unavailable artifacts return typed errors.
+A finding may carry `build_citations`; the host resolves each against what that
+phase actually read. Only a head-side authored original the phase read, or one
+reached through an exactly declared map span (or a whole-line map) together
+with the verifier's explicit `root_cause` reasoning, can anchor a finding
+inline. Generated output, base-side evidence and citations that do not verify
+the claimed file and line are listed in the walkthrough as supporting evidence
+with attribution marked uncertain. A `root_cause` is a verifier assertion, not
+proof from the map. Exported lineage is exporter-asserted: it does not prove
 freshness or causality.
 
 ```sh

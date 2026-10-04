@@ -9,7 +9,8 @@ import { runStreaming } from "./exec.js";
 import { pathIsInside } from "./path.js";
 import { scopeResolver } from "./build-artifacts.js";
 import {
-  describeBuildArtifacts, readBuildArtifact, type BuildArtifactInventory, type BuildArtifactReadReply, type BuildArtifactReadRequest,
+  describeBuildArtifacts, listBuildArtifacts, readBuildArtifact, type BuildArtifactInventory, type BuildArtifactListReply,
+  type BuildArtifactListRequest, type BuildArtifactReadReply, type BuildArtifactReadRequest,
 } from "./build-artifact-reader.js";
 import { prepareBuildJavaInputs, type BuildJavaDecision, type PreparedJavaCompilation } from "./build-java-inputs.js";
 import type { BuildEvidencePin } from "./build-evidence-contract.js";
@@ -71,6 +72,8 @@ export interface InspectJavaBridge {
   buildArtifacts: { base: BuildArtifactInventory; head: BuildArtifactInventory };
   references(request: ReferenceRequest): Promise<ReferencePage>;
   readArtifact(side: "base" | "head", request: BuildArtifactReadRequest): Promise<BuildArtifactReadReply>;
+  /** Read-only, paged inventory of the retrievable text artifacts of one admitted side; never citable evidence. */
+  listArtifacts(side: "base" | "head", request: Omit<BuildArtifactListRequest, "side">): Promise<BuildArtifactListReply>;
   close(): Promise<void>;
 }
 
@@ -739,6 +742,16 @@ export async function openInspectJava(
         const action = async () => {
           await verifyIntegrity();
           return readBuildArtifact(admissions[side], request, policy);
+        };
+        const next = serial.then(action);
+        serial = next.then(() => undefined, () => undefined);
+        return next;
+      },
+      listArtifacts(side, request) {
+        if (closed) return Promise.resolve({ ok: false, error: { code: "artifact-unavailable", message: "Java bridge is closed" } });
+        const action = async () => {
+          await verifyIntegrity();
+          return listBuildArtifacts(admissions[side], { ...request, side }, policy);
         };
         const next = serial.then(action);
         serial = next.then(() => undefined, () => undefined);

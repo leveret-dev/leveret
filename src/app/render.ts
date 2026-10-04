@@ -125,6 +125,9 @@ export function renderWalkthrough(
         s.push(`- **[${r.tier}]** \`${r.file}:${r.line}\` — ${r.title} *(build evidence does not verify this location; supporting evidence only)*`);
         const supporting = buildEvidence(r);
         if (supporting) s.push(`  - ${supporting}`);
+        const oneLine = (value: string) => value.replace(/\s*[\r\n\u2028\u2029]+\s*/g, " ");
+        s.push(`  - evidence: ${oneLine(r.evidence)}`);
+        if (r.suggested_fix) s.push(`  - suggested fix: ${oneLine(r.suggested_fix)}`);
         continue;
       }
       const marker = r.scope === "out-of-diff" ? " *(out-of-diff)*" : "";

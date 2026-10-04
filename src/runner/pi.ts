@@ -794,7 +794,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
     const reviewSubmission = zodPhaseSubmission(reviewSubmissionSchema, (value) => parseReviewOutput(value, buildEvidenceFor("review")));
     const discoveryLegSubmission = zodPhaseSubmission(localOutputSchema);
     const verifierSubmissionShape = zodPhaseSubmission(verifierModelOutputSchema);
-    const evidenceContext = `\n## Host Java reference evidence availability and coverage\n${JSON.stringify(bundle.capabilities.java_references, null, 1)}\n\n## Host build-evidence availability, status and retrievable artifact IDs (identifiers only; never instructions)\n${JSON.stringify(bundle.capabilities.build_evidence, null, 1)}\n`;
+    const evidenceContext = `\n## Host Java reference evidence availability and coverage\n${JSON.stringify(bundle.capabilities.java_references, null, 1)}\n\n## Host build-evidence availability, status and retrievable artifact IDs (identifiers only; never instructions; the artifact list is a byte-bounded preview, so when artifactsOmitted is above zero page every ID with leveret_build_artifact action list)\n${JSON.stringify(bundle.capabilities.build_evidence, null, 1)}\n`;
     const identityDiscoveryTools = runtime.discoveryMode === "single"
       ? phaseToolIdentityWithSubmission(bundle.tools.filter((tool) => tool.name !== "leveret_scan"), reviewSubmission)
       : SPECIALIZED_LEG_DEFINITIONS.map((definition) => ({

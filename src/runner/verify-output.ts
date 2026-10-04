@@ -351,6 +351,8 @@ export function verifySchemaGaps(output: unknown, expected: VerifyExpectations):
     const cited = (row.build_citations ?? []).map(({ manifestSha256, artifactId, range, span }) => ({
       manifestSha256, artifactId, range, ...(span ? { span } : {}),
     }));
+    // No export means a legacy row has nothing to resolve; a forged anchor without citations must still reach the resolver and gap.
+    if (cited.length === 0 && !row.build_anchor) continue;
     if (!expected.resolveBuildCitations) {
       if (cited.length > 0 || row.build_anchor) gaps.add(`report:build-evidence-unresolvable:${row.id}`);
       continue;
