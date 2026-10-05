@@ -945,12 +945,13 @@ async function runMain(runtimeDir: string, host: PiHostRuntime, audit: AuditWrit
       knowledge_sha256: guidance.provenance.dataSha256, phase_deadline_ms: runtime.deadlineMs,
     };
     const configurationIdentities = {
-      prompt_content_sha256: promptContent.sha256,
+      // The frozen experiment contract has exactly six identity keys: prompt content folds into prompt_sha256, not a new key.
       prompt_sha256: stableSha256({
         discovery: runtime.discoveryMode === "specialized/v1"
           ? SPECIALIZED_DISCOVERY
           : { id: "single/v1", system_prompt_version: PI_SYSTEM_PROMPT_VERSION },
         mechanism_checklist_set_sha256: MECHANISM_CHECKLIST_SET_SHA256,
+        prompt_content_sha256: promptContent.sha256,
         verifier: { id: "targeted-verifier/v1", system_prompt_version: PI_SYSTEM_PROMPT_VERSION },
       }),
       tool_sha256: stableSha256({

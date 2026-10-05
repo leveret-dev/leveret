@@ -14,6 +14,7 @@ import { BuildEvidenceLedger } from "../src/build-citations.js";
 import { admitBuildEvidence } from "../src/build-evidence.js";
 import { readBuildArtifact } from "../src/build-artifact-reader.js";
 import { createBuildFixture, fixtureRequest } from "./build-evidence-fixture.js";
+import { configurationSha256, experimentManifestSchema } from "../src/runner/experiment.js";
 import { ReviewCache, incrementalDependencyBoundary } from "../src/review-cache.js";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -1221,6 +1222,19 @@ it("carries one real imported bridge through host auth, resource isolation, prov
       { role: "production", outcome: "prepared" }, { role: "test", outcome: "prepared" },
     ] });
     expect(cleanOutput.identities.cache_sha256).toMatch(/^[a-f0-9]{64}$/);
+    // The real runner's identity vector must satisfy the frozen experiment contract that replay compares against, unchanged.
+    const configuration = {
+      id: "real-runner", context_mode: "diff-only" as const, discovery_mode: "single" as const,
+      scheduler: { id: "serial/v1" as const, concurrency_bound: 1 }, routing: cleanOutput.routing,
+      identities: cleanOutput.identities, reference_hardware: "fixture", trial_ids: ["t1", "t2", "t3", "t4", "t5"], cold_trial_id: "t1",
+    };
+    const pinned = experimentManifestSchema.safeParse({
+      schema: "leveret.replay-experiment/v1", corpus: { schema: "leveret.replay-corpus/v1", sha256: "a".repeat(64) },
+      candidate_configuration_id: "real-runner",
+      configurations: [{ ...configuration, configuration_sha256: configurationSha256(configuration) }],
+    });
+    expect(pinned.success, JSON.stringify(pinned.error?.issues)).toBe(true);
+    expect(Object.keys(cleanOutput.identities)).toEqual(["prompt_sha256", "tool_sha256", "policy_sha256", "card_sha256", "rule_sha256", "cache_sha256"]);
     installHostileBuildResources();
     const hostile = await launch(config);
     expect(hostile.code, hostile.stderr).toBe(0);

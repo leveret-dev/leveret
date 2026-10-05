@@ -813,19 +813,6 @@
       "source_location": "L23"
     },
     {
-      "id": "src_review_cache_lastcompleted",
-      "label": "LastCompleted",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 10,
-      "community_name": "review-cache.ts",
-      "file_type": "code",
-      "norm_label": "lastcompleted",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L157"
-    },
-    {
       "id": "src_review_cache_publicationdecision",
       "label": "PublicationDecision",
       "_callable": true,
@@ -915,58 +902,6 @@
       "norm_label": "changeevidence",
       "source_file": "src/change-evidence.ts",
       "source_location": "L111"
-    },
-    {
-      "id": "src_context_filecontext",
-      "label": "FileContext",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "filecontext",
-      "source_file": "src/context.ts",
-      "source_location": "L15"
-    },
-    {
-      "id": "src_context_functioninfo",
-      "label": "FunctionInfo",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "functioninfo",
-      "source_file": "src/context.ts",
-      "source_location": "L7"
-    },
-    {
-      "id": "src_exec_runopts",
-      "label": "RunOpts",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "runopts",
-      "source_file": "src/exec.ts",
-      "source_location": "L31"
-    },
-    {
-      "id": "src_exec_streamrunopts",
-      "label": "StreamRunOpts",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "streamrunopts",
-      "source_file": "src/exec.ts",
-      "source_location": "L125"
     },
     {
       "id": "src_runner_pi_tools_buildevidencecapability",
@@ -1268,6 +1203,45 @@
       "source_location": "L38"
     },
     {
+      "id": "src_findings_severity",
+      "label": "Severity",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 117,
+      "community_name": "scan.ts",
+      "file_type": "code",
+      "norm_label": "severity",
+      "source_file": "src/findings.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_profile_customenginedef",
+      "label": "CustomEngineDef",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 117,
+      "community_name": "scan.ts",
+      "file_type": "code",
+      "norm_label": "customenginedef",
+      "source_file": "src/profile.ts",
+      "source_location": "L25"
+    },
+    {
+      "id": "src_profile_engineprofile",
+      "label": "EngineProfile",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 117,
+      "community_name": "scan.ts",
+      "file_type": "code",
+      "norm_label": "engineprofile",
+      "source_file": "src/profile.ts",
+      "source_location": "L12"
+    },
+    {
       "id": "src_profile_profile",
       "label": "Profile",
       "_callable": true,
@@ -1279,6 +1253,45 @@
       "norm_label": "profile",
       "source_file": "src/profile.ts",
       "source_location": "L39"
+    },
+    {
+      "id": "src_profile_reviewconfig",
+      "label": "ReviewConfig",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 117,
+      "community_name": "scan.ts",
+      "file_type": "code",
+      "norm_label": "reviewconfig",
+      "source_file": "src/profile.ts",
+      "source_location": "L32"
+    },
+    {
+      "id": "src_profile_suppressentry",
+      "label": "SuppressEntry",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 117,
+      "community_name": "scan.ts",
+      "file_type": "code",
+      "norm_label": "suppressentry",
+      "source_file": "src/profile.ts",
+      "source_location": "L6"
+    },
+    {
+      "id": "src_profile_suppression",
+      "label": "Suppression",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 117,
+      "community_name": "scan.ts",
+      "file_type": "code",
+      "norm_label": "suppression",
+      "source_file": "src/profile.ts",
+      "source_location": "L49"
     },
     {
       "id": "inspect_persistence_src_main_kotlin_com_leveret_inspect_db_config_databasesettings_databasesettings",
@@ -1385,19 +1398,6 @@
       "source_location": "L9"
     },
     {
-      "id": "src_review_cache_reviewcache",
-      "label": "ReviewCache",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 120,
-      "community_name": "ReviewCache",
-      "file_type": "code",
-      "norm_label": "reviewcache",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L420"
-    },
-    {
       "id": "inspect_java_classpath_src_main_kotlin_com_leveret_inspect_classpath_classpathanalysis_classpathdiagnostic",
       "label": "ClasspathDiagnostic",
       "_callable": true,
@@ -1435,84 +1435,6 @@
       "norm_label": "lockedmodule",
       "source_file": "inspect/java-classpath/src/main/kotlin/com/leveret/inspect/classpath/GradleLockfileClasspathWorker.kt",
       "source_location": "L144"
-    },
-    {
-      "id": "src_findings_severity",
-      "label": "Severity",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 123,
-      "community_name": "ref_node_crypto",
-      "file_type": "code",
-      "norm_label": "severity",
-      "source_file": "src/findings.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "src_profile_customenginedef",
-      "label": "CustomEngineDef",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 123,
-      "community_name": "ref_node_crypto",
-      "file_type": "code",
-      "norm_label": "customenginedef",
-      "source_file": "src/profile.ts",
-      "source_location": "L25"
-    },
-    {
-      "id": "src_profile_engineprofile",
-      "label": "EngineProfile",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 123,
-      "community_name": "ref_node_crypto",
-      "file_type": "code",
-      "norm_label": "engineprofile",
-      "source_file": "src/profile.ts",
-      "source_location": "L12"
-    },
-    {
-      "id": "src_profile_reviewconfig",
-      "label": "ReviewConfig",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 123,
-      "community_name": "ref_node_crypto",
-      "file_type": "code",
-      "norm_label": "reviewconfig",
-      "source_file": "src/profile.ts",
-      "source_location": "L32"
-    },
-    {
-      "id": "src_profile_suppressentry",
-      "label": "SuppressEntry",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 123,
-      "community_name": "ref_node_crypto",
-      "file_type": "code",
-      "norm_label": "suppressentry",
-      "source_file": "src/profile.ts",
-      "source_location": "L6"
-    },
-    {
-      "id": "src_profile_suppression",
-      "label": "Suppression",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 123,
-      "community_name": "ref_node_crypto",
-      "file_type": "code",
-      "norm_label": "suppression",
-      "source_file": "src/profile.ts",
-      "source_location": "L49"
     },
     {
       "id": "inspect_java_analysis_src_test_kotlin_com_leveret_inspect_java_javacompilationenvironmenttest_javacompilationenvironmenttest_firstcall_object_fileastrequestor_l531",
@@ -1684,6 +1606,58 @@
       "source_location": "L26"
     },
     {
+      "id": "src_caveat_cards_cardselector",
+      "label": "CardSelector",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 128,
+      "community_name": "FileKind",
+      "file_type": "code",
+      "norm_label": "cardselector",
+      "source_file": "src/caveat-cards.ts",
+      "source_location": "L10"
+    },
+    {
+      "id": "src_evidence_pack_filekind",
+      "label": "FileKind",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 128,
+      "community_name": "FileKind",
+      "file_type": "code",
+      "norm_label": "filekind",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L26"
+    },
+    {
+      "id": "src_runner_discovery_legs_fileassignment",
+      "label": "FileAssignment",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 128,
+      "community_name": "FileKind",
+      "file_type": "code",
+      "norm_label": "fileassignment",
+      "source_file": "src/runner/discovery-legs.ts",
+      "source_location": "L182"
+    },
+    {
+      "id": "src_runner_mechanism_checklists_mechanismchecklist",
+      "label": "MechanismChecklist",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 128,
+      "community_name": "FileKind",
+      "file_type": "code",
+      "norm_label": "mechanismchecklist",
+      "source_file": "src/runner/mechanism-checklists.ts",
+      "source_location": "L6"
+    },
+    {
       "id": "src_app_incremental_priorfinding",
       "label": "PriorFinding",
       "_callable": true,
@@ -1812,6 +1786,19 @@
       "norm_label": "evidencelead",
       "source_file": "src/evidence-pack.ts",
       "source_location": "L105"
+    },
+    {
+      "id": "src_evidence_pack_evidencepack",
+      "label": "EvidencePack",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "post-walk-leads.ts",
+      "file_type": "code",
+      "norm_label": "evidencepack",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L118"
     },
     {
       "id": "src_runner_post_walk_leads_buildoptions",
@@ -1957,6 +1944,84 @@
       "source_location": "L25"
     },
     {
+      "id": "src_context_filecontext",
+      "label": "FileContext",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 15,
+      "community_name": "exec.ts",
+      "file_type": "code",
+      "norm_label": "filecontext",
+      "source_file": "src/context.ts",
+      "source_location": "L15"
+    },
+    {
+      "id": "src_context_functioninfo",
+      "label": "FunctionInfo",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 15,
+      "community_name": "exec.ts",
+      "file_type": "code",
+      "norm_label": "functioninfo",
+      "source_file": "src/context.ts",
+      "source_location": "L7"
+    },
+    {
+      "id": "src_evidence_pack_analyzerfact",
+      "label": "AnalyzerFact",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 15,
+      "community_name": "exec.ts",
+      "file_type": "code",
+      "norm_label": "analyzerfact",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L83"
+    },
+    {
+      "id": "src_exec_executableidentity",
+      "label": "executableIdentity",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 15,
+      "community_name": "exec.ts",
+      "file_type": "code",
+      "norm_label": "executableidentity",
+      "source_file": "src/exec.ts",
+      "source_location": "L288"
+    },
+    {
+      "id": "src_exec_runopts",
+      "label": "RunOpts",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 15,
+      "community_name": "exec.ts",
+      "file_type": "code",
+      "norm_label": "runopts",
+      "source_file": "src/exec.ts",
+      "source_location": "L31"
+    },
+    {
+      "id": "src_exec_streamrunopts",
+      "label": "StreamRunOpts",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 15,
+      "community_name": "exec.ts",
+      "file_type": "code",
+      "norm_label": "streamrunopts",
+      "source_file": "src/exec.ts",
+      "source_location": "L125"
+    },
+    {
       "id": "inspect_java_analysis_src_test_kotlin_com_leveret_inspect_java_javaanalysismaintest_javaanalysismaintest",
       "label": "JavaAnalysisMainTest",
       "_callable": true,
@@ -1970,30 +2035,17 @@
       "source_location": "L14"
     },
     {
-      "id": "src_evidence_pack_analyzerfact",
-      "label": "AnalyzerFact",
+      "id": "src_change_evidence_patchevidencerequest",
+      "label": "PatchEvidenceRequest",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 17,
       "community_name": "ref_node_path",
       "file_type": "code",
-      "norm_label": "analyzerfact",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L83"
-    },
-    {
-      "id": "src_exec_executableidentity",
-      "label": "executableIdentity",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 17,
-      "community_name": "ref_node_path",
-      "file_type": "code",
-      "norm_label": "executableidentity",
-      "source_file": "src/exec.ts",
-      "source_location": "L288"
+      "norm_label": "patchevidencerequest",
+      "source_file": "src/change-evidence.ts",
+      "source_location": "L74"
     },
     {
       "id": "bench_replay_completereplay",
@@ -2204,6 +2256,19 @@
       "source_location": "L140"
     },
     {
+      "id": "src_review_cache_lastcompleted",
+      "label": "LastCompleted",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "replay.mts",
+      "file_type": "code",
+      "norm_label": "lastcompleted",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L157"
+    },
+    {
       "id": "src_runner_experiment_experimentconfiguration",
       "label": "ExperimentConfiguration",
       "_callable": true,
@@ -2262,11 +2327,24 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 19,
-      "community_name": "stableJson",
+      "community_name": "ReviewCache",
       "file_type": "code",
       "norm_label": "findingsnapshot",
       "source_file": "src/review-cache.ts",
       "source_location": "L361"
+    },
+    {
+      "id": "src_review_cache_reviewcache",
+      "label": "ReviewCache",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 19,
+      "community_name": "ReviewCache",
+      "file_type": "code",
+      "norm_label": "reviewcache",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L420"
     },
     {
       "id": "src_build_evidence_buildevidenceadmission",
@@ -2906,45 +2984,6 @@
       "source_location": "L48"
     },
     {
-      "id": "src_caveat_cards_cardselector",
-      "label": "CardSelector",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 3,
-      "community_name": "discovery-legs.ts",
-      "file_type": "code",
-      "norm_label": "cardselector",
-      "source_file": "src/caveat-cards.ts",
-      "source_location": "L10"
-    },
-    {
-      "id": "src_evidence_pack_evidencepack",
-      "label": "EvidencePack",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 3,
-      "community_name": "discovery-legs.ts",
-      "file_type": "code",
-      "norm_label": "evidencepack",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L118"
-    },
-    {
-      "id": "src_evidence_pack_filekind",
-      "label": "FileKind",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 3,
-      "community_name": "discovery-legs.ts",
-      "file_type": "code",
-      "norm_label": "filekind",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L26"
-    },
-    {
       "id": "src_runner_discovery_legs_definitionsource",
       "label": "DefinitionSource",
       "_callable": true,
@@ -2997,17 +3036,17 @@
       "source_location": "L217"
     },
     {
-      "id": "src_runner_discovery_legs_fileassignment",
-      "label": "FileAssignment",
+      "id": "src_runner_discovery_legs_discoverymode",
+      "label": "discoveryMode",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 3,
       "community_name": "discovery-legs.ts",
       "file_type": "code",
-      "norm_label": "fileassignment",
+      "norm_label": "discoverymode",
       "source_file": "src/runner/discovery-legs.ts",
-      "source_location": "L182"
+      "source_location": "L166"
     },
     {
       "id": "src_runner_discovery_legs_localdiscoveryoutput",
@@ -3036,6 +3075,32 @@
       "source_location": "L397"
     },
     {
+      "id": "src_runner_discovery_legs_specializeddiscoveryresult",
+      "label": "SpecializedDiscoveryResult",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 3,
+      "community_name": "discovery-legs.ts",
+      "file_type": "code",
+      "norm_label": "specializeddiscoveryresult",
+      "source_file": "src/runner/discovery-legs.ts",
+      "source_location": "L415"
+    },
+    {
+      "id": "src_runner_experiment_discoveryscheduler",
+      "label": "discoveryScheduler",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 3,
+      "community_name": "discovery-legs.ts",
+      "file_type": "code",
+      "norm_label": "discoveryscheduler",
+      "source_file": "src/runner/experiment.ts",
+      "source_location": "L27"
+    },
+    {
       "id": "src_runner_mechanism_checklists_checklistleg",
       "label": "ChecklistLeg",
       "_callable": true,
@@ -3062,17 +3127,17 @@
       "source_location": "L22"
     },
     {
-      "id": "src_runner_mechanism_checklists_mechanismchecklist",
-      "label": "MechanismChecklist",
+      "id": "src_runner_pi_piruntimeconfig",
+      "label": "piRuntimeConfig",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 3,
       "community_name": "discovery-legs.ts",
       "file_type": "code",
-      "norm_label": "mechanismchecklist",
-      "source_file": "src/runner/mechanism-checklists.ts",
-      "source_location": "L6"
+      "norm_label": "piruntimeconfig",
+      "source_file": "src/runner/pi.ts",
+      "source_location": "L113"
     },
     {
       "id": "src_runner_pi_workitemcontext",
@@ -3855,19 +3920,6 @@
       "source_location": "L10"
     },
     {
-      "id": "src_prompts_contractname",
-      "label": "ContractName",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 42,
-      "community_name": "memory.ts",
-      "file_type": "code",
-      "norm_label": "contractname",
-      "source_file": "src/prompts.ts",
-      "source_location": "L19"
-    },
-    {
       "id": "src_app_webhook_job",
       "label": "Job",
       "_callable": true,
@@ -4113,19 +4165,6 @@
       "norm_label": "numstatentry",
       "source_file": "src/change-evidence.ts",
       "source_location": "L128"
-    },
-    {
-      "id": "src_change_evidence_patchevidencerequest",
-      "label": "PatchEvidenceRequest",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "change-evidence.ts",
-      "file_type": "code",
-      "norm_label": "patchevidencerequest",
-      "source_file": "src/change-evidence.ts",
-      "source_location": "L74"
     },
     {
       "id": "src_change_evidence_patchevidenceresponse",
@@ -4739,45 +4778,6 @@
       "source_location": "L56"
     },
     {
-      "id": "src_runner_discovery_legs_discoverymode",
-      "label": "discoveryMode",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 7,
-      "community_name": "pi.ts",
-      "file_type": "code",
-      "norm_label": "discoverymode",
-      "source_file": "src/runner/discovery-legs.ts",
-      "source_location": "L166"
-    },
-    {
-      "id": "src_runner_discovery_legs_specializeddiscoveryresult",
-      "label": "SpecializedDiscoveryResult",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 7,
-      "community_name": "pi.ts",
-      "file_type": "code",
-      "norm_label": "specializeddiscoveryresult",
-      "source_file": "src/runner/discovery-legs.ts",
-      "source_location": "L415"
-    },
-    {
-      "id": "src_runner_experiment_discoveryscheduler",
-      "label": "discoveryScheduler",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 7,
-      "community_name": "pi.ts",
-      "file_type": "code",
-      "norm_label": "discoveryscheduler",
-      "source_file": "src/runner/experiment.ts",
-      "source_location": "L27"
-    },
-    {
       "id": "src_runner_experiment_loadedrouting",
       "label": "LoadedRouting",
       "_callable": true,
@@ -4828,19 +4828,6 @@
       "norm_label": "pirunnerparams",
       "source_file": "src/runner/pi.ts",
       "source_location": "L74"
-    },
-    {
-      "id": "src_runner_pi_piruntimeconfig",
-      "label": "piRuntimeConfig",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 7,
-      "community_name": "pi.ts",
-      "file_type": "code",
-      "norm_label": "piruntimeconfig",
-      "source_file": "src/runner/pi.ts",
-      "source_location": "L113"
     },
     {
       "id": "src_runner_pi_promptcontentidentity",
@@ -5304,7 +5291,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "logger",
       "source_file": "src/app/log.ts",
@@ -5317,7 +5304,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "prefetchoptions",
       "source_file": "src/runner/prefetch-serena.ts",
@@ -5330,7 +5317,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "serenafixture",
       "source_file": "src/runner/serena.ts",
@@ -5413,6 +5400,19 @@
       "norm_label": "distributiontest",
       "source_file": "inspect/runtime/src/test/kotlin/com/leveret/inspect/runtime/DistributionTest.kt",
       "source_location": "L9"
+    },
+    {
+      "id": "src_prompts_contractname",
+      "label": "ContractName",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 85,
+      "community_name": "prompts.ts",
+      "file_type": "code",
+      "norm_label": "contractname",
+      "source_file": "src/prompts.ts",
+      "source_location": "L19"
     },
     {
       "id": "bench_report_adjudicationrecord",
@@ -6583,90 +6583,6 @@
       "source_location": "L10"
     },
     {
-      "id": "src_evidence_pack_analyzerfacts",
-      "label": "analyzerFacts()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "evidence-pack.ts",
-      "file_type": "code",
-      "norm_label": "analyzerfacts()",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L484"
-    },
-    {
-      "id": "src_evidence_pack_boundedprojectfacts",
-      "label": "boundedProjectFacts()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "evidence-pack.ts",
-      "file_type": "code",
-      "norm_label": "boundedprojectfacts()",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L262"
-    },
-    {
-      "id": "src_evidence_pack_canonicalsha256",
-      "label": "canonicalSha256()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "evidence-pack.ts",
-      "file_type": "code",
-      "norm_label": "canonicalsha256()",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L205"
-    },
-    {
-      "id": "src_evidence_pack_changemanifestsha256",
-      "label": "changeManifestSha256()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "evidence-pack.ts",
-      "file_type": "code",
-      "norm_label": "changemanifestsha256()",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L209"
-    },
-    {
-      "id": "src_evidence_pack_clip",
-      "label": "clip()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "evidence-pack.ts",
-      "file_type": "code",
-      "norm_label": "clip()",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L196"
-    },
-    {
-      "id": "src_evidence_pack_createevidencepack",
-      "label": "createEvidencePack()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "evidence-pack.ts",
-      "file_type": "code",
-      "norm_label": "createevidencepack()",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L541"
-    },
-    {
-      "id": "src_evidence_pack_customdefinition",
-      "label": "customDefinition()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "evidence-pack.ts",
-      "file_type": "code",
-      "norm_label": "customdefinition()",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L479"
-    },
-    {
       "id": "src_evidence_pack_defaultshell",
       "label": "defaultShell()",
       "_callable": true,
@@ -6679,30 +6595,6 @@
       "source_location": "L293"
     },
     {
-      "id": "src_evidence_pack_disposition",
-      "label": "disposition()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "evidence-pack.ts",
-      "file_type": "code",
-      "norm_label": "disposition()",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L250"
-    },
-    {
-      "id": "src_evidence_pack_evidenceid",
-      "label": "evidenceId()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "evidence-pack.ts",
-      "file_type": "code",
-      "norm_label": "evidenceid()",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L213"
-    },
-    {
       "id": "src_evidence_pack_exactkeys",
       "label": "exactKeys()",
       "_callable": true,
@@ -6713,18 +6605,6 @@
       "norm_label": "exactkeys()",
       "source_file": "src/evidence-pack.ts",
       "source_location": "L605"
-    },
-    {
-      "id": "src_evidence_pack_haspart",
-      "label": "hasPart()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "evidence-pack.ts",
-      "file_type": "code",
-      "norm_label": "haspart()",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L219"
     },
     {
       "id": "src_evidence_pack_literalcommands",
@@ -6751,30 +6631,6 @@
       "source_location": "L698"
     },
     {
-      "id": "src_evidence_pack_normalizeleads",
-      "label": "normalizeLeads()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "evidence-pack.ts",
-      "file_type": "code",
-      "norm_label": "normalizeleads()",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L425"
-    },
-    {
-      "id": "src_evidence_pack_optionalfilesha256",
-      "label": "optionalFileSha256()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "evidence-pack.ts",
-      "file_type": "code",
-      "norm_label": "optionalfilesha256()",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L460"
-    },
-    {
       "id": "src_evidence_pack_outsidecheckout",
       "label": "outsideCheckout()",
       "_callable": true,
@@ -6785,30 +6641,6 @@
       "norm_label": "outsidecheckout()",
       "source_file": "src/evidence-pack.ts",
       "source_location": "L656"
-    },
-    {
-      "id": "src_evidence_pack_pathbase",
-      "label": "pathBase()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "evidence-pack.ts",
-      "file_type": "code",
-      "norm_label": "pathbase()",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L214"
-    },
-    {
-      "id": "src_evidence_pack_pathparts",
-      "label": "pathParts()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "evidence-pack.ts",
-      "file_type": "code",
-      "norm_label": "pathparts()",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L215"
     },
     {
       "id": "src_evidence_pack_record",
@@ -6833,18 +6665,6 @@
       "norm_label": "relevantfacts()",
       "source_file": "src/evidence-pack.ts",
       "source_location": "L529"
-    },
-    {
-      "id": "src_evidence_pack_rulesources",
-      "label": "ruleSources()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "evidence-pack.ts",
-      "file_type": "code",
-      "norm_label": "rulesources()",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L466"
     },
     {
       "id": "src_evidence_pack_saferepofile",
@@ -6931,18 +6751,6 @@
       "source_location": "L671"
     },
     {
-      "id": "src_evidence_pack_workflowfacts",
-      "label": "workflowFacts()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "evidence-pack.ts",
-      "file_type": "code",
-      "norm_label": "workflowfacts()",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L414"
-    },
-    {
       "id": "src_evidence_pack_workflowshell",
       "label": "workflowShell()",
       "_callable": true,
@@ -6979,6 +6787,90 @@
       "source_location": "L319"
     },
     {
+      "id": "src_review_cache_boundarydigest",
+      "label": "boundaryDigest()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 10,
+      "community_name": "review-cache.ts",
+      "file_type": "code",
+      "norm_label": "boundarydigest()",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L271"
+    },
+    {
+      "id": "src_review_cache_dependencyrolereason",
+      "label": "dependencyRoleReason()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 10,
+      "community_name": "review-cache.ts",
+      "file_type": "code",
+      "norm_label": "dependencyrolereason()",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L302"
+    },
+    {
+      "id": "src_review_cache_incrementaldependencyboundary",
+      "label": "incrementalDependencyBoundary()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 10,
+      "community_name": "review-cache.ts",
+      "file_type": "code",
+      "norm_label": "incrementaldependencyboundary()",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L312"
+    },
+    {
+      "id": "src_review_cache_parsenamestatusz",
+      "label": "parseNameStatusZ()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 10,
+      "community_name": "review-cache.ts",
+      "file_type": "code",
+      "norm_label": "parsenamestatusz()",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L278"
+    },
+    {
+      "id": "src_review_cache_reviewcache_checkoutmatches",
+      "label": ".checkoutMatches()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 10,
+      "community_name": "review-cache.ts",
+      "file_type": "code",
+      "norm_label": ".checkoutmatches()",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L473"
+    },
+    {
+      "id": "src_review_cache_saferelativepath",
+      "label": "safeRelativePath()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 10,
+      "community_name": "review-cache.ts",
+      "file_type": "code",
+      "norm_label": "saferelativepath()",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L236"
+    },
+    {
+      "id": "src_review_cache_trackedpaths",
+      "label": "trackedPaths()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 10,
+      "community_name": "review-cache.ts",
+      "file_type": "code",
+      "norm_label": "trackedpaths()",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L294"
+    },
+    {
       "id": "inspect_java_classpath_src_main_kotlin_com_leveret_inspect_classpath_cacheonlyclasspathworker_cacheonlymodelresolver_resolvemodel",
       "label": ".resolveModel()",
       "_callable": true,
@@ -7001,18 +6893,6 @@
       "norm_label": ".gettransporterfactories()",
       "source_file": "inspect/java-classpath/src/main/kotlin/com/leveret/inspect/classpath/CacheOnlyClasspathWorker.kt",
       "source_location": "L240"
-    },
-    {
-      "id": "src_audit_currentaudittrace",
-      "label": "currentAuditTrace()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "currentaudittrace()",
-      "source_file": "src/audit.ts",
-      "source_location": "L863"
     },
     {
       "id": "src_audit_sanitizeauditvalue",
@@ -7051,78 +6931,6 @@
       "source_location": "L113"
     },
     {
-      "id": "src_context_context",
-      "label": "context()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "context()",
-      "source_file": "src/context.ts",
-      "source_location": "L49"
-    },
-    {
-      "id": "src_context_parselizard",
-      "label": "parseLizard()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "parselizard()",
-      "source_file": "src/context.ts",
-      "source_location": "L29"
-    },
-    {
-      "id": "src_evidence_pack_commit",
-      "label": "commit()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "commit()",
-      "source_file": "src/evidence-pack.ts",
-      "source_location": "L665"
-    },
-    {
-      "id": "src_exec_capturesubprocess",
-      "label": "captureSubprocess()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "capturesubprocess()",
-      "source_file": "src/exec.ts",
-      "source_location": "L68"
-    },
-    {
-      "id": "src_exec_registerownedgroup",
-      "label": "registerOwnedGroup()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "registerownedgroup()",
-      "source_file": "src/exec.ts",
-      "source_location": "L144"
-    },
-    {
-      "id": "src_exec_run",
-      "label": "run()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "run()",
-      "source_file": "src/exec.ts",
-      "source_location": "L92"
-    },
-    {
       "id": "src_exec_runstreaming",
       "label": "runStreaming()",
       "_callable": true,
@@ -7145,54 +6953,6 @@
       "norm_label": "safechildenvironment()",
       "source_file": "src/exec.ts",
       "source_location": "L84"
-    },
-    {
-      "id": "src_exec_scratchpath",
-      "label": "scratchPath()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "scratchpath()",
-      "source_file": "src/exec.ts",
-      "source_location": "L280"
-    },
-    {
-      "id": "src_exec_streamrunopts_onstderr",
-      "label": ".onStderr()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": ".onstderr()",
-      "source_file": "src/exec.ts",
-      "source_location": "L135"
-    },
-    {
-      "id": "src_exec_streamrunopts_onstdout",
-      "label": ".onStdout()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": ".onstdout()",
-      "source_file": "src/exec.ts",
-      "source_location": "L134"
-    },
-    {
-      "id": "src_exec_which",
-      "label": "which()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "which()",
-      "source_file": "src/exec.ts",
-      "source_location": "L284"
     },
     {
       "id": "src_runner_pi_tools_annotateevidence",
@@ -8191,6 +7951,18 @@
       "source_location": "L23"
     },
     {
+      "id": "bench_replay_scan_git",
+      "label": "git()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 117,
+      "community_name": "scan.ts",
+      "file_type": "code",
+      "norm_label": "git()",
+      "source_file": "bench/replay-scan.mts",
+      "source_location": "L20"
+    },
+    {
       "id": "src_delta_basefindingkeys",
       "label": "baseFindingKeys()",
       "_callable": true,
@@ -8743,100 +8515,148 @@
       "source_location": "L16"
     },
     {
-      "id": "src_review_cache_reviewcache_commitcompleted",
-      "label": ".commitCompleted()",
+      "id": "src_evidence_pack_analyzerfacts",
+      "label": "analyzerFacts()",
       "_callable": true,
       "_origin": "ast",
       "community": 120,
-      "community_name": "ReviewCache",
+      "community_name": "createEvidencePack",
       "file_type": "code",
-      "norm_label": ".commitcompleted()",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L583"
+      "norm_label": "analyzerfacts()",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L484"
     },
     {
-      "id": "src_review_cache_reviewcache_discard",
-      "label": ".discard()",
+      "id": "src_evidence_pack_boundedprojectfacts",
+      "label": "boundedProjectFacts()",
       "_callable": true,
       "_origin": "ast",
       "community": 120,
-      "community_name": "ReviewCache",
+      "community_name": "createEvidencePack",
       "file_type": "code",
-      "norm_label": ".discard()",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L614"
+      "norm_label": "boundedprojectfacts()",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L262"
     },
     {
-      "id": "src_review_cache_reviewcache_entryroot",
-      "label": ".entryRoot()",
+      "id": "src_evidence_pack_canonicalsha256",
+      "label": "canonicalSha256()",
       "_callable": true,
       "_origin": "ast",
       "community": 120,
-      "community_name": "ReviewCache",
+      "community_name": "createEvidencePack",
       "file_type": "code",
-      "norm_label": ".entryroot()",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L471"
+      "norm_label": "canonicalsha256()",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L205"
     },
     {
-      "id": "src_review_cache_reviewcache_prroot",
-      "label": ".prRoot()",
+      "id": "src_evidence_pack_changemanifestsha256",
+      "label": "changeManifestSha256()",
       "_callable": true,
       "_origin": "ast",
       "community": 120,
-      "community_name": "ReviewCache",
+      "community_name": "createEvidencePack",
       "file_type": "code",
-      "norm_label": ".prroot()",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L470"
+      "norm_label": "changemanifestsha256()",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L209"
     },
     {
-      "id": "src_review_cache_reviewcache_prune",
-      "label": ".prune()",
+      "id": "src_evidence_pack_clip",
+      "label": "clip()",
       "_callable": true,
       "_origin": "ast",
       "community": 120,
-      "community_name": "ReviewCache",
+      "community_name": "createEvidencePack",
       "file_type": "code",
-      "norm_label": ".prune()",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L616"
+      "norm_label": "clip()",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L196"
     },
     {
-      "id": "src_review_cache_reviewcache_readentry",
-      "label": ".readEntry()",
+      "id": "src_evidence_pack_createevidencepack",
+      "label": "createEvidencePack()",
       "_callable": true,
       "_origin": "ast",
       "community": 120,
-      "community_name": "ReviewCache",
+      "community_name": "createEvidencePack",
       "file_type": "code",
-      "norm_label": ".readentry()",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L491"
+      "norm_label": "createevidencepack()",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L541"
     },
     {
-      "id": "src_review_cache_reviewcache_readlastcompleted",
-      "label": ".readLastCompleted()",
+      "id": "src_evidence_pack_customdefinition",
+      "label": "customDefinition()",
       "_callable": true,
       "_origin": "ast",
       "community": 120,
-      "community_name": "ReviewCache",
+      "community_name": "createEvidencePack",
       "file_type": "code",
-      "norm_label": ".readlastcompleted()",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L570"
+      "norm_label": "customdefinition()",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L479"
     },
     {
-      "id": "src_review_cache_saferead",
-      "label": "safeRead()",
+      "id": "src_evidence_pack_evidenceid",
+      "label": "evidenceId()",
       "_callable": true,
       "_origin": "ast",
       "community": 120,
-      "community_name": "ReviewCache",
+      "community_name": "createEvidencePack",
       "file_type": "code",
-      "norm_label": "saferead()",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L250"
+      "norm_label": "evidenceid()",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L213"
+    },
+    {
+      "id": "src_evidence_pack_normalizeleads",
+      "label": "normalizeLeads()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 120,
+      "community_name": "createEvidencePack",
+      "file_type": "code",
+      "norm_label": "normalizeleads()",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L425"
+    },
+    {
+      "id": "src_evidence_pack_optionalfilesha256",
+      "label": "optionalFileSha256()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 120,
+      "community_name": "createEvidencePack",
+      "file_type": "code",
+      "norm_label": "optionalfilesha256()",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L460"
+    },
+    {
+      "id": "src_evidence_pack_rulesources",
+      "label": "ruleSources()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 120,
+      "community_name": "createEvidencePack",
+      "file_type": "code",
+      "norm_label": "rulesources()",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L466"
+    },
+    {
+      "id": "src_evidence_pack_workflowfacts",
+      "label": "workflowFacts()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 120,
+      "community_name": "createEvidencePack",
+      "file_type": "code",
+      "norm_label": "workflowfacts()",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L414"
     },
     {
       "id": "inspect_java_classpath_src_main_kotlin_com_leveret_inspect_classpath_gradlelockfileclasspathworker_gradlelockfileclasspathworker_cataloghasdynamicversions",
@@ -9472,91 +9292,55 @@
       "file_type": "code",
       "norm_label": "launch()",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L1511"
+      "source_location": "L1525"
     },
     {
-      "id": "src_review_cache_boundarydigest",
-      "label": "boundaryDigest()",
+      "id": "src_evidence_pack_disposition",
+      "label": "disposition()",
       "_callable": true,
       "_origin": "ast",
       "community": 128,
-      "community_name": "incrementalDependencyBoundary",
+      "community_name": "FileKind",
       "file_type": "code",
-      "norm_label": "boundarydigest()",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L271"
+      "norm_label": "disposition()",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L250"
     },
     {
-      "id": "src_review_cache_dependencyrolereason",
-      "label": "dependencyRoleReason()",
+      "id": "src_evidence_pack_haspart",
+      "label": "hasPart()",
       "_callable": true,
       "_origin": "ast",
       "community": 128,
-      "community_name": "incrementalDependencyBoundary",
+      "community_name": "FileKind",
       "file_type": "code",
-      "norm_label": "dependencyrolereason()",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L302"
+      "norm_label": "haspart()",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L219"
     },
     {
-      "id": "src_review_cache_incrementaldependencyboundary",
-      "label": "incrementalDependencyBoundary()",
+      "id": "src_evidence_pack_pathbase",
+      "label": "pathBase()",
       "_callable": true,
       "_origin": "ast",
       "community": 128,
-      "community_name": "incrementalDependencyBoundary",
+      "community_name": "FileKind",
       "file_type": "code",
-      "norm_label": "incrementaldependencyboundary()",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L312"
+      "norm_label": "pathbase()",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L214"
     },
     {
-      "id": "src_review_cache_parsenamestatusz",
-      "label": "parseNameStatusZ()",
+      "id": "src_evidence_pack_pathparts",
+      "label": "pathParts()",
       "_callable": true,
       "_origin": "ast",
       "community": 128,
-      "community_name": "incrementalDependencyBoundary",
+      "community_name": "FileKind",
       "file_type": "code",
-      "norm_label": "parsenamestatusz()",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L278"
-    },
-    {
-      "id": "src_review_cache_reviewcache_checkoutmatches",
-      "label": ".checkoutMatches()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 128,
-      "community_name": "incrementalDependencyBoundary",
-      "file_type": "code",
-      "norm_label": ".checkoutmatches()",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L473"
-    },
-    {
-      "id": "src_review_cache_saferelativepath",
-      "label": "safeRelativePath()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 128,
-      "community_name": "incrementalDependencyBoundary",
-      "file_type": "code",
-      "norm_label": "saferelativepath()",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L236"
-    },
-    {
-      "id": "src_review_cache_trackedpaths",
-      "label": "trackedPaths()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 128,
-      "community_name": "incrementalDependencyBoundary",
-      "file_type": "code",
-      "norm_label": "trackedpaths()",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L294"
+      "norm_label": "pathparts()",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L215"
     },
     {
       "id": "src_app_incremental_bare",
@@ -10099,268 +9883,148 @@
       "source_location": "L139"
     },
     {
-      "id": "src_change_evidence_ensurechangeevidence",
-      "label": "ensureChangeEvidence()",
+      "id": "src_app_graph_ensuregraph",
+      "label": "ensureGraph()",
       "_callable": true,
       "_origin": "ast",
       "community": 15,
-      "community_name": "pi-runner.test.ts",
+      "community_name": "exec.ts",
       "file_type": "code",
-      "norm_label": "ensurechangeevidence()",
-      "source_file": "src/change-evidence.ts",
-      "source_location": "L634"
+      "norm_label": "ensuregraph()",
+      "source_file": "src/app/graph.ts",
+      "source_location": "L19"
     },
     {
-      "id": "src_runner_discovery_legs_specializedreviewoutput",
-      "label": "specializedReviewOutput()",
+      "id": "src_audit_currentaudittrace",
+      "label": "currentAuditTrace()",
       "_callable": true,
       "_origin": "ast",
       "community": 15,
-      "community_name": "pi-runner.test.ts",
+      "community_name": "exec.ts",
       "file_type": "code",
-      "norm_label": "specializedreviewoutput()",
-      "source_file": "src/runner/discovery-legs.ts",
-      "source_location": "L497"
+      "norm_label": "currentaudittrace()",
+      "source_file": "src/audit.ts",
+      "source_location": "L863"
     },
     {
-      "id": "src_runner_pi_classifyauth",
-      "label": "classifyAuth()",
+      "id": "src_context_context",
+      "label": "context()",
       "_callable": true,
       "_origin": "ast",
       "community": 15,
-      "community_name": "pi-runner.test.ts",
+      "community_name": "exec.ts",
       "file_type": "code",
-      "norm_label": "classifyauth()",
-      "source_file": "src/runner/pi.ts",
-      "source_location": "L236"
+      "norm_label": "context()",
+      "source_file": "src/context.ts",
+      "source_location": "L49"
     },
     {
-      "id": "src_runner_pi_loadworkitemcontext",
-      "label": "loadWorkItemContext()",
+      "id": "src_context_parselizard",
+      "label": "parseLizard()",
       "_callable": true,
       "_origin": "ast",
       "community": 15,
-      "community_name": "pi-runner.test.ts",
+      "community_name": "exec.ts",
       "file_type": "code",
-      "norm_label": "loadworkitemcontext()",
-      "source_file": "src/runner/pi.ts",
-      "source_location": "L96"
+      "norm_label": "parselizard()",
+      "source_file": "src/context.ts",
+      "source_location": "L29"
     },
     {
-      "id": "src_runner_pi_picontract",
-      "label": "piContract()",
+      "id": "src_evidence_pack_commit",
+      "label": "commit()",
       "_callable": true,
       "_origin": "ast",
       "community": 15,
-      "community_name": "pi-runner.test.ts",
+      "community_name": "exec.ts",
       "file_type": "code",
-      "norm_label": "picontract()",
-      "source_file": "src/runner/pi.ts",
-      "source_location": "L252"
+      "norm_label": "commit()",
+      "source_file": "src/evidence-pack.ts",
+      "source_location": "L665"
     },
     {
-      "id": "src_runner_pi_runmain",
-      "label": "runMain()",
+      "id": "src_exec_capturesubprocess",
+      "label": "captureSubprocess()",
       "_callable": true,
       "_origin": "ast",
       "community": 15,
-      "community_name": "pi-runner.test.ts",
+      "community_name": "exec.ts",
       "file_type": "code",
-      "norm_label": "runmain()",
-      "source_file": "src/runner/pi.ts",
-      "source_location": "L696"
+      "norm_label": "capturesubprocess()",
+      "source_file": "src/exec.ts",
+      "source_location": "L68"
     },
     {
-      "id": "src_runner_pi_startupindexproblem",
-      "label": "startupIndexProblem()",
+      "id": "src_exec_registerownedgroup",
+      "label": "registerOwnedGroup()",
       "_callable": true,
       "_origin": "ast",
       "community": 15,
-      "community_name": "pi-runner.test.ts",
+      "community_name": "exec.ts",
       "file_type": "code",
-      "norm_label": "startupindexproblem()",
-      "source_file": "src/runner/pi.ts",
-      "source_location": "L136"
+      "norm_label": "registerownedgroup()",
+      "source_file": "src/exec.ts",
+      "source_location": "L144"
     },
     {
-      "id": "src_runner_pi_toolmetricssummary",
-      "label": "toolMetricsSummary()",
+      "id": "src_exec_run",
+      "label": "run()",
       "_callable": true,
       "_origin": "ast",
       "community": 15,
-      "community_name": "pi-runner.test.ts",
+      "community_name": "exec.ts",
       "file_type": "code",
-      "norm_label": "toolmetricssummary()",
-      "source_file": "src/runner/pi.ts",
-      "source_location": "L240"
+      "norm_label": "run()",
+      "source_file": "src/exec.ts",
+      "source_location": "L92"
     },
     {
-      "id": "src_runner_pi_tools_zodphasesubmission",
-      "label": "zodPhaseSubmission()",
+      "id": "src_exec_scratchpath",
+      "label": "scratchPath()",
       "_callable": true,
       "_origin": "ast",
       "community": 15,
-      "community_name": "pi-runner.test.ts",
+      "community_name": "exec.ts",
       "file_type": "code",
-      "norm_label": "zodphasesubmission()",
-      "source_file": "src/runner/pi-tools.ts",
-      "source_location": "L98"
+      "norm_label": "scratchpath()",
+      "source_file": "src/exec.ts",
+      "source_location": "L280"
     },
     {
-      "id": "src_runner_verify_output_assembleverifieroutput",
-      "label": "assembleVerifierOutput()",
+      "id": "src_exec_streamrunopts_onstderr",
+      "label": ".onStderr()",
       "_callable": true,
       "_origin": "ast",
       "community": 15,
-      "community_name": "pi-runner.test.ts",
+      "community_name": "exec.ts",
       "file_type": "code",
-      "norm_label": "assembleverifieroutput()",
-      "source_file": "src/runner/verify-output.ts",
-      "source_location": "L233"
+      "norm_label": ".onstderr()",
+      "source_file": "src/exec.ts",
+      "source_location": "L135"
     },
     {
-      "id": "src_runner_verify_output_mergeverificationcoverage",
-      "label": "mergeVerificationCoverage()",
+      "id": "src_exec_streamrunopts_onstdout",
+      "label": ".onStdout()",
       "_callable": true,
       "_origin": "ast",
       "community": 15,
-      "community_name": "pi-runner.test.ts",
+      "community_name": "exec.ts",
       "file_type": "code",
-      "norm_label": "mergeverificationcoverage()",
-      "source_file": "src/runner/verify-output.ts",
-      "source_location": "L382"
+      "norm_label": ".onstdout()",
+      "source_file": "src/exec.ts",
+      "source_location": "L134"
     },
     {
-      "id": "src_runner_verify_output_normalizeverifyoutput",
-      "label": "normalizeVerifyOutput()",
+      "id": "src_exec_which",
+      "label": "which()",
       "_callable": true,
       "_origin": "ast",
       "community": 15,
-      "community_name": "pi-runner.test.ts",
+      "community_name": "exec.ts",
       "file_type": "code",
-      "norm_label": "normalizeverifyoutput()",
-      "source_file": "src/runner/verify-output.ts",
-      "source_location": "L157"
-    },
-    {
-      "id": "src_work_item_readworkitem",
-      "label": "readWorkItem()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 15,
-      "community_name": "pi-runner.test.ts",
-      "file_type": "code",
-      "norm_label": "readworkitem()",
-      "source_file": "src/work-item.ts",
-      "source_location": "L163"
-    },
-    {
-      "id": "test_pi_runner_test_abort",
-      "label": "abort()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 15,
-      "community_name": "pi-runner.test.ts",
-      "file_type": "code",
-      "norm_label": "abort()",
-      "source_file": "test/pi-runner.test.ts",
-      "source_location": "L753"
-    },
-    {
-      "id": "test_pi_runner_test_dispose",
-      "label": "dispose()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 15,
-      "community_name": "pi-runner.test.ts",
-      "file_type": "code",
-      "norm_label": "dispose()",
-      "source_file": "test/pi-runner.test.ts",
-      "source_location": "L754"
-    },
-    {
-      "id": "test_pi_runner_test_hostruntime",
-      "label": "hostRuntime()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 15,
-      "community_name": "pi-runner.test.ts",
-      "file_type": "code",
-      "norm_label": "hostruntime()",
-      "source_file": "test/pi-runner.test.ts",
-      "source_location": "L1027"
-    },
-    {
-      "id": "test_pi_runner_test_onstdout",
-      "label": "onStdout()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 15,
-      "community_name": "pi-runner.test.ts",
-      "file_type": "code",
-      "norm_label": "onstdout()",
-      "source_file": "test/pi-runner.test.ts",
-      "source_location": "L1279"
-    },
-    {
-      "id": "test_pi_runner_test_prompt",
-      "label": "prompt()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 15,
-      "community_name": "pi-runner.test.ts",
-      "file_type": "code",
-      "norm_label": "prompt()",
-      "source_file": "test/pi-runner.test.ts",
-      "source_location": "L750"
-    },
-    {
-      "id": "test_pi_runner_test_subscribe",
-      "label": "subscribe()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 15,
-      "community_name": "pi-runner.test.ts",
-      "file_type": "code",
-      "norm_label": "subscribe()",
-      "source_file": "test/pi-runner.test.ts",
-      "source_location": "L749"
-    },
-    {
-      "id": "test_pi_runner_test_tooloptions",
-      "label": "toolOptions()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 15,
-      "community_name": "pi-runner.test.ts",
-      "file_type": "code",
-      "norm_label": "tooloptions()",
-      "source_file": "test/pi-runner.test.ts",
-      "source_location": "L67"
-    },
-    {
-      "id": "test_pi_runner_test_toolpayload",
-      "label": "toolPayload()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 15,
-      "community_name": "pi-runner.test.ts",
-      "file_type": "code",
-      "norm_label": "toolpayload()",
-      "source_file": "test/pi-runner.test.ts",
-      "source_location": "L77"
-    },
-    {
-      "id": "test_pi_runner_test_validverification",
-      "label": "validVerification()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 15,
-      "community_name": "pi-runner.test.ts",
-      "file_type": "code",
-      "norm_label": "validverification()",
-      "source_file": "test/pi-runner.test.ts",
-      "source_location": "L551"
+      "norm_label": "which()",
+      "source_file": "src/exec.ts",
+      "source_location": "L284"
     },
     {
       "id": "inspect_java_analysis_src_test_kotlin_com_leveret_inspect_java_javaanalysismaintest_javaanalysismaintest_execute",
@@ -10435,30 +10099,6 @@
       "source_location": "L115"
     },
     {
-      "id": "bench_replay_scan_git",
-      "label": "git()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 17,
-      "community_name": "ref_node_path",
-      "file_type": "code",
-      "norm_label": "git()",
-      "source_file": "bench/replay-scan.mts",
-      "source_location": "L20"
-    },
-    {
-      "id": "src_app_graph_ensuregraph",
-      "label": "ensureGraph()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 17,
-      "community_name": "ref_node_path",
-      "file_type": "code",
-      "norm_label": "ensuregraph()",
-      "source_file": "src/app/graph.ts",
-      "source_location": "L19"
-    },
-    {
       "id": "src_app_graphify_ensuregraphify",
       "label": "ensureGraphify()",
       "_callable": true,
@@ -10517,6 +10157,18 @@
       "norm_label": "sha256()",
       "source_file": "test/build-java-inputs.test.ts",
       "source_location": "L15"
+    },
+    {
+      "id": "test_change_evidence_test_git",
+      "label": "git()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 17,
+      "community_name": "ref_node_path",
+      "file_type": "code",
+      "norm_label": "git()",
+      "source_file": "test/change-evidence.test.ts",
+      "source_location": "L25"
     },
     {
       "id": "test_context_test_git",
@@ -10615,6 +10267,18 @@
       "source_location": "L14"
     },
     {
+      "id": "bench_replay_assertunique",
+      "label": "assertUnique()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "replay.mts",
+      "file_type": "code",
+      "norm_label": "assertunique()",
+      "source_file": "bench/replay.mts",
+      "source_location": "L75"
+    },
+    {
       "id": "bench_replay_capabilitiesmatch",
       "label": "capabilitiesMatch()",
       "_callable": true,
@@ -10651,6 +10315,42 @@
       "source_location": "L227"
     },
     {
+      "id": "bench_replay_corpusidentity",
+      "label": "corpusIdentity()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "replay.mts",
+      "file_type": "code",
+      "norm_label": "corpusidentity()",
+      "source_file": "bench/replay.mts",
+      "source_location": "L74"
+    },
+    {
+      "id": "bench_replay_digest",
+      "label": "digest()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "replay.mts",
+      "file_type": "code",
+      "norm_label": "digest()",
+      "source_file": "bench/replay.mts",
+      "source_location": "L73"
+    },
+    {
+      "id": "bench_replay_executepreconditions",
+      "label": "executePreconditions()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "replay.mts",
+      "file_type": "code",
+      "norm_label": "executepreconditions()",
+      "source_file": "bench/replay.mts",
+      "source_location": "L116"
+    },
+    {
       "id": "bench_replay_experimentconfigurationgaps",
       "label": "experimentConfigurationGaps()",
       "_callable": true,
@@ -10685,6 +10385,90 @@
       "norm_label": "invalid()",
       "source_file": "bench/replay.mts",
       "source_location": "L241"
+    },
+    {
+      "id": "bench_replay_loadcorpus",
+      "label": "loadCorpus()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "replay.mts",
+      "file_type": "code",
+      "norm_label": "loadcorpus()",
+      "source_file": "bench/replay.mts",
+      "source_location": "L82"
+    },
+    {
+      "id": "bench_replay_loadexperimentmanifest",
+      "label": "loadExperimentManifest()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "replay.mts",
+      "file_type": "code",
+      "norm_label": "loadexperimentmanifest()",
+      "source_file": "bench/replay.mts",
+      "source_location": "L163"
+    },
+    {
+      "id": "bench_replay_main",
+      "label": "main()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "replay.mts",
+      "file_type": "code",
+      "norm_label": "main()",
+      "source_file": "bench/replay.mts",
+      "source_location": "L574"
+    },
+    {
+      "id": "bench_replay_option",
+      "label": "option()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "replay.mts",
+      "file_type": "code",
+      "norm_label": "option()",
+      "source_file": "bench/replay.mts",
+      "source_location": "L573"
+    },
+    {
+      "id": "bench_replay_planexperimenttrials",
+      "label": "planExperimentTrials()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "replay.mts",
+      "file_type": "code",
+      "norm_label": "planexperimenttrials()",
+      "source_file": "bench/replay.mts",
+      "source_location": "L169"
+    },
+    {
+      "id": "bench_replay_plantrials",
+      "label": "planTrials()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "replay.mts",
+      "file_type": "code",
+      "norm_label": "plantrials()",
+      "source_file": "bench/replay.mts",
+      "source_location": "L144"
+    },
+    {
+      "id": "bench_replay_requireinside",
+      "label": "requireInside()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "replay.mts",
+      "file_type": "code",
+      "norm_label": "requireinside()",
+      "source_file": "bench/replay.mts",
+      "source_location": "L76"
     },
     {
       "id": "bench_replay_resolvecommit",
@@ -10735,12 +10519,24 @@
       "source_location": "L12"
     },
     {
+      "id": "src_work_item_parseworkitem",
+      "label": "parseWorkItem()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "replay.mts",
+      "file_type": "code",
+      "norm_label": "parseworkitem()",
+      "source_file": "src/work-item.ts",
+      "source_location": "L150"
+    },
+    {
       "id": "src_review_cache_buildevidencesemanticidentity",
       "label": "buildEvidenceSemanticIdentity()",
       "_callable": true,
       "_origin": "ast",
       "community": 19,
-      "community_name": "stableJson",
+      "community_name": "ReviewCache",
       "file_type": "code",
       "norm_label": "buildevidencesemanticidentity()",
       "source_file": "src/review-cache.ts",
@@ -10752,7 +10548,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 19,
-      "community_name": "stableJson",
+      "community_name": "ReviewCache",
       "file_type": "code",
       "norm_label": "canonicalreviewresult()",
       "source_file": "src/review-cache.ts",
@@ -10764,7 +10560,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 19,
-      "community_name": "stableJson",
+      "community_name": "ReviewCache",
       "file_type": "code",
       "norm_label": "comparecoldwarmresults()",
       "source_file": "src/review-cache.ts",
@@ -10776,7 +10572,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 19,
-      "community_name": "stableJson",
+      "community_name": "ReviewCache",
       "file_type": "code",
       "norm_label": "decision()",
       "source_file": "src/review-cache.ts",
@@ -10788,11 +10584,47 @@
       "_callable": true,
       "_origin": "ast",
       "community": 19,
-      "community_name": "stableJson",
+      "community_name": "ReviewCache",
       "file_type": "code",
       "norm_label": "digest()",
       "source_file": "src/review-cache.ts",
       "source_location": "L172"
+    },
+    {
+      "id": "src_review_cache_reviewcache_commitcompleted",
+      "label": ".commitCompleted()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 19,
+      "community_name": "ReviewCache",
+      "file_type": "code",
+      "norm_label": ".commitcompleted()",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L583"
+    },
+    {
+      "id": "src_review_cache_reviewcache_discard",
+      "label": ".discard()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 19,
+      "community_name": "ReviewCache",
+      "file_type": "code",
+      "norm_label": ".discard()",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L614"
+    },
+    {
+      "id": "src_review_cache_reviewcache_entryroot",
+      "label": ".entryRoot()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 19,
+      "community_name": "ReviewCache",
+      "file_type": "code",
+      "norm_label": ".entryroot()",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L471"
     },
     {
       "id": "src_review_cache_reviewcache_fallback",
@@ -10800,7 +10632,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 19,
-      "community_name": "stableJson",
+      "community_name": "ReviewCache",
       "file_type": "code",
       "norm_label": ".fallback()",
       "source_file": "src/review-cache.ts",
@@ -10812,7 +10644,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 19,
-      "community_name": "stableJson",
+      "community_name": "ReviewCache",
       "file_type": "code",
       "norm_label": ".get()",
       "source_file": "src/review-cache.ts",
@@ -10824,7 +10656,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 19,
-      "community_name": "stableJson",
+      "community_name": "ReviewCache",
       "file_type": "code",
       "norm_label": ".invalidate()",
       "source_file": "src/review-cache.ts",
@@ -10836,7 +10668,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 19,
-      "community_name": "stableJson",
+      "community_name": "ReviewCache",
       "file_type": "code",
       "norm_label": ".key()",
       "source_file": "src/review-cache.ts",
@@ -10848,11 +10680,59 @@
       "_callable": true,
       "_origin": "ast",
       "community": 19,
-      "community_name": "stableJson",
+      "community_name": "ReviewCache",
       "file_type": "code",
       "norm_label": ".keydigest()",
       "source_file": "src/review-cache.ts",
       "source_location": "L468"
+    },
+    {
+      "id": "src_review_cache_reviewcache_prroot",
+      "label": ".prRoot()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 19,
+      "community_name": "ReviewCache",
+      "file_type": "code",
+      "norm_label": ".prroot()",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L470"
+    },
+    {
+      "id": "src_review_cache_reviewcache_prune",
+      "label": ".prune()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 19,
+      "community_name": "ReviewCache",
+      "file_type": "code",
+      "norm_label": ".prune()",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L616"
+    },
+    {
+      "id": "src_review_cache_reviewcache_readentry",
+      "label": ".readEntry()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 19,
+      "community_name": "ReviewCache",
+      "file_type": "code",
+      "norm_label": ".readentry()",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L491"
+    },
+    {
+      "id": "src_review_cache_reviewcache_readlastcompleted",
+      "label": ".readLastCompleted()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 19,
+      "community_name": "ReviewCache",
+      "file_type": "code",
+      "norm_label": ".readlastcompleted()",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L570"
     },
     {
       "id": "src_review_cache_reviewcache_stage",
@@ -10860,11 +10740,23 @@
       "_callable": true,
       "_origin": "ast",
       "community": 19,
-      "community_name": "stableJson",
+      "community_name": "ReviewCache",
       "file_type": "code",
       "norm_label": ".stage()",
       "source_file": "src/review-cache.ts",
       "source_location": "L562"
+    },
+    {
+      "id": "src_review_cache_saferead",
+      "label": "safeRead()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 19,
+      "community_name": "ReviewCache",
+      "file_type": "code",
+      "norm_label": "saferead()",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L250"
     },
     {
       "id": "src_review_cache_stablejson",
@@ -10872,7 +10764,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 19,
-      "community_name": "stableJson",
+      "community_name": "ReviewCache",
       "file_type": "code",
       "norm_label": "stablejson()",
       "source_file": "src/review-cache.ts",
@@ -11011,6 +10903,18 @@
       "source_location": "L341"
     },
     {
+      "id": "src_runner_verify_output_assembleverifieroutput",
+      "label": "assembleVerifierOutput()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 20,
+      "community_name": "verify-output.ts",
+      "file_type": "code",
+      "norm_label": "assembleverifieroutput()",
+      "source_file": "src/runner/verify-output.ts",
+      "source_location": "L233"
+    },
+    {
       "id": "src_runner_verify_output_completeverificationcoverage",
       "label": "completeVerificationCoverage()",
       "_callable": true,
@@ -11035,16 +10939,16 @@
       "source_location": "L294"
     },
     {
-      "id": "src_runner_verify_output_parsereviewoutput",
-      "label": "parseReviewOutput()",
+      "id": "src_runner_verify_output_normalizeverifyoutput",
+      "label": "normalizeVerifyOutput()",
       "_callable": true,
       "_origin": "ast",
       "community": 20,
       "community_name": "verify-output.ts",
       "file_type": "code",
-      "norm_label": "parsereviewoutput()",
+      "norm_label": "normalizeverifyoutput()",
       "source_file": "src/runner/verify-output.ts",
-      "source_location": "L144"
+      "source_location": "L157"
     },
     {
       "id": "src_runner_verify_output_verifyschemagaps",
@@ -12535,6 +12439,18 @@
       "source_location": "L165"
     },
     {
+      "id": "src_runner_pi_parseduration",
+      "label": "parseDuration()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 3,
+      "community_name": "discovery-legs.ts",
+      "file_type": "code",
+      "norm_label": "parseduration()",
+      "source_file": "src/runner/pi.ts",
+      "source_location": "L105"
+    },
+    {
       "id": "src_runner_pi_singlediscoveryinput",
       "label": "singleDiscoveryInput()",
       "_callable": true,
@@ -13987,6 +13903,54 @@
       "source_location": "L76"
     },
     {
+      "id": "src_runner_pi_cliparams",
+      "label": "cliParams()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "experiment.ts",
+      "file_type": "code",
+      "norm_label": "cliparams()",
+      "source_file": "src/runner/pi.ts",
+      "source_location": "L564"
+    },
+    {
+      "id": "src_runner_pi_createpisecretpolicy",
+      "label": "createPiSecretPolicy()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "experiment.ts",
+      "file_type": "code",
+      "norm_label": "createpisecretpolicy()",
+      "source_file": "src/runner/pi.ts",
+      "source_location": "L585"
+    },
+    {
+      "id": "src_runner_pi_hostscreening",
+      "label": "hostScreening()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "experiment.ts",
+      "file_type": "code",
+      "norm_label": "hostscreening()",
+      "source_file": "src/runner/pi.ts",
+      "source_location": "L631"
+    },
+    {
+      "id": "src_runner_pi_preparepihostruntime",
+      "label": "preparePiHostRuntime()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "experiment.ts",
+      "file_type": "code",
+      "norm_label": "preparepihostruntime()",
+      "source_file": "src/runner/pi.ts",
+      "source_location": "L655"
+    },
+    {
       "id": "test_experiment_test_deferred",
       "label": "deferred()",
       "_callable": true,
@@ -14021,30 +13985,6 @@
       "norm_label": "fixture()",
       "source_file": "test/parity.test.ts",
       "source_location": "L13"
-    },
-    {
-      "id": "test_parity_test_hash",
-      "label": "hash()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 40,
-      "community_name": "experiment.ts",
-      "file_type": "code",
-      "norm_label": "hash()",
-      "source_file": "test/parity.test.ts",
-      "source_location": "L11"
-    },
-    {
-      "id": "test_parity_test_mechanismstate",
-      "label": "mechanismState()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 40,
-      "community_name": "experiment.ts",
-      "file_type": "code",
-      "norm_label": "mechanismstate()",
-      "source_file": "test/parity.test.ts",
-      "source_location": "L65"
     },
     {
       "id": "src_astsearch_astsearch",
@@ -14189,30 +14129,6 @@
       "norm_label": "remember()",
       "source_file": "src/memory.ts",
       "source_location": "L92"
-    },
-    {
-      "id": "src_memory_rulingstext",
-      "label": "rulingsText()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 42,
-      "community_name": "memory.ts",
-      "file_type": "code",
-      "norm_label": "rulingstext()",
-      "source_file": "src/memory.ts",
-      "source_location": "L163"
-    },
-    {
-      "id": "src_prompts_loadcontract",
-      "label": "loadContract()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 42,
-      "community_name": "memory.ts",
-      "file_type": "code",
-      "norm_label": "loadcontract()",
-      "source_file": "src/prompts.ts",
-      "source_location": "L21"
     },
     {
       "id": "test_scan_test_git",
@@ -15175,18 +15091,6 @@
       "source_location": "L426"
     },
     {
-      "id": "test_change_evidence_test_git",
-      "label": "git()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "change-evidence.ts",
-      "file_type": "code",
-      "norm_label": "git()",
-      "source_file": "test/change-evidence.test.ts",
-      "source_location": "L25"
-    },
-    {
       "id": "src_build_evidence_contract_buildevidenceinputerror_constructor",
       "label": ".constructor()",
       "_callable": true,
@@ -15448,7 +15352,7 @@
       "file_type": "code",
       "norm_label": "admitted()",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L1639"
+      "source_location": "L1653"
     },
     {
       "id": "test_build_artifact_reader_test_auditpatch",
@@ -17143,6 +17047,18 @@
       "source_location": "L859"
     },
     {
+      "id": "src_change_evidence_ensurechangeevidence",
+      "label": "ensureChangeEvidence()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 7,
+      "community_name": "pi.ts",
+      "file_type": "code",
+      "norm_label": "ensurechangeevidence()",
+      "source_file": "src/change-evidence.ts",
+      "source_location": "L634"
+    },
+    {
       "id": "src_runner_discovery_legs_phasetoolidentity",
       "label": "phaseToolIdentity()",
       "_callable": true,
@@ -17153,6 +17069,18 @@
       "norm_label": "phasetoolidentity()",
       "source_file": "src/runner/discovery-legs.ts",
       "source_location": "L334"
+    },
+    {
+      "id": "src_runner_discovery_legs_specializedreviewoutput",
+      "label": "specializedReviewOutput()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 7,
+      "community_name": "pi.ts",
+      "file_type": "code",
+      "norm_label": "specializedreviewoutput()",
+      "source_file": "src/runner/discovery-legs.ts",
+      "source_location": "L497"
     },
     {
       "id": "src_runner_pi_backgroundaudit",
@@ -17179,6 +17107,18 @@
       "source_location": "L187"
     },
     {
+      "id": "src_runner_pi_classifyauth",
+      "label": "classifyAuth()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 7,
+      "community_name": "pi.ts",
+      "file_type": "code",
+      "norm_label": "classifyauth()",
+      "source_file": "src/runner/pi.ts",
+      "source_location": "L236"
+    },
+    {
       "id": "src_runner_pi_classifytooloutcome",
       "label": "classifyToolOutcome()",
       "_callable": true,
@@ -17189,18 +17129,6 @@
       "norm_label": "classifytooloutcome()",
       "source_file": "src/runner/pi.ts",
       "source_location": "L232"
-    },
-    {
-      "id": "src_runner_pi_cliparams",
-      "label": "cliParams()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 7,
-      "community_name": "pi.ts",
-      "file_type": "code",
-      "norm_label": "cliparams()",
-      "source_file": "src/runner/pi.ts",
-      "source_location": "L564"
     },
     {
       "id": "src_runner_pi_configuredpaths",
@@ -17227,18 +17155,6 @@
       "source_location": "L333"
     },
     {
-      "id": "src_runner_pi_createpisecretpolicy",
-      "label": "createPiSecretPolicy()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 7,
-      "community_name": "pi.ts",
-      "file_type": "code",
-      "norm_label": "createpisecretpolicy()",
-      "source_file": "src/runner/pi.ts",
-      "source_location": "L585"
-    },
-    {
       "id": "src_runner_pi_existingpaths",
       "label": "existingPaths()",
       "_callable": true,
@@ -17251,16 +17167,16 @@
       "source_location": "L151"
     },
     {
-      "id": "src_runner_pi_hostscreening",
-      "label": "hostScreening()",
+      "id": "src_runner_pi_loadworkitemcontext",
+      "label": "loadWorkItemContext()",
       "_callable": true,
       "_origin": "ast",
       "community": 7,
       "community_name": "pi.ts",
       "file_type": "code",
-      "norm_label": "hostscreening()",
+      "norm_label": "loadworkitemcontext()",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L631"
+      "source_location": "L96"
     },
     {
       "id": "src_runner_pi_main",
@@ -17272,7 +17188,7 @@
       "file_type": "code",
       "norm_label": "main()",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1370"
+      "source_location": "L1371"
     },
     {
       "id": "src_runner_pi_omppackageextensions",
@@ -17287,18 +17203,6 @@
       "source_location": "L159"
     },
     {
-      "id": "src_runner_pi_parseduration",
-      "label": "parseDuration()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 7,
-      "community_name": "pi.ts",
-      "file_type": "code",
-      "norm_label": "parseduration()",
-      "source_file": "src/runner/pi.ts",
-      "source_location": "L105"
-    },
-    {
       "id": "src_runner_pi_phasetoolidentitywithsubmission",
       "label": "phaseToolIdentityWithSubmission()",
       "_callable": true,
@@ -17311,16 +17215,28 @@
       "source_location": "L285"
     },
     {
-      "id": "src_runner_pi_preparepihostruntime",
-      "label": "preparePiHostRuntime()",
+      "id": "src_runner_pi_picontract",
+      "label": "piContract()",
       "_callable": true,
       "_origin": "ast",
       "community": 7,
       "community_name": "pi.ts",
       "file_type": "code",
-      "norm_label": "preparepihostruntime()",
+      "norm_label": "picontract()",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L655"
+      "source_location": "L252"
+    },
+    {
+      "id": "src_runner_pi_runmain",
+      "label": "runMain()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 7,
+      "community_name": "pi.ts",
+      "file_type": "code",
+      "norm_label": "runmain()",
+      "source_file": "src/runner/pi.ts",
+      "source_location": "L696"
     },
     {
       "id": "src_runner_pi_runphase",
@@ -17335,6 +17251,18 @@
       "source_location": "L361"
     },
     {
+      "id": "src_runner_pi_startupindexproblem",
+      "label": "startupIndexProblem()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 7,
+      "community_name": "pi.ts",
+      "file_type": "code",
+      "norm_label": "startupindexproblem()",
+      "source_file": "src/runner/pi.ts",
+      "source_location": "L136"
+    },
+    {
       "id": "src_runner_pi_system_buildpisystemprompt",
       "label": "buildPiSystemPrompt()",
       "_callable": true,
@@ -17345,6 +17273,18 @@
       "norm_label": "buildpisystemprompt()",
       "source_file": "src/runner/pi-system.ts",
       "source_location": "L3"
+    },
+    {
+      "id": "src_runner_pi_toolmetricssummary",
+      "label": "toolMetricsSummary()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 7,
+      "community_name": "pi.ts",
+      "file_type": "code",
+      "norm_label": "toolmetricssummary()",
+      "source_file": "src/runner/pi.ts",
+      "source_location": "L240"
     },
     {
       "id": "src_runner_pi_tools_createphasesubmissiontool",
@@ -17383,6 +17323,18 @@
       "source_location": "L89"
     },
     {
+      "id": "src_runner_pi_tools_zodphasesubmission",
+      "label": "zodPhaseSubmission()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 7,
+      "community_name": "pi.ts",
+      "file_type": "code",
+      "norm_label": "zodphasesubmission()",
+      "source_file": "src/runner/pi-tools.ts",
+      "source_location": "L98"
+    },
+    {
       "id": "src_runner_pi_withdeadline",
       "label": "withDeadline()",
       "_callable": true,
@@ -17395,6 +17347,30 @@
       "source_location": "L313"
     },
     {
+      "id": "src_runner_verify_output_mergeverificationcoverage",
+      "label": "mergeVerificationCoverage()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 7,
+      "community_name": "pi.ts",
+      "file_type": "code",
+      "norm_label": "mergeverificationcoverage()",
+      "source_file": "src/runner/verify-output.ts",
+      "source_location": "L382"
+    },
+    {
+      "id": "src_runner_verify_output_parsereviewoutput",
+      "label": "parseReviewOutput()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 7,
+      "community_name": "pi.ts",
+      "file_type": "code",
+      "norm_label": "parsereviewoutput()",
+      "source_file": "src/runner/verify-output.ts",
+      "source_location": "L144"
+    },
+    {
       "id": "src_secret_screening_withsecretpolicy",
       "label": "withSecretPolicy()",
       "_callable": true,
@@ -17405,6 +17381,18 @@
       "norm_label": "withsecretpolicy()",
       "source_file": "src/secret-screening.ts",
       "source_location": "L150"
+    },
+    {
+      "id": "src_work_item_readworkitem",
+      "label": "readWorkItem()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 7,
+      "community_name": "pi.ts",
+      "file_type": "code",
+      "norm_label": "readworkitem()",
+      "source_file": "src/work-item.ts",
+      "source_location": "L163"
     },
     {
       "id": "bench_inspect_java_citingrecords",
@@ -18252,7 +18240,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": ".error()",
       "source_file": "src/app/log.ts",
@@ -18264,7 +18252,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": ".info()",
       "source_file": "src/app/log.ts",
@@ -18276,7 +18264,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": ".warn()",
       "source_file": "src/app/log.ts",
@@ -18288,7 +18276,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "cli()",
       "source_file": "src/runner/prefetch-serena.ts",
@@ -18300,7 +18288,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "prefetchserena()",
       "source_file": "src/runner/prefetch-serena.ts",
@@ -18312,7 +18300,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "buildserenaargs()",
       "source_file": "src/runner/serena.ts",
@@ -18324,7 +18312,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "connectserena()",
       "source_file": "src/runner/serena.ts",
@@ -18336,7 +18324,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "createserenaruntimehome()",
       "source_file": "src/runner/serena.ts",
@@ -18348,7 +18336,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "createserenashadowproject()",
       "source_file": "src/runner/serena.ts",
@@ -18360,7 +18348,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "detectedlanguages()",
       "source_file": "src/runner/serena.ts",
@@ -18372,7 +18360,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "packagedlanguageserver()",
       "source_file": "src/runner/serena.ts",
@@ -18384,7 +18372,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "prefetchenvironment()",
       "source_file": "src/runner/serena.ts",
@@ -18396,7 +18384,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "prepareserenaproject()",
       "source_file": "src/runner/serena.ts",
@@ -18408,7 +18396,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "representativesourcefiles()",
       "source_file": "src/runner/serena.ts",
@@ -18420,7 +18408,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "safetoolenvironment()",
       "source_file": "src/runner/serena.ts",
@@ -18432,7 +18420,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": ".close()",
       "source_file": "src/runner/serena.ts",
@@ -18444,7 +18432,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "serenabundleproblem()",
       "source_file": "src/runner/serena.ts",
@@ -18456,7 +18444,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "serenaprefetchfixtures()",
       "source_file": "src/runner/serena.ts",
@@ -18468,7 +18456,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "sourceextensions()",
       "source_file": "src/runner/serena.ts",
@@ -18480,11 +18468,119 @@
       "_callable": true,
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "textcontent()",
       "source_file": "src/runner/serena.ts",
       "source_location": "L287"
+    },
+    {
+      "id": "test_pi_runner_test_abort",
+      "label": "abort()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 8,
+      "community_name": "pi-runner.test.ts",
+      "file_type": "code",
+      "norm_label": "abort()",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L754"
+    },
+    {
+      "id": "test_pi_runner_test_dispose",
+      "label": "dispose()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 8,
+      "community_name": "pi-runner.test.ts",
+      "file_type": "code",
+      "norm_label": "dispose()",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L755"
+    },
+    {
+      "id": "test_pi_runner_test_hostruntime",
+      "label": "hostRuntime()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 8,
+      "community_name": "pi-runner.test.ts",
+      "file_type": "code",
+      "norm_label": "hostruntime()",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L1028"
+    },
+    {
+      "id": "test_pi_runner_test_onstdout",
+      "label": "onStdout()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 8,
+      "community_name": "pi-runner.test.ts",
+      "file_type": "code",
+      "norm_label": "onstdout()",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L1293"
+    },
+    {
+      "id": "test_pi_runner_test_prompt",
+      "label": "prompt()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 8,
+      "community_name": "pi-runner.test.ts",
+      "file_type": "code",
+      "norm_label": "prompt()",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L751"
+    },
+    {
+      "id": "test_pi_runner_test_subscribe",
+      "label": "subscribe()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 8,
+      "community_name": "pi-runner.test.ts",
+      "file_type": "code",
+      "norm_label": "subscribe()",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L750"
+    },
+    {
+      "id": "test_pi_runner_test_tooloptions",
+      "label": "toolOptions()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 8,
+      "community_name": "pi-runner.test.ts",
+      "file_type": "code",
+      "norm_label": "tooloptions()",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L68"
+    },
+    {
+      "id": "test_pi_runner_test_toolpayload",
+      "label": "toolPayload()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 8,
+      "community_name": "pi-runner.test.ts",
+      "file_type": "code",
+      "norm_label": "toolpayload()",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L78"
+    },
+    {
+      "id": "test_pi_runner_test_validverification",
+      "label": "validVerification()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 8,
+      "community_name": "pi-runner.test.ts",
+      "file_type": "code",
+      "norm_label": "validverification()",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L552"
     },
     {
       "id": "inspect_runtime_src_main_kotlin_com_leveret_inspect_runtime_fs_runtimefilesystem_runtimefilesystem_cleantempdir",
@@ -18655,148 +18751,52 @@
       "source_location": "L10"
     },
     {
-      "id": "bench_replay_assertunique",
-      "label": "assertUnique()",
+      "id": "src_memory_rulingstext",
+      "label": "rulingsText()",
       "_callable": true,
       "_origin": "ast",
       "community": 85,
-      "community_name": "digest",
+      "community_name": "prompts.ts",
       "file_type": "code",
-      "norm_label": "assertunique()",
-      "source_file": "bench/replay.mts",
-      "source_location": "L75"
-    },
-    {
-      "id": "bench_replay_corpusidentity",
-      "label": "corpusIdentity()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 85,
-      "community_name": "digest",
-      "file_type": "code",
-      "norm_label": "corpusidentity()",
-      "source_file": "bench/replay.mts",
-      "source_location": "L74"
-    },
-    {
-      "id": "bench_replay_digest",
-      "label": "digest()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 85,
-      "community_name": "digest",
-      "file_type": "code",
-      "norm_label": "digest()",
-      "source_file": "bench/replay.mts",
-      "source_location": "L73"
-    },
-    {
-      "id": "bench_replay_executepreconditions",
-      "label": "executePreconditions()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 85,
-      "community_name": "digest",
-      "file_type": "code",
-      "norm_label": "executepreconditions()",
-      "source_file": "bench/replay.mts",
-      "source_location": "L116"
-    },
-    {
-      "id": "bench_replay_loadcorpus",
-      "label": "loadCorpus()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 85,
-      "community_name": "digest",
-      "file_type": "code",
-      "norm_label": "loadcorpus()",
-      "source_file": "bench/replay.mts",
-      "source_location": "L82"
-    },
-    {
-      "id": "bench_replay_loadexperimentmanifest",
-      "label": "loadExperimentManifest()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 85,
-      "community_name": "digest",
-      "file_type": "code",
-      "norm_label": "loadexperimentmanifest()",
-      "source_file": "bench/replay.mts",
+      "norm_label": "rulingstext()",
+      "source_file": "src/memory.ts",
       "source_location": "L163"
     },
     {
-      "id": "bench_replay_main",
-      "label": "main()",
+      "id": "src_prompts_loadcontract",
+      "label": "loadContract()",
       "_callable": true,
       "_origin": "ast",
       "community": 85,
-      "community_name": "digest",
+      "community_name": "prompts.ts",
       "file_type": "code",
-      "norm_label": "main()",
-      "source_file": "bench/replay.mts",
-      "source_location": "L574"
+      "norm_label": "loadcontract()",
+      "source_file": "src/prompts.ts",
+      "source_location": "L21"
     },
     {
-      "id": "bench_replay_option",
-      "label": "option()",
+      "id": "test_parity_test_hash",
+      "label": "hash()",
       "_callable": true,
       "_origin": "ast",
       "community": 85,
-      "community_name": "digest",
+      "community_name": "prompts.ts",
       "file_type": "code",
-      "norm_label": "option()",
-      "source_file": "bench/replay.mts",
-      "source_location": "L573"
+      "norm_label": "hash()",
+      "source_file": "test/parity.test.ts",
+      "source_location": "L11"
     },
     {
-      "id": "bench_replay_planexperimenttrials",
-      "label": "planExperimentTrials()",
+      "id": "test_parity_test_mechanismstate",
+      "label": "mechanismState()",
       "_callable": true,
       "_origin": "ast",
       "community": 85,
-      "community_name": "digest",
+      "community_name": "prompts.ts",
       "file_type": "code",
-      "norm_label": "planexperimenttrials()",
-      "source_file": "bench/replay.mts",
-      "source_location": "L169"
-    },
-    {
-      "id": "bench_replay_plantrials",
-      "label": "planTrials()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 85,
-      "community_name": "digest",
-      "file_type": "code",
-      "norm_label": "plantrials()",
-      "source_file": "bench/replay.mts",
-      "source_location": "L144"
-    },
-    {
-      "id": "bench_replay_requireinside",
-      "label": "requireInside()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 85,
-      "community_name": "digest",
-      "file_type": "code",
-      "norm_label": "requireinside()",
-      "source_file": "bench/replay.mts",
-      "source_location": "L76"
-    },
-    {
-      "id": "src_work_item_parseworkitem",
-      "label": "parseWorkItem()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 85,
-      "community_name": "digest",
-      "file_type": "code",
-      "norm_label": "parseworkitem()",
-      "source_file": "src/work-item.ts",
-      "source_location": "L150"
+      "norm_label": "mechanismstate()",
+      "source_file": "test/parity.test.ts",
+      "source_location": "L65"
     },
     {
       "id": "bench_report_array",
@@ -19739,6 +19739,17 @@
       "source_location": "L73"
     },
     {
+      "id": "src_review_cache_exec",
+      "label": "exec",
+      "_origin": "ast",
+      "community": 10,
+      "community_name": "review-cache.ts",
+      "file_type": "code",
+      "norm_label": "exec",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L171"
+    },
+    {
       "id": "src_review_cache_finding_states",
       "label": "FINDING_STATES",
       "_origin": "ast",
@@ -19816,17 +19827,6 @@
       "source_location": "L84"
     },
     {
-      "id": "src_review_cache_projectfactscacheschema",
-      "label": "projectFactsCacheSchema",
-      "_origin": "ast",
-      "community": 10,
-      "community_name": "review-cache.ts",
-      "file_type": "code",
-      "norm_label": "projectfactscacheschema",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L49"
-    },
-    {
       "id": "src_review_cache_review_cache_version",
       "label": "REVIEW_CACHE_VERSION",
       "_origin": "ast",
@@ -19836,17 +19836,6 @@
       "norm_label": "review_cache_version",
       "source_file": "src/review-cache.ts",
       "source_location": "L10"
-    },
-    {
-      "id": "src_review_cache_scanresultcacheschema",
-      "label": "scanResultCacheSchema",
-      "_origin": "ast",
-      "community": 10,
-      "community_name": "review-cache.ts",
-      "file_type": "code",
-      "norm_label": "scanresultcacheschema",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L41"
     },
     {
       "id": "src_review_cache_sha256schema",
@@ -20146,61 +20135,6 @@
       "source_file": "node:fs/promises"
     },
     {
-      "id": "src_context",
-      "label": "context.ts",
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "context.ts",
-      "source_file": "src/context.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "src_engines_registry_engines",
-      "label": "ENGINES",
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "engines",
-      "source_file": "src/engines/registry.ts",
-      "source_location": "L413"
-    },
-    {
-      "id": "src_exec",
-      "label": "exec.ts",
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "exec.ts",
-      "source_file": "src/exec.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "src_exec_ownedgroups",
-      "label": "ownedGroups",
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "ownedgroups",
-      "source_file": "src/exec.ts",
-      "source_location": "L142"
-    },
-    {
-      "id": "src_exec_safe_env_keys",
-      "label": "SAFE_ENV_KEYS",
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "safe_env_keys",
-      "source_file": "src/exec.ts",
-      "source_location": "L40"
-    },
-    {
       "id": "src_runner_pi_tools",
       "label": "pi-tools.ts",
       "_origin": "ast",
@@ -20232,17 +20166,6 @@
       "norm_label": "created",
       "source_file": "test/audit.test.ts",
       "source_location": "L19"
-    },
-    {
-      "id": "test_robustness_test",
-      "label": "robustness.test.ts",
-      "_origin": "ast",
-      "community": 112,
-      "community_name": "pi-tools.ts",
-      "file_type": "code",
-      "norm_label": "robustness.test.ts",
-      "source_file": "test/robustness.test.ts",
-      "source_location": "L1"
     },
     {
       "id": "docs_superpowers_plans_2026_09_29_inspect_java_references_existing_seams_and_file_map",
@@ -20478,6 +20401,39 @@
       "source_location": "L21"
     },
     {
+      "id": "bench_replay_scan",
+      "label": "replay-scan.mts",
+      "_origin": "ast",
+      "community": 117,
+      "community_name": "scan.ts",
+      "file_type": "code",
+      "norm_label": "replay-scan.mts",
+      "source_file": "bench/replay-scan.mts",
+      "source_location": "L1"
+    },
+    {
+      "id": "bench_replay_scan_outdir",
+      "label": "outDir",
+      "_origin": "ast",
+      "community": 117,
+      "community_name": "scan.ts",
+      "file_type": "code",
+      "norm_label": "outdir",
+      "source_file": "bench/replay-scan.mts",
+      "source_location": "L17"
+    },
+    {
+      "id": "bench_replay_scan_repo_profilearg_prs",
+      "label": "[repo, profileArg, ...prs]",
+      "_origin": "ast",
+      "community": 117,
+      "community_name": "scan.ts",
+      "file_type": "code",
+      "norm_label": "[repo, profilearg, ...prs]",
+      "source_file": "bench/replay-scan.mts",
+      "source_location": "L11"
+    },
+    {
       "id": "src_delta",
       "label": "delta.ts",
       "_origin": "ast",
@@ -20511,6 +20467,39 @@
       "source_location": "L1"
     },
     {
+      "id": "src_profile",
+      "label": "profile.ts",
+      "_origin": "ast",
+      "community": 117,
+      "community_name": "scan.ts",
+      "file_type": "code",
+      "norm_label": "profile.ts",
+      "source_file": "src/profile.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_profile_empty",
+      "label": "EMPTY",
+      "_origin": "ast",
+      "community": 117,
+      "community_name": "scan.ts",
+      "file_type": "code",
+      "norm_label": "empty",
+      "source_file": "src/profile.ts",
+      "source_location": "L55"
+    },
+    {
+      "id": "src_profile_sev_order",
+      "label": "SEV_ORDER",
+      "_origin": "ast",
+      "community": 117,
+      "community_name": "scan.ts",
+      "file_type": "code",
+      "norm_label": "sev_order",
+      "source_file": "src/profile.ts",
+      "source_location": "L56"
+    },
+    {
       "id": "src_sarif",
       "label": "sarif.ts",
       "_origin": "ast",
@@ -20542,6 +20531,28 @@
       "norm_label": "scan.ts",
       "source_file": "src/scan.ts",
       "source_location": "L1"
+    },
+    {
+      "id": "test_custom_test",
+      "label": "custom.test.ts",
+      "_origin": "ast",
+      "community": 117,
+      "community_name": "scan.ts",
+      "file_type": "code",
+      "norm_label": "custom.test.ts",
+      "source_file": "test/custom.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "ref_yaml",
+      "label": "yaml",
+      "_origin": "ast",
+      "community": 117,
+      "community_name": "scan.ts",
+      "file_type": "concept",
+      "norm_label": "yaml",
+      "source_file": "package.json",
+      "source_location": "L33"
     },
     {
       "id": "agents",
@@ -20929,39 +20940,6 @@
       "source_location": "L1"
     },
     {
-      "id": "src_profile",
-      "label": "profile.ts",
-      "_origin": "ast",
-      "community": 123,
-      "community_name": "ref_node_crypto",
-      "file_type": "code",
-      "norm_label": "profile.ts",
-      "source_file": "src/profile.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "src_profile_empty",
-      "label": "EMPTY",
-      "_origin": "ast",
-      "community": 123,
-      "community_name": "ref_node_crypto",
-      "file_type": "code",
-      "norm_label": "empty",
-      "source_file": "src/profile.ts",
-      "source_location": "L55"
-    },
-    {
-      "id": "src_profile_sev_order",
-      "label": "SEV_ORDER",
-      "_origin": "ast",
-      "community": 123,
-      "community_name": "ref_node_crypto",
-      "file_type": "code",
-      "norm_label": "sev_order",
-      "source_file": "src/profile.ts",
-      "source_location": "L56"
-    },
-    {
       "id": "src_trusted_state",
       "label": "trusted-state.ts",
       "_origin": "ast",
@@ -20993,17 +20971,6 @@
       "norm_label": "repos",
       "source_file": "test/trusted-state.test.ts",
       "source_location": "L10"
-    },
-    {
-      "id": "ref_yaml",
-      "label": "yaml",
-      "_origin": "ast",
-      "community": 123,
-      "community_name": "ref_node_crypto",
-      "file_type": "concept",
-      "norm_label": "yaml",
-      "source_file": "package.json",
-      "source_location": "L33"
     },
     {
       "id": "inspect_java_analysis_src_test_kotlin_com_leveret_inspect_java_javacompilationenvironmenttest",
@@ -21268,17 +21235,6 @@
       "norm_label": "sourcerange",
       "source_file": "src/build-citations.ts",
       "source_location": "L20"
-    },
-    {
-      "id": "src_review_cache_exec",
-      "label": "exec",
-      "_origin": "ast",
-      "community": 128,
-      "community_name": "incrementalDependencyBoundary",
-      "file_type": "code",
-      "norm_label": "exec",
-      "source_file": "src/review-cache.ts",
-      "source_location": "L171"
     },
     {
       "id": "src_app_incremental",
@@ -22006,59 +21962,70 @@
       "source_location": "L40"
     },
     {
-      "id": "test_pi_runner_test",
-      "label": "pi-runner.test.ts",
+      "id": "src_app_graph",
+      "label": "graph.ts",
       "_origin": "ast",
       "community": 15,
-      "community_name": "pi-runner.test.ts",
+      "community_name": "exec.ts",
       "file_type": "code",
-      "norm_label": "pi-runner.test.ts",
-      "source_file": "test/pi-runner.test.ts",
+      "norm_label": "graph.ts",
+      "source_file": "src/app/graph.ts",
       "source_location": "L1"
     },
     {
-      "id": "test_pi_runner_test_expectations",
-      "label": "expectations",
+      "id": "src_context",
+      "label": "context.ts",
       "_origin": "ast",
       "community": 15,
-      "community_name": "pi-runner.test.ts",
+      "community_name": "exec.ts",
       "file_type": "code",
-      "norm_label": "expectations",
-      "source_file": "test/pi-runner.test.ts",
-      "source_location": "L544"
+      "norm_label": "context.ts",
+      "source_file": "src/context.ts",
+      "source_location": "L1"
     },
     {
-      "id": "test_pi_runner_test_lenses",
-      "label": "lenses",
+      "id": "src_exec",
+      "label": "exec.ts",
       "_origin": "ast",
       "community": 15,
-      "community_name": "pi-runner.test.ts",
+      "community_name": "exec.ts",
       "file_type": "code",
-      "norm_label": "lenses",
-      "source_file": "test/pi-runner.test.ts",
-      "source_location": "L536"
+      "norm_label": "exec.ts",
+      "source_file": "src/exec.ts",
+      "source_location": "L1"
     },
     {
-      "id": "test_pi_runner_test_test_change_evidence",
-      "label": "TEST_CHANGE_EVIDENCE",
+      "id": "src_exec_ownedgroups",
+      "label": "ownedGroups",
       "_origin": "ast",
       "community": 15,
-      "community_name": "pi-runner.test.ts",
+      "community_name": "exec.ts",
       "file_type": "code",
-      "norm_label": "test_change_evidence",
-      "source_file": "test/pi-runner.test.ts",
-      "source_location": "L61"
+      "norm_label": "ownedgroups",
+      "source_file": "src/exec.ts",
+      "source_location": "L142"
     },
     {
-      "id": "test_pi_runner_test_test_change_manifest",
-      "label": "TEST_CHANGE_MANIFEST",
+      "id": "src_exec_safe_env_keys",
+      "label": "SAFE_ENV_KEYS",
       "_origin": "ast",
       "community": 15,
-      "community_name": "pi-runner.test.ts",
+      "community_name": "exec.ts",
       "file_type": "code",
-      "norm_label": "test_change_manifest",
-      "source_file": "test/pi-runner.test.ts",
-      "source_location": "L52"
+      "norm_label": "safe_env_keys",
+      "source_file": "src/exec.ts",
+      "source_location": "L40"
+    },
+    {
+      "id": "test_graph_test",
+      "label": "graph.test.ts",
+      "_origin": "ast",
+      "community": 15,
+      "community_name": "exec.ts",
+      "file_type": "code",
+      "norm_label": "graph.test.ts",
+      "source_file": "test/graph.test.ts",
+      "source_location": "L1"
     },
     {
       "id": "inspect_java_analysis_src_test_kotlin_com_leveret_inspect_java_javaanalysismaintest",
@@ -22094,50 +22061,6 @@
       "source_location": ""
     },
     {
-      "id": "bench_replay_scan",
-      "label": "replay-scan.mts",
-      "_origin": "ast",
-      "community": 17,
-      "community_name": "ref_node_path",
-      "file_type": "code",
-      "norm_label": "replay-scan.mts",
-      "source_file": "bench/replay-scan.mts",
-      "source_location": "L1"
-    },
-    {
-      "id": "bench_replay_scan_outdir",
-      "label": "outDir",
-      "_origin": "ast",
-      "community": 17,
-      "community_name": "ref_node_path",
-      "file_type": "code",
-      "norm_label": "outdir",
-      "source_file": "bench/replay-scan.mts",
-      "source_location": "L17"
-    },
-    {
-      "id": "bench_replay_scan_repo_profilearg_prs",
-      "label": "[repo, profileArg, ...prs]",
-      "_origin": "ast",
-      "community": 17,
-      "community_name": "ref_node_path",
-      "file_type": "code",
-      "norm_label": "[repo, profilearg, ...prs]",
-      "source_file": "bench/replay-scan.mts",
-      "source_location": "L11"
-    },
-    {
-      "id": "src_app_graph",
-      "label": "graph.ts",
-      "_origin": "ast",
-      "community": 17,
-      "community_name": "ref_node_path",
-      "file_type": "code",
-      "norm_label": "graph.ts",
-      "source_file": "src/app/graph.ts",
-      "source_location": "L1"
-    },
-    {
       "id": "src_app_graphify",
       "label": "graphify.ts",
       "_origin": "ast",
@@ -22147,6 +22070,17 @@
       "norm_label": "graphify.ts",
       "source_file": "src/app/graphify.ts",
       "source_location": "L1"
+    },
+    {
+      "id": "src_change_evidence_max_patch_response_bytes",
+      "label": "MAX_PATCH_RESPONSE_BYTES",
+      "_origin": "ast",
+      "community": 17,
+      "community_name": "ref_node_path",
+      "file_type": "code",
+      "norm_label": "max_patch_response_bytes",
+      "source_file": "src/change-evidence.ts",
+      "source_location": "L9"
     },
     {
       "id": "test_build_java_inputs_test",
@@ -22160,6 +22094,61 @@
       "source_location": "L1"
     },
     {
+      "id": "test_change_evidence_test",
+      "label": "change-evidence.test.ts",
+      "_origin": "ast",
+      "community": 17,
+      "community_name": "ref_node_path",
+      "file_type": "code",
+      "norm_label": "change-evidence.test.ts",
+      "source_file": "test/change-evidence.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "test_change_evidence_test_env",
+      "label": "env",
+      "_origin": "ast",
+      "community": 17,
+      "community_name": "ref_node_path",
+      "file_type": "code",
+      "norm_label": "env",
+      "source_file": "test/change-evidence.test.ts",
+      "source_location": "L18"
+    },
+    {
+      "id": "test_change_evidence_test_manifestpath",
+      "label": "manifestPath",
+      "_origin": "ast",
+      "community": 17,
+      "community_name": "ref_node_path",
+      "file_type": "code",
+      "norm_label": "manifestpath",
+      "source_file": "test/change-evidence.test.ts",
+      "source_location": "L17"
+    },
+    {
+      "id": "test_change_evidence_test_repo",
+      "label": "repo",
+      "_origin": "ast",
+      "community": 17,
+      "community_name": "ref_node_path",
+      "file_type": "code",
+      "norm_label": "repo",
+      "source_file": "test/change-evidence.test.ts",
+      "source_location": "L16"
+    },
+    {
+      "id": "test_change_evidence_test_root",
+      "label": "root",
+      "_origin": "ast",
+      "community": 17,
+      "community_name": "ref_node_path",
+      "file_type": "code",
+      "norm_label": "root",
+      "source_file": "test/change-evidence.test.ts",
+      "source_location": "L15"
+    },
+    {
       "id": "test_context_test",
       "label": "context.test.ts",
       "_origin": "ast",
@@ -22168,17 +22157,6 @@
       "file_type": "code",
       "norm_label": "context.test.ts",
       "source_file": "test/context.test.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "test_custom_test",
-      "label": "custom.test.ts",
-      "_origin": "ast",
-      "community": 17,
-      "community_name": "ref_node_path",
-      "file_type": "code",
-      "norm_label": "custom.test.ts",
-      "source_file": "test/custom.test.ts",
       "source_location": "L1"
     },
     {
@@ -22226,17 +22204,6 @@
       "source_location": "L10"
     },
     {
-      "id": "test_graph_test",
-      "label": "graph.test.ts",
-      "_origin": "ast",
-      "community": 17,
-      "community_name": "ref_node_path",
-      "file_type": "code",
-      "norm_label": "graph.test.ts",
-      "source_file": "test/graph.test.ts",
-      "source_location": "L1"
-    },
-    {
       "id": "test_graphify_test",
       "label": "graphify.test.ts",
       "_origin": "ast",
@@ -22267,6 +22234,17 @@
       "file_type": "code",
       "norm_label": "learn.test.ts",
       "source_file": "test/learn.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "test_robustness_test",
+      "label": "robustness.test.ts",
+      "_origin": "ast",
+      "community": 17,
+      "community_name": "ref_node_path",
+      "file_type": "code",
+      "norm_label": "robustness.test.ts",
+      "source_file": "test/robustness.test.ts",
       "source_location": "L1"
     },
     {
@@ -22432,6 +22410,28 @@
       "file_type": "code",
       "norm_label": "textprecondition",
       "source_file": "bench/replay.mts",
+      "source_location": "L41"
+    },
+    {
+      "id": "src_review_cache_projectfactscacheschema",
+      "label": "projectFactsCacheSchema",
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "replay.mts",
+      "file_type": "code",
+      "norm_label": "projectfactscacheschema",
+      "source_file": "src/review-cache.ts",
+      "source_location": "L49"
+    },
+    {
+      "id": "src_review_cache_scanresultcacheschema",
+      "label": "scanResultCacheSchema",
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "replay.mts",
+      "file_type": "code",
+      "norm_label": "scanresultcacheschema",
+      "source_file": "src/review-cache.ts",
       "source_location": "L41"
     },
     {
@@ -24670,50 +24670,6 @@
       "source_location": "L16"
     },
     {
-      "id": "test_parity_test",
-      "label": "parity.test.ts",
-      "_origin": "ast",
-      "community": 40,
-      "community_name": "experiment.ts",
-      "file_type": "code",
-      "norm_label": "parity.test.ts",
-      "source_file": "test/parity.test.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "test_parity_test_corpus",
-      "label": "corpus",
-      "_origin": "ast",
-      "community": 40,
-      "community_name": "experiment.ts",
-      "file_type": "code",
-      "norm_label": "corpus",
-      "source_file": "test/parity.test.ts",
-      "source_location": "L9"
-    },
-    {
-      "id": "test_parity_test_gate",
-      "label": "gate",
-      "_origin": "ast",
-      "community": 40,
-      "community_name": "experiment.ts",
-      "file_type": "code",
-      "norm_label": "gate",
-      "source_file": "test/parity.test.ts",
-      "source_location": "L10"
-    },
-    {
-      "id": "test_parity_test_root",
-      "label": "root",
-      "_origin": "ast",
-      "community": 40,
-      "community_name": "experiment.ts",
-      "file_type": "code",
-      "norm_label": "root",
-      "source_file": "test/parity.test.ts",
-      "source_location": "L8"
-    },
-    {
       "id": "ref_earendil_works_pi_coding_agent",
       "label": "@earendil-works/pi-coding-agent",
       "_origin": "ast",
@@ -24747,39 +24703,6 @@
       "source_location": "L1"
     },
     {
-      "id": "src_prompts",
-      "label": "prompts.ts",
-      "_origin": "ast",
-      "community": 42,
-      "community_name": "memory.ts",
-      "file_type": "code",
-      "norm_label": "prompts.ts",
-      "source_file": "src/prompts.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "src_prompts_agents_dir",
-      "label": "AGENTS_DIR",
-      "_origin": "ast",
-      "community": 42,
-      "community_name": "memory.ts",
-      "file_type": "code",
-      "norm_label": "agents_dir",
-      "source_file": "src/prompts.ts",
-      "source_location": "L12"
-    },
-    {
-      "id": "src_prompts_contracts",
-      "label": "CONTRACTS",
-      "_origin": "ast",
-      "community": 42,
-      "community_name": "memory.ts",
-      "file_type": "code",
-      "norm_label": "contracts",
-      "source_file": "src/prompts.ts",
-      "source_location": "L14"
-    },
-    {
       "id": "src_server",
       "label": "src/server.ts",
       "_origin": "ast",
@@ -24799,72 +24722,6 @@
       "file_type": "code",
       "norm_label": "server",
       "source_file": "src/server.ts",
-      "source_location": "L11"
-    },
-    {
-      "id": "test_agents_test",
-      "label": "agents.test.ts",
-      "_origin": "ast",
-      "community": 42,
-      "community_name": "memory.ts",
-      "file_type": "code",
-      "norm_label": "agents.test.ts",
-      "source_file": "test/agents.test.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "test_agents_test_registered",
-      "label": "registered",
-      "_origin": "ast",
-      "community": 42,
-      "community_name": "memory.ts",
-      "file_type": "code",
-      "norm_label": "registered",
-      "source_file": "test/agents.test.ts",
-      "source_location": "L14"
-    },
-    {
-      "id": "test_agents_test_root",
-      "label": "root",
-      "_origin": "ast",
-      "community": 42,
-      "community_name": "memory.ts",
-      "file_type": "code",
-      "norm_label": "root",
-      "source_file": "test/agents.test.ts",
-      "source_location": "L7"
-    },
-    {
-      "id": "test_agents_test_serversource",
-      "label": "serverSource",
-      "_origin": "ast",
-      "community": 42,
-      "community_name": "memory.ts",
-      "file_type": "code",
-      "norm_label": "serversource",
-      "source_file": "test/agents.test.ts",
-      "source_location": "L13"
-    },
-    {
-      "id": "test_round2_test",
-      "label": "round2.test.ts",
-      "_origin": "ast",
-      "community": 42,
-      "community_name": "memory.ts",
-      "file_type": "code",
-      "norm_label": "round2.test.ts",
-      "source_file": "test/round2.test.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "test_round2_test_root",
-      "label": "root",
-      "_origin": "ast",
-      "community": 42,
-      "community_name": "memory.ts",
-      "file_type": "code",
-      "norm_label": "root",
-      "source_file": "test/round2.test.ts",
       "source_location": "L11"
     },
     {
@@ -25561,72 +25418,6 @@
       "norm_label": "language_by_extension",
       "source_file": "src/change-evidence.ts",
       "source_location": "L142"
-    },
-    {
-      "id": "src_change_evidence_max_patch_response_bytes",
-      "label": "MAX_PATCH_RESPONSE_BYTES",
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "change-evidence.ts",
-      "file_type": "code",
-      "norm_label": "max_patch_response_bytes",
-      "source_file": "src/change-evidence.ts",
-      "source_location": "L9"
-    },
-    {
-      "id": "test_change_evidence_test",
-      "label": "change-evidence.test.ts",
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "change-evidence.ts",
-      "file_type": "code",
-      "norm_label": "change-evidence.test.ts",
-      "source_file": "test/change-evidence.test.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "test_change_evidence_test_env",
-      "label": "env",
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "change-evidence.ts",
-      "file_type": "code",
-      "norm_label": "env",
-      "source_file": "test/change-evidence.test.ts",
-      "source_location": "L18"
-    },
-    {
-      "id": "test_change_evidence_test_manifestpath",
-      "label": "manifestPath",
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "change-evidence.ts",
-      "file_type": "code",
-      "norm_label": "manifestpath",
-      "source_file": "test/change-evidence.test.ts",
-      "source_location": "L17"
-    },
-    {
-      "id": "test_change_evidence_test_repo",
-      "label": "repo",
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "change-evidence.ts",
-      "file_type": "code",
-      "norm_label": "repo",
-      "source_file": "test/change-evidence.test.ts",
-      "source_location": "L16"
-    },
-    {
-      "id": "test_change_evidence_test_root",
-      "label": "root",
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "change-evidence.ts",
-      "file_type": "code",
-      "norm_label": "root",
-      "source_file": "test/change-evidence.test.ts",
-      "source_location": "L15"
     },
     {
       "id": "tsconfig",
@@ -27783,7 +27574,7 @@
       "label": "prefetch-serena.ts",
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "prefetch-serena.ts",
       "source_file": "src/runner/prefetch-serena.ts",
@@ -27794,7 +27585,7 @@
       "label": "serena.ts",
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "serena.ts",
       "source_file": "src/runner/serena.ts",
@@ -27805,7 +27596,7 @@
       "label": "FIXTURES",
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "fixtures",
       "source_file": "src/runner/serena.ts",
@@ -27816,7 +27607,7 @@
       "label": "LANGUAGE_EXTENSIONS",
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "language_extensions",
       "source_file": "src/runner/serena.ts",
@@ -27827,7 +27618,7 @@
       "label": "PACKAGED_SERVERS",
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "packaged_servers",
       "source_file": "src/runner/serena.ts",
@@ -27838,7 +27629,7 @@
       "label": "READ_ONLY_TOOLS",
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "read_only_tools",
       "source_file": "src/runner/serena.ts",
@@ -27849,18 +27640,73 @@
       "label": "SKIP_DIRS",
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "code",
       "norm_label": "skip_dirs",
       "source_file": "src/runner/serena.ts",
       "source_location": "L135"
     },
     {
+      "id": "test_pi_runner_test",
+      "label": "pi-runner.test.ts",
+      "_origin": "ast",
+      "community": 8,
+      "community_name": "pi-runner.test.ts",
+      "file_type": "code",
+      "norm_label": "pi-runner.test.ts",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "test_pi_runner_test_expectations",
+      "label": "expectations",
+      "_origin": "ast",
+      "community": 8,
+      "community_name": "pi-runner.test.ts",
+      "file_type": "code",
+      "norm_label": "expectations",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L545"
+    },
+    {
+      "id": "test_pi_runner_test_lenses",
+      "label": "lenses",
+      "_origin": "ast",
+      "community": 8,
+      "community_name": "pi-runner.test.ts",
+      "file_type": "code",
+      "norm_label": "lenses",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L537"
+    },
+    {
+      "id": "test_pi_runner_test_test_change_evidence",
+      "label": "TEST_CHANGE_EVIDENCE",
+      "_origin": "ast",
+      "community": 8,
+      "community_name": "pi-runner.test.ts",
+      "file_type": "code",
+      "norm_label": "test_change_evidence",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L62"
+    },
+    {
+      "id": "test_pi_runner_test_test_change_manifest",
+      "label": "TEST_CHANGE_MANIFEST",
+      "_origin": "ast",
+      "community": 8,
+      "community_name": "pi-runner.test.ts",
+      "file_type": "code",
+      "norm_label": "test_change_manifest",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L53"
+    },
+    {
       "id": "ref_modelcontextprotocol_sdk",
       "label": "@modelcontextprotocol/sdk",
       "_origin": "ast",
       "community": 8,
-      "community_name": "serena.ts",
+      "community_name": "pi-runner.test.ts",
       "file_type": "concept",
       "norm_label": "@modelcontextprotocol/sdk",
       "source_file": "package.json",
@@ -28014,6 +27860,17 @@
       "norm_label": "astgrep",
       "source_file": "src/engines/registry.ts",
       "source_location": "L292"
+    },
+    {
+      "id": "src_engines_registry_engines",
+      "label": "ENGINES",
+      "_origin": "ast",
+      "community": 82,
+      "community_name": "registry.ts",
+      "file_type": "code",
+      "norm_label": "engines",
+      "source_file": "src/engines/registry.ts",
+      "source_location": "L413"
     },
     {
       "id": "src_engines_registry_gitleaks",
@@ -28289,6 +28146,149 @@
       "norm_label": "logconfigtest.kt",
       "source_file": "inspect/runtime/src/test/kotlin/com/leveret/inspect/runtime/log/LogConfigTest.kt",
       "source_location": "L1"
+    },
+    {
+      "id": "src_prompts",
+      "label": "prompts.ts",
+      "_origin": "ast",
+      "community": 85,
+      "community_name": "prompts.ts",
+      "file_type": "code",
+      "norm_label": "prompts.ts",
+      "source_file": "src/prompts.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_prompts_agents_dir",
+      "label": "AGENTS_DIR",
+      "_origin": "ast",
+      "community": 85,
+      "community_name": "prompts.ts",
+      "file_type": "code",
+      "norm_label": "agents_dir",
+      "source_file": "src/prompts.ts",
+      "source_location": "L12"
+    },
+    {
+      "id": "src_prompts_contracts",
+      "label": "CONTRACTS",
+      "_origin": "ast",
+      "community": 85,
+      "community_name": "prompts.ts",
+      "file_type": "code",
+      "norm_label": "contracts",
+      "source_file": "src/prompts.ts",
+      "source_location": "L14"
+    },
+    {
+      "id": "test_agents_test",
+      "label": "agents.test.ts",
+      "_origin": "ast",
+      "community": 85,
+      "community_name": "prompts.ts",
+      "file_type": "code",
+      "norm_label": "agents.test.ts",
+      "source_file": "test/agents.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "test_agents_test_registered",
+      "label": "registered",
+      "_origin": "ast",
+      "community": 85,
+      "community_name": "prompts.ts",
+      "file_type": "code",
+      "norm_label": "registered",
+      "source_file": "test/agents.test.ts",
+      "source_location": "L14"
+    },
+    {
+      "id": "test_agents_test_root",
+      "label": "root",
+      "_origin": "ast",
+      "community": 85,
+      "community_name": "prompts.ts",
+      "file_type": "code",
+      "norm_label": "root",
+      "source_file": "test/agents.test.ts",
+      "source_location": "L7"
+    },
+    {
+      "id": "test_agents_test_serversource",
+      "label": "serverSource",
+      "_origin": "ast",
+      "community": 85,
+      "community_name": "prompts.ts",
+      "file_type": "code",
+      "norm_label": "serversource",
+      "source_file": "test/agents.test.ts",
+      "source_location": "L13"
+    },
+    {
+      "id": "test_parity_test",
+      "label": "parity.test.ts",
+      "_origin": "ast",
+      "community": 85,
+      "community_name": "prompts.ts",
+      "file_type": "code",
+      "norm_label": "parity.test.ts",
+      "source_file": "test/parity.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "test_parity_test_corpus",
+      "label": "corpus",
+      "_origin": "ast",
+      "community": 85,
+      "community_name": "prompts.ts",
+      "file_type": "code",
+      "norm_label": "corpus",
+      "source_file": "test/parity.test.ts",
+      "source_location": "L9"
+    },
+    {
+      "id": "test_parity_test_gate",
+      "label": "gate",
+      "_origin": "ast",
+      "community": 85,
+      "community_name": "prompts.ts",
+      "file_type": "code",
+      "norm_label": "gate",
+      "source_file": "test/parity.test.ts",
+      "source_location": "L10"
+    },
+    {
+      "id": "test_parity_test_root",
+      "label": "root",
+      "_origin": "ast",
+      "community": 85,
+      "community_name": "prompts.ts",
+      "file_type": "code",
+      "norm_label": "root",
+      "source_file": "test/parity.test.ts",
+      "source_location": "L8"
+    },
+    {
+      "id": "test_round2_test",
+      "label": "round2.test.ts",
+      "_origin": "ast",
+      "community": 85,
+      "community_name": "prompts.ts",
+      "file_type": "code",
+      "norm_label": "round2.test.ts",
+      "source_file": "test/round2.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "test_round2_test_root",
+      "label": "root",
+      "_origin": "ast",
+      "community": 85,
+      "community_name": "prompts.ts",
+      "file_type": "code",
+      "norm_label": "root",
+      "source_file": "test/round2.test.ts",
+      "source_location": "L11"
     },
     {
       "id": "tests_shell_setup_hooks_spec",
@@ -29569,21 +29569,6 @@
       "source_url": null
     },
     {
-      "id": "design_ast_search_tool",
-      "label": "ast_search MCP tool",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 136,
-      "community_name": "Repo Memory Store (.leveret/memory.jsonl)",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "ast_search mcp tool",
-      "source_file": "DESIGN.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
       "id": "design_coderabbit_four_pillars",
       "label": "CodeRabbit Four Pillars",
       "_origin": "semantic",
@@ -29679,21 +29664,6 @@
       "source_url": null
     },
     {
-      "id": "design_remember_tool",
-      "label": "remember MCP tool",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 136,
-      "community_name": "Repo Memory Store (.leveret/memory.jsonl)",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "remember mcp tool",
-      "source_file": "DESIGN.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
       "id": "design_scan_tool",
       "label": "scan MCP tool",
       "_origin": "semantic",
@@ -29736,36 +29706,6 @@
       "file_type": "concept",
       "norm_label": "interactive mcp mode",
       "source_file": "README.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "agents_review_blast_radius",
-      "label": "Mandatory Blast Radius Tracing",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 136,
-      "community_name": "Repo Memory Store (.leveret/memory.jsonl)",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "mandatory blast radius tracing",
-      "source_file": "agents/review.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "agents_verify_refute_or_evidence",
-      "label": "Refute-or-Evidence Procedure",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 136,
-      "community_name": "Repo Memory Store (.leveret/memory.jsonl)",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "refute-or-evidence procedure",
-      "source_file": "agents/verify.md",
       "source_location": null,
       "source_url": null
     },
@@ -30212,6 +30152,21 @@
       "source_url": null
     },
     {
+      "id": "docs_research_coderabbit_speed_effectiveness_context_packs",
+      "label": "Bounded contract-oriented context packs",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "bounded contract-oriented context packs",
+      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
+      "source_location": "L291",
+      "source_url": null
+    },
+    {
       "id": "docs_research_coderabbit_speed_effectiveness_deterministic_evidence_belt",
       "label": "Parallel deterministic evidence belt",
       "_origin": "semantic",
@@ -30255,6 +30210,21 @@
       "rationale": "Checkout never supplies config, executables, plugins, or instructions; executables must canonicalize under host allowlisted roots, and repository-derived text is evidence, never LLM instructions.",
       "source_file": "docs/research/serena-lsp-bundling.md",
       "source_location": "L34",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_snyk_aikido_review_inspiration_deterministic_first_triage",
+      "label": "Deterministic-first residual triage (Aikido AutoTriage order)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "deterministic-first residual triage (aikido autotriage order)",
+      "source_file": "docs/research/snyk-aikido-review-inspiration.md",
+      "source_location": "L245",
       "source_url": null
     },
     {
@@ -30337,6 +30307,52 @@
       "source_url": null
     },
     {
+      "id": "docs_research_tool_assisted_review_guidance_conjunctive_selection_budget",
+      "label": "Conjunctive card selection with hard guidance budget",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "conjunctive card selection with hard guidance budget",
+      "rationale": "At most six cards, 1 KiB each, 8 KiB total, so irrelevant language guidance does not occupy the prompt.",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L327",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_project_fact_record",
+      "label": "Versioned project fact record (model-free extraction)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "versioned project fact record (model-free extraction)",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L275",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_three_channel_review_packet",
+      "label": "Three-channel review packet (facts, rules, judgment)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "three-channel review packet (facts, rules, judgment)",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L351",
+      "source_url": null
+    },
+    {
       "id": "docs_research_tool_assisted_review_guidance_udev_trigger_before_consumer",
       "label": "Rule: udev-trigger-before-consumer",
       "_origin": "semantic",
@@ -30349,6 +30365,21 @@
       "norm_label": "rule: udev-trigger-before-consumer",
       "source_file": "docs/research/tool-assisted-review-guidance.md",
       "source_location": "L231",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_uv_sync_then_bare_project_command",
+      "label": "Rule: uv-sync-then-bare-project-command",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 41,
+      "community_name": "Existing Leveret deterministic analyzer belt",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "rule: uv-sync-then-bare-project-command",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L237",
       "source_url": null
     },
     {
@@ -30492,6 +30523,21 @@
       "source_url": null
     },
     {
+      "id": "design_remember_tool",
+      "label": "remember MCP tool",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 43,
+      "community_name": "Review Agent Contract",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "remember mcp tool",
+      "source_file": "DESIGN.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
       "id": "design_review_agent",
       "label": "Review Agent",
       "_origin": "semantic",
@@ -30612,6 +30658,21 @@
       "file_type": "rationale",
       "norm_label": "dropped claims never persisted",
       "rationale": "Failure to verify is not refutation; storing it as false-positive would permanently suppress a possibly-real finding class",
+      "source_file": "agents/verify.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "agents_verify_refute_or_evidence",
+      "label": "Refute-or-Evidence Procedure",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 43,
+      "community_name": "Review Agent Contract",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "refute-or-evidence procedure",
       "source_file": "agents/verify.md",
       "source_location": null,
       "source_url": null
@@ -30738,36 +30799,6 @@
       "source_url": null
     },
     {
-      "id": "docs_research_coderabbit_speed_effectiveness_context_packs",
-      "label": "Bounded contract-oriented context packs",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 47,
-      "community_name": "Aikido",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "bounded contract-oriented context packs",
-      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
-      "source_location": "L291",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_snyk_aikido_review_inspiration_deterministic_first_triage",
-      "label": "Deterministic-first residual triage (Aikido AutoTriage order)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 47,
-      "community_name": "Aikido",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "deterministic-first residual triage (aikido autotriage order)",
-      "source_file": "docs/research/snyk-aikido-review-inspiration.md",
-      "source_location": "L245",
-      "source_url": null
-    },
-    {
       "id": "docs_research_snyk_aikido_review_inspiration_fixability",
       "label": "Fixability classification (verified/candidate/recommendation/no known fix)",
       "_origin": "semantic",
@@ -30828,67 +30859,6 @@
       "rationale": "Both vendors warn static no-path is not proof of safety; reachability should change ranking, never silently produce clean.",
       "source_file": "docs/research/snyk-aikido-review-inspiration.md",
       "source_location": "L90",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_conjunctive_selection_budget",
-      "label": "Conjunctive card selection with hard guidance budget",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 47,
-      "community_name": "Aikido",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "conjunctive card selection with hard guidance budget",
-      "rationale": "At most six cards, 1 KiB each, 8 KiB total, so irrelevant language guidance does not occupy the prompt.",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L327",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_project_fact_record",
-      "label": "Versioned project fact record (model-free extraction)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 47,
-      "community_name": "Aikido",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "versioned project fact record (model-free extraction)",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L275",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_three_channel_review_packet",
-      "label": "Three-channel review packet (facts, rules, judgment)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 47,
-      "community_name": "Aikido",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "three-channel review packet (facts, rules, judgment)",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L351",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_uv_sync_then_bare_project_command",
-      "label": "Rule: uv-sync-then-bare-project-command",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 47,
-      "community_name": "Aikido",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "rule: uv-sync-then-bare-project-command",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L237",
       "source_url": null
     },
     {
@@ -31216,6 +31186,21 @@
       "source_url": null
     },
     {
+      "id": "design_ast_search_tool",
+      "label": "ast_search MCP tool",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 55,
+      "community_name": "leveret-runner-pi (Pi harness)",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "ast_search mcp tool",
+      "source_file": "DESIGN.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
       "id": "design_bench_corpus_v1",
       "label": "bench/corpus.v1.json",
       "_origin": "semantic",
@@ -31430,6 +31415,21 @@
       "file_type": "document",
       "norm_label": "serena project config (typescript ls)",
       "source_file": ".serena/project.yml",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "agents_review_blast_radius",
+      "label": "Mandatory Blast Radius Tracing",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 55,
+      "community_name": "leveret-runner-pi (Pi harness)",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "mandatory blast radius tracing",
+      "source_file": "agents/review.md",
       "source_location": null,
       "source_url": null
     },
@@ -31909,6 +31909,66 @@
       "source_url": null
     },
     {
+      "id": "docs_research_coderabbit_speed_effectiveness_pfblockerng_pr_2444",
+      "label": "pfBlockerNG PR #2444",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 65,
+      "community_name": "Leveret Design Doc",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "pfblockerng pr #2444",
+      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
+      "source_location": "L149",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_coderabbit_speed_effectiveness_pfblockerng_pr_2521",
+      "label": "pfBlockerNG PR #2521",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 65,
+      "community_name": "Leveret Design Doc",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "pfblockerng pr #2521",
+      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
+      "source_location": "L150",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_four_defect_classes",
+      "label": "Four defect classes (output invariants, test fidelity, runner sequencing, framework env)",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 65,
+      "community_name": "Leveret Design Doc",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "four defect classes (output invariants, test fidelity, runner sequencing, framework env)",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L27",
+      "source_url": null
+    },
+    {
+      "id": "docs_research_tool_assisted_review_guidance_twelve_missed_mechanisms",
+      "label": "Twelve missed CodeRabbit recall mechanisms",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 65,
+      "community_name": "Leveret Design Doc",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "twelve missed coderabbit recall mechanisms",
+      "source_file": "docs/research/tool-assisted-review-guidance.md",
+      "source_location": "L8",
+      "source_url": null
+    },
+    {
       "id": "inspect_readme_config_precedence",
       "label": "Inspect Config Precedence",
       "_origin": "semantic",
@@ -31970,6 +32030,21 @@
       "source_url": null
     },
     {
+      "id": "readme_accounted_filter",
+      "label": "Accounted Filter",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 65,
+      "community_name": "Leveret Design Doc",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "accounted filter",
+      "source_file": "README.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
       "id": "readme_monorepo_layout",
       "label": "Monorepo Layout (TypeScript + Inspect)",
       "_origin": "semantic",
@@ -31998,6 +32073,22 @@
       "rationale": "Replace CodeRabbit review with composable, inspectable local layers driven by an agent instead of a hosted black box",
       "source_file": "DESIGN.md",
       "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "docs_research_coderabbit_speed_effectiveness_doc",
+      "label": "Why CodeRabbit can look fast and effective",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 65,
+      "community_name": "Leveret Design Doc",
+      "contributor": null,
+      "file_type": "document",
+      "norm_label": "why coderabbit can look fast and effective",
+      "rationale": "Explains CodeRabbit's public speed/effectiveness as mechanical staging (scoping, deterministic preprocessing, verification) rather than an undisclosed fast model.",
+      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
+      "source_location": "L1",
       "source_url": null
     },
     {
@@ -32043,6 +32134,22 @@
       "norm_label": "leveret readme",
       "source_file": "README.md",
       "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "docs_research_coderabbit_speed_effectiveness_evidence_labels",
+      "label": "D/O/I evidence labels with confidence",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 65,
+      "community_name": "Leveret Design Doc",
+      "contributor": null,
+      "file_type": "rationale",
+      "norm_label": "d/o/i evidence labels with confidence",
+      "rationale": "Separates vendor-documented, publicly observed, and inferred claims so vendor statements are not treated as independent proof.",
+      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
+      "source_location": "L7",
       "source_url": null
     },
     {
@@ -32404,21 +32511,6 @@
       "source_url": null
     },
     {
-      "id": "readme_accounted_filter",
-      "label": "Accounted Filter",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 79,
-      "community_name": "Three-Grade Filter",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "accounted filter",
-      "source_file": "README.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
       "id": "_leveret_self_profile",
       "label": "Leveret Self-Review Profile",
       "_origin": "semantic",
@@ -32511,36 +32603,6 @@
       "source_url": null
     },
     {
-      "id": "docs_research_coderabbit_speed_effectiveness_pfblockerng_pr_2444",
-      "label": "pfBlockerNG PR #2444",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 84,
-      "community_name": "CodeRabbit",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "pfblockerng pr #2444",
-      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
-      "source_location": "L149",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_coderabbit_speed_effectiveness_pfblockerng_pr_2521",
-      "label": "pfBlockerNG PR #2521",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 84,
-      "community_name": "CodeRabbit",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "pfblockerng pr #2521",
-      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
-      "source_location": "L150",
-      "source_url": null
-    },
-    {
       "id": "docs_research_coderabbit_speed_effectiveness_sandbox_cache",
       "label": "CodeRabbit reusable sandbox cache",
       "_origin": "semantic",
@@ -32587,52 +32649,6 @@
       "source_url": null
     },
     {
-      "id": "docs_research_tool_assisted_review_guidance_four_defect_classes",
-      "label": "Four defect classes (output invariants, test fidelity, runner sequencing, framework env)",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 84,
-      "community_name": "CodeRabbit",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "four defect classes (output invariants, test fidelity, runner sequencing, framework env)",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L27",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_tool_assisted_review_guidance_twelve_missed_mechanisms",
-      "label": "Twelve missed CodeRabbit recall mechanisms",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 84,
-      "community_name": "CodeRabbit",
-      "contributor": null,
-      "file_type": "concept",
-      "norm_label": "twelve missed coderabbit recall mechanisms",
-      "source_file": "docs/research/tool-assisted-review-guidance.md",
-      "source_location": "L8",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_coderabbit_speed_effectiveness_doc",
-      "label": "Why CodeRabbit can look fast and effective",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 84,
-      "community_name": "CodeRabbit",
-      "contributor": null,
-      "file_type": "document",
-      "norm_label": "why coderabbit can look fast and effective",
-      "rationale": "Explains CodeRabbit's public speed/effectiveness as mechanical staging (scoping, deterministic preprocessing, verification) rather than an undisclosed fast model.",
-      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
-      "source_location": "L1",
-      "source_url": null
-    },
-    {
       "id": "docs_research_coderabbit_speed_effectiveness_candidate_verifier",
       "label": "Candidate then independent verifier",
       "_origin": "semantic",
@@ -32661,22 +32677,6 @@
       "rationale": "Run only after scoping/verification stages; parallelizing unbounded prompts spends the same mistakes faster.",
       "source_file": "docs/research/coderabbit-speed-effectiveness.md",
       "source_location": "L306",
-      "source_url": null
-    },
-    {
-      "id": "docs_research_coderabbit_speed_effectiveness_evidence_labels",
-      "label": "D/O/I evidence labels with confidence",
-      "_origin": "semantic",
-      "author": null,
-      "captured_at": null,
-      "community": 84,
-      "community_name": "CodeRabbit",
-      "contributor": null,
-      "file_type": "rationale",
-      "norm_label": "d/o/i evidence labels with confidence",
-      "rationale": "Separates vendor-documented, publicly observed, and inferred claims so vendor statements are not treated as independent proof.",
-      "source_file": "docs/research/coderabbit-speed-effectiveness.md",
-      "source_location": "L7",
       "source_url": null
     },
     {
@@ -33657,30 +33657,6 @@
       "type": "external"
     },
     {
-      "id": "ref_bench_parity_mjs",
-      "label": "ref_bench_parity_mjs",
-      "_origin": "semantic",
-      "community": 40,
-      "community_name": "experiment.ts",
-      "external": true,
-      "file_type": "concept",
-      "norm_label": "ref_bench_parity_mjs",
-      "source_file": "",
-      "type": "external"
-    },
-    {
-      "id": "ref_node_url",
-      "label": "ref_node_url",
-      "_origin": "semantic",
-      "community": 42,
-      "community_name": "memory.ts",
-      "external": true,
-      "file_type": "concept",
-      "norm_label": "ref_node_url",
-      "source_file": "",
-      "type": "external"
-    },
-    {
       "id": "ref_node_stream",
       "label": "ref_node_stream",
       "_origin": "semantic",
@@ -33881,6 +33857,30 @@
       "external": true,
       "file_type": "concept",
       "norm_label": "tempdir",
+      "source_file": "",
+      "type": "external"
+    },
+    {
+      "id": "ref_bench_parity_mjs",
+      "label": "ref_bench_parity_mjs",
+      "_origin": "semantic",
+      "community": 85,
+      "community_name": "prompts.ts",
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "ref_bench_parity_mjs",
+      "source_file": "",
+      "type": "external"
+    },
+    {
+      "id": "ref_node_url",
+      "label": "ref_node_url",
+      "_origin": "semantic",
+      "community": 85,
+      "community_name": "prompts.ts",
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "ref_node_url",
       "source_file": "",
       "type": "external"
     },
@@ -52159,7 +52159,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1372",
+      "source_location": "L1373",
       "weight": 1.0
     },
     {
@@ -52171,7 +52171,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1402",
+      "source_location": "L1403",
       "weight": 1.0
     },
     {
@@ -52183,7 +52183,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1403",
+      "source_location": "L1404",
       "weight": 1.0
     },
     {
@@ -52195,7 +52195,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1407",
+      "source_location": "L1408",
       "weight": 1.0
     },
     {
@@ -52207,7 +52207,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1408",
+      "source_location": "L1409",
       "weight": 1.0
     },
     {
@@ -52219,7 +52219,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1408",
+      "source_location": "L1409",
       "weight": 1.0
     },
     {
@@ -52231,7 +52231,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1411",
+      "source_location": "L1412",
       "weight": 1.0
     },
     {
@@ -52243,7 +52243,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1416",
+      "source_location": "L1417",
       "weight": 1.0
     },
     {
@@ -52255,7 +52255,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1417",
+      "source_location": "L1418",
       "weight": 1.0
     },
     {
@@ -52459,7 +52459,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1004",
+      "source_location": "L1005",
       "weight": 1.0
     },
     {
@@ -52471,7 +52471,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1027",
+      "source_location": "L1028",
       "weight": 1.0
     },
     {
@@ -52483,7 +52483,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1046",
+      "source_location": "L1047",
       "weight": 1.0
     },
     {
@@ -52495,7 +52495,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1056",
+      "source_location": "L1057",
       "weight": 1.0
     },
     {
@@ -52507,7 +52507,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1098",
+      "source_location": "L1099",
       "weight": 1.0
     },
     {
@@ -52519,7 +52519,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1106",
+      "source_location": "L1107",
       "weight": 1.0
     },
     {
@@ -52531,7 +52531,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1117",
+      "source_location": "L1118",
       "weight": 1.0
     },
     {
@@ -52543,7 +52543,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1122",
+      "source_location": "L1123",
       "weight": 1.0
     },
     {
@@ -52555,7 +52555,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1184",
+      "source_location": "L1185",
       "weight": 1.0
     },
     {
@@ -52567,7 +52567,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1185",
+      "source_location": "L1186",
       "weight": 1.0
     },
     {
@@ -52579,7 +52579,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1209",
+      "source_location": "L1210",
       "weight": 1.0
     },
     {
@@ -52591,7 +52591,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1210",
+      "source_location": "L1211",
       "weight": 1.0
     },
     {
@@ -52603,7 +52603,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1214",
+      "source_location": "L1215",
       "weight": 1.0
     },
     {
@@ -52615,7 +52615,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1247",
+      "source_location": "L1248",
       "weight": 1.0
     },
     {
@@ -52627,7 +52627,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1293",
+      "source_location": "L1294",
       "weight": 1.0
     },
     {
@@ -52639,7 +52639,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1321",
+      "source_location": "L1322",
       "weight": 1.0
     },
     {
@@ -53011,7 +53011,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/runner/pi.ts",
-      "source_location": "L987",
+      "source_location": "L988",
       "weight": 1.0
     },
     {
@@ -55963,7 +55963,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L1186",
+      "source_location": "L1187",
       "weight": 1.0
     },
     {
@@ -55975,7 +55975,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L1643",
+      "source_location": "L1657",
       "weight": 1.0
     },
     {
@@ -55987,7 +55987,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L1644",
+      "source_location": "L1658",
       "weight": 1.0
     },
     {
@@ -55999,7 +55999,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L1644",
+      "source_location": "L1658",
       "weight": 1.0
     },
     {
@@ -56011,7 +56011,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L1646",
+      "source_location": "L1660",
       "weight": 1.0
     },
     {
@@ -56023,7 +56023,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L1557",
+      "source_location": "L1571",
       "weight": 1.0
     },
     {
@@ -56035,7 +56035,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L1557",
+      "source_location": "L1571",
       "weight": 1.0
     },
     {
@@ -56047,7 +56047,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L1279",
+      "source_location": "L1293",
       "weight": 1.0
     },
     {
@@ -57403,7 +57403,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L1027",
+      "source_location": "L1028",
       "weight": 1.0
     },
     {
@@ -57415,7 +57415,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L1511",
+      "source_location": "L1525",
       "weight": 1.0
     },
     {
@@ -57427,7 +57427,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L1639",
+      "source_location": "L1653",
       "weight": 1.0
     },
     {
@@ -57439,7 +57439,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L551",
+      "source_location": "L552",
       "weight": 1.0
     },
     {
@@ -57451,7 +57451,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L67",
+      "source_location": "L68",
       "weight": 1.0
     },
     {
@@ -57463,7 +57463,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L754",
+      "source_location": "L755",
       "weight": 1.0
     },
     {
@@ -57475,7 +57475,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L77",
+      "source_location": "L78",
       "weight": 1.0
     },
     {
@@ -59407,7 +59407,7 @@
       "context": "import",
       "deferred": true,
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L222",
+      "source_location": "L223",
       "weight": 1.0
     },
     {
@@ -59420,7 +59420,7 @@
       "context": "import",
       "deferred": true,
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L223",
+      "source_location": "L224",
       "weight": 1.0
     },
     {
@@ -59433,7 +59433,7 @@
       "context": "import",
       "deferred": true,
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L86",
+      "source_location": "L87",
       "weight": 1.0
     },
     {
@@ -72488,7 +72488,7 @@
     },
     {
       "source": "test_pi_runner_test",
-      "target": "src_review_cache_incrementaldependencyboundary",
+      "target": "src_runner_experiment_configurationsha256",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -72496,6 +72496,30 @@
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
       "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "test_pi_runner_test",
+      "target": "src_runner_experiment_experimentmanifestschema",
+      "relation": "imports",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "test_pi_runner_test",
+      "target": "src_review_cache_incrementaldependencyboundary",
+      "relation": "imports",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L18",
       "weight": 1.0
     },
     {
@@ -72507,7 +72531,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L17",
+      "source_location": "L18",
       "weight": 1.0
     },
     {
@@ -72519,7 +72543,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L20",
+      "source_location": "L21",
       "weight": 1.0
     },
     {
@@ -72531,7 +72555,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L20",
+      "source_location": "L21",
       "weight": 1.0
     },
     {
@@ -72543,7 +72567,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L21",
+      "source_location": "L22",
       "weight": 1.0
     },
     {
@@ -72555,7 +72579,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L21",
+      "source_location": "L22",
       "weight": 1.0
     },
     {
@@ -72567,7 +72591,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L22",
+      "source_location": "L23",
       "weight": 1.0
     },
     {
@@ -72579,7 +72603,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L23",
+      "source_location": "L24",
       "weight": 1.0
     },
     {
@@ -72591,7 +72615,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L24",
+      "source_location": "L25",
       "weight": 1.0
     },
     {
@@ -72603,7 +72627,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
@@ -72615,7 +72639,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
@@ -72627,7 +72651,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
@@ -72639,7 +72663,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
@@ -72651,7 +72675,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
@@ -72663,7 +72687,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
@@ -72675,7 +72699,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
@@ -72687,7 +72711,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
@@ -72699,7 +72723,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
@@ -72711,7 +72735,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
@@ -72723,7 +72747,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
@@ -72735,7 +72759,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L38",
+      "source_location": "L39",
       "weight": 1.0
     },
     {
@@ -72747,7 +72771,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L38",
+      "source_location": "L39",
       "weight": 1.0
     },
     {
@@ -72759,7 +72783,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L38",
+      "source_location": "L39",
       "weight": 1.0
     },
     {
@@ -72771,7 +72795,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L38",
+      "source_location": "L39",
       "weight": 1.0
     },
     {
@@ -72783,7 +72807,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L38",
+      "source_location": "L39",
       "weight": 1.0
     },
     {
@@ -72795,7 +72819,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L39",
+      "source_location": "L40",
       "weight": 1.0
     },
     {
@@ -72807,7 +72831,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L39",
+      "source_location": "L40",
       "weight": 1.0
     },
     {
@@ -72819,7 +72843,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L39",
+      "source_location": "L40",
       "weight": 1.0
     },
     {
@@ -72831,7 +72855,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L39",
+      "source_location": "L40",
       "weight": 1.0
     },
     {
@@ -72843,7 +72867,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L39",
+      "source_location": "L40",
       "weight": 1.0
     },
     {
@@ -72855,7 +72879,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L39",
+      "source_location": "L40",
       "weight": 1.0
     },
     {
@@ -72867,7 +72891,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L39",
+      "source_location": "L40",
       "weight": 1.0
     },
     {
@@ -72879,7 +72903,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L39",
+      "source_location": "L40",
       "weight": 1.0
     },
     {
@@ -72891,7 +72915,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L49",
+      "source_location": "L50",
       "weight": 1.0
     },
     {
@@ -72903,7 +72927,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L50",
+      "source_location": "L51",
       "weight": 1.0
     },
     {
@@ -72915,7 +72939,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L50",
+      "source_location": "L51",
       "weight": 1.0
     },
     {
@@ -80645,7 +80669,7 @@
     },
     {
       "source": "test_pi_runner_test",
-      "target": "src_review_cache",
+      "target": "src_runner_experiment",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -80657,7 +80681,7 @@
     },
     {
       "source": "test_pi_runner_test",
-      "target": "ref_node_crypto",
+      "target": "src_review_cache",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -80669,7 +80693,7 @@
     },
     {
       "source": "test_pi_runner_test",
-      "target": "ref_node_child_process",
+      "target": "ref_node_crypto",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -80681,7 +80705,7 @@
     },
     {
       "source": "test_pi_runner_test",
-      "target": "src_change_evidence",
+      "target": "ref_node_child_process",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -80689,6 +80713,18 @@
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
       "source_location": "L20",
+      "weight": 1.0
+    },
+    {
+      "source": "test_pi_runner_test",
+      "target": "src_change_evidence",
+      "relation": "imports_from",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L21",
       "type_only": true,
       "weight": 1.0
     },
@@ -80701,7 +80737,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L21",
+      "source_location": "L22",
       "weight": 1.0
     },
     {
@@ -80713,7 +80749,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L22",
+      "source_location": "L23",
       "weight": 1.0
     },
     {
@@ -80725,7 +80761,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L23",
+      "source_location": "L24",
       "weight": 1.0
     },
     {
@@ -80737,7 +80773,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L24",
+      "source_location": "L25",
       "weight": 1.0
     },
     {
@@ -80749,24 +80785,12 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
       "source": "test_pi_runner_test",
       "target": "src_runner_verify_output",
-      "relation": "imports_from",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "import",
-      "source_file": "test/pi-runner.test.ts",
-      "source_location": "L38",
-      "weight": 1.0
-    },
-    {
-      "source": "test_pi_runner_test",
-      "target": "src_runner_serena",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -80790,6 +80814,18 @@
     },
     {
       "source": "test_pi_runner_test",
+      "target": "src_runner_serena",
+      "relation": "imports_from",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "test/pi-runner.test.ts",
+      "source_location": "L40",
+      "weight": 1.0
+    },
+    {
+      "source": "test_pi_runner_test",
       "target": "src_runner_pi_tools",
       "relation": "imports_from",
       "_origin": "ast",
@@ -80797,7 +80833,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L49",
+      "source_location": "L50",
       "weight": 1.0
     },
     {
@@ -80809,7 +80845,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L50",
+      "source_location": "L51",
       "weight": 1.0
     },
     {
@@ -95681,7 +95717,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/runner/pi.ts",
-      "source_location": "L1370",
+      "source_location": "L1371",
       "weight": 1.0
     },
     {
@@ -99707,7 +99743,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L1457",
+      "source_location": "L1471",
       "weight": 1.0
     },
     {
@@ -99718,7 +99754,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L52",
+      "source_location": "L53",
       "weight": 1.0
     },
     {
@@ -99729,7 +99765,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L536",
+      "source_location": "L537",
       "weight": 1.0
     },
     {
@@ -99740,7 +99776,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L544",
+      "source_location": "L545",
       "weight": 1.0
     },
     {
@@ -99751,7 +99787,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L61",
+      "source_location": "L62",
       "weight": 1.0
     },
     {
@@ -99762,7 +99798,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L749",
+      "source_location": "L750",
       "weight": 1.0
     },
     {
@@ -99773,7 +99809,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L750",
+      "source_location": "L751",
       "weight": 1.0
     },
     {
@@ -99784,7 +99820,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L753",
+      "source_location": "L754",
       "weight": 1.0
     },
     {
@@ -108397,7 +108433,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "test/pi-runner.test.ts",
-      "source_location": "L643",
+      "source_location": "L644",
       "weight": 1.0
     },
     {
@@ -112770,5 +112806,5 @@
       "source_file": "docs/reports/2026-08-24-pi-quality-vs-omp-coderabbit.md"
     }
   ],
-  "built_at_commit": "05fb03149675bac6bb1b218ce11cca837981a3de"
+  "built_at_commit": "59a546248401a09621e2a62965e24000d2b98a69"
 }
