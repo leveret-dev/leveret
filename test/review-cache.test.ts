@@ -13,6 +13,10 @@ import {
   publicationDecisions,
   reconcileFindings,
 } from "../src/review-cache.js";
+import * as reviewCache from "../src/review-cache.js";
+import { admitBuildEvidence } from "../src/build-evidence.js";
+import { createBuildFixture, fixtureRequest } from "./build-evidence-fixture.js";
+import type { BuildEvidenceManifest } from "../src/build-evidence-contract.js";
 
 const roots: string[] = [];
 const git = (repo: string, ...args: string[]) => execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
@@ -147,6 +151,43 @@ describe("host-owned review cache", () => {
     expect(await cache.readLastCompleted()).toBeNull();
     expect((await cache.get(key)).decision.outcome).toBe("miss");
   });
+
+  it("keys actual semantic cache entries by compiler, roots, artifacts and policy, not manifest formatting", async () => {
+    const fixture = repository();
+    const exported = await createBuildFixture(join(fixture.root, "export"), "valid");
+    const policy = { id: "policy-one", available: false, knownValues: new Set<string>(), refreshKnownValues: async () => [],
+      additionalRules: [], nonSecretValues: new Set<string>() };
+    let serial = 0;
+    const identity = async (change: (manifest: BuildEvidenceManifest) => void, pretty = false, policyId = "policy-one") => {
+      const manifest = structuredClone(exported.manifests.head);
+      change(manifest);
+      const bytes = JSON.stringify(manifest, null, pretty ? 2 : undefined);
+      const manifestPath = join(fixture.root, `export-${++serial}.json`);
+      writeFileSync(manifestPath, bytes);
+      const request = fixtureRequest(exported, "head", join(fixture.root, `admission-${serial}`));
+      const admission = await admitBuildEvidence({ ...request, pin: { ...request.pin!, manifestPath, manifestSha256: sha256(bytes) } },
+        { ...policy, id: policyId });
+      expect(admission.outcome).toBe("admitted");
+      return reviewCache.buildEvidenceSemanticIdentity(admission);
+    };
+    const cache = await ReviewCache.open({ dataRoot: fixture.data, repoRoot: exported.repo, repository: "owner/build", pullRequest: 8 });
+    const boundary = await incrementalDependencyBoundary(exported.repo, null, exported.head);
+    const original = await identity(() => {});
+    const key = (build: string) => cache.key("final-result", exported.base, exported.head, { build_evidence: build }, boundary);
+    cache.stage(key(original), { verdict: "prior" });
+    await cache.commitCompleted(completed(exported.base, exported.head));
+    expect((await cache.get(key(await identity(() => {}, true)))).decision.outcome).toBe("hit");
+    for (const changed of [
+      await identity((manifest) => { manifest.compilations[0]!.compiler.targetLevel = "17"; }),
+      await identity((manifest) => { manifest.compilations[0]!.sourceRoots[0]!.repositoryPath = "src/changed/java"; }),
+      await identity((manifest) => {
+        const artifact = manifest.artifacts.find((item) => item.id === "pricing-output")!;
+        if (artifact.availability !== "available" || artifact.kind !== "file") throw new Error("output missing");
+        artifact.content.sha256 = "f".repeat(64);
+      }),
+      await identity(() => {}, false, "policy-two"),
+    ]) expect((await cache.get(key(changed))).decision.outcome).toBe("miss");
+  }, 180_000);
 });
 
 describe("verified finding lifecycle", () => {

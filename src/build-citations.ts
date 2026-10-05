@@ -1,8 +1,11 @@
 import { z } from "zod";
 import {
-  lastLine, positionBefore, spanInExcerpt,
+  buildArtifactReadAuthorization, lastLine, positionBefore, spanInExcerpt,
   type BuildArtifactMap, type BuildArtifactReadResult, type SourceRange,
 } from "./build-artifact-reader.js";
+import { screenText, secretPolicyGeneration } from "./secret-screening.js";
+import type { SecretPolicy } from "./secret-screening.js";
+import type { BuildArtifactReadReply, BuildArtifactReadRequest } from "./build-artifact-reader.js";
 
 /**
  * Content citations for findings: `{ manifestSha256, artifactId, range, span? }`, with a null range for whole-file
@@ -65,6 +68,7 @@ type Receipt = {
   range: LineSpan;
   text: string;
   maps: readonly BuildArtifactMap[];
+  generation: number;
 };
 
 const withinSpan = (outer: LineSpan, inner: LineSpan): boolean => outer.startLine <= inner.startLine && inner.endLine <= outer.endLine;
@@ -93,12 +97,43 @@ function covered(wanted: LineSpan, available: readonly LineSpan[]): boolean {
  */
 export class BuildEvidenceLedger {
   readonly #receipts: Receipt[] = [];
+  #policy: SecretPolicy | undefined;
+  constructor(policy?: SecretPolicy) { this.#policy = policy; }
 
   record(evidenceId: string, side: "base" | "head", result: BuildArtifactReadResult): void {
+    const authorization = buildArtifactReadAuthorization(result);
+    if (authorization) {
+      if (this.#policy && authorization.policy !== this.#policy) return;
+      this.#policy = authorization.policy;
+    }
     this.#receipts.push({
       evidenceId, side, manifestSha256: result.citation.manifestSha256, artifactId: result.citation.artifactId, origin: result.origin,
       repositoryPath: result.repositoryPath, lineCount: result.lineCount, range: result.range, text: result.text, maps: result.maps,
+      generation: authorization?.generation ?? (this.#policy ? secretPolicyGeneration(this.#policy) : 0),
     });
+  }
+
+  /** Re-read frozen bytes AND map counterparts under refreshed policy before any new publication. */
+  async refresh(
+    read: (side: "base" | "head", request: BuildArtifactReadRequest) => Promise<BuildArtifactReadReply>,
+    evidenceIds: ReadonlySet<string>,
+  ): Promise<void> {
+    for (const receipt of this.#receipts) {
+      if (!evidenceIds.has(receipt.evidenceId)) continue;
+      try {
+        const reply = await read(receipt.side, {
+          manifestSha256: receipt.manifestSha256, artifactId: receipt.artifactId, range: receipt.range, byteBudget: 262144,
+        });
+        const authorization = reply.ok ? buildArtifactReadAuthorization(reply.result) : undefined;
+        if (reply.ok && authorization !== undefined && authorization.policy === this.#policy && reply.result.text === receipt.text
+          && reply.result.range.startLine === receipt.range.startLine && reply.result.range.endLine === receipt.range.endLine) {
+          receipt.maps = reply.result.maps;
+          receipt.generation = authorization.generation;
+        } else receipt.generation = -1;
+      } catch {
+        receipt.generation = -1; // Integrity/screening failure revokes, never retains an old authorization.
+      }
+    }
   }
 
   /**
@@ -114,7 +149,9 @@ export class BuildEvidenceLedger {
   resolve(finding: BuildCitable, evidenceIds: ReadonlySet<string>): BuildResolution {
     const cited = finding.build_citations ?? [];
     if (cited.length === 0) return { ok: true, citations: [], anchor: null };
-    const receipts = this.#receipts.filter((item) => evidenceIds.has(item.evidenceId));
+    const generation = this.#policy ? secretPolicyGeneration(this.#policy) : 0;
+    const receipts = this.#receipts.filter((item) => evidenceIds.has(item.evidenceId) && item.generation === generation
+      && (!this.#policy || screenText(JSON.stringify(item), this.#policy).state === "available"));
     const fail = (index: number, why: string): BuildResolution => ({ ok: false, reason: `build citation ${index} ${why}` });
     const seen = new Set<string>();
     for (const [index, citation] of cited.entries()) {

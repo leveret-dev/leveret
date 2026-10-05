@@ -3,7 +3,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { currentAuditTrace } from "./audit.js";
+import { currentAuditTrace, sanitizeAuditValue } from "./audit.js";
+import { currentSecretPolicy, refreshSecretPolicy, withSecretPolicy } from "./secret-screening.js";
 
 export interface ExecResult {
   code: number;
@@ -34,6 +35,8 @@ export interface RunOpts {
   env?: NodeJS.ProcessEnv;
   /** output cap; callers handling untrusted tools should keep this small */
   maxBuffer?: number;
+  /** Host cancellation, independent of the subprocess deadline. */
+  signal?: AbortSignal;
 }
 
 const SAFE_ENV_KEYS = [
@@ -93,15 +96,16 @@ export function run(cmd: string, args: string[], cwd: string, opts?: RunOpts): P
     const startedAt = Date.now();
     const env = opts?.env ?? (process.env.LEVERET_SANITIZE_CHILD_ENV === "1" ? safeChildEnvironment() : undefined);
     const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    execFile(cmd, args, { cwd, env, maxBuffer: opts?.maxBuffer ?? 64 * 1024 * 1024, timeout: timeoutMs }, (err, stdout, stderr) => {
+    execFile(cmd, args, { cwd, env, maxBuffer: opts?.maxBuffer ?? 64 * 1024 * 1024, timeout: timeoutMs, signal: opts?.signal }, (err, stdout, stderr) => {
       let code = 0;
       let signal: string | undefined;
       let timedOut = false;
       let truncated = false;
       if (err) {
         const e = err as NodeJS.ErrnoException & { code?: unknown; signal?: string; killed?: boolean };
-        timedOut = e.killed === true && Boolean(e.signal);
+        timedOut = opts?.signal?.aborted !== true && e.killed === true && Boolean(e.signal);
         truncated = e.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER";
+        if (opts?.signal?.aborted) signal = "SIGTERM";
         if (typeof e.signal === "string" && e.signal) {
           // A signal death reports err.code null; `?? 0` would read as success
           // and callers would trust partial stdout from a killed tool.
@@ -126,14 +130,22 @@ export interface StreamRunOpts extends RunOpts {
   onStderr?(chunk: Buffer): void;
 }
 
-/** Streaming child execution for long-running harnesses; preserves the result protocol on stdout. */
+/**
+ * Streaming child execution for long-running harnesses. The child leads its own process group so cancellation,
+ * deadlines and capture limits terminate every descendant that inherited its output pipes, even after the root
+ * exited; only that owned group is ever signalled. Under an active secret policy, callbacks receive one screened
+ * bounded copy per stream at completion, never independently screened fragments. Private returned stdout/stderr
+ * remain exact for host protocol parsing.
+ */
 export function runStreaming(cmd: string, args: string[], cwd: string, opts?: StreamRunOpts): Promise<ExecResult> {
-  return new Promise((resolveResult) => {
+  // Keep the executor form for the project's ES2023 standard-library contract (no withResolvers declaration).
+  return new Promise((resolveResult, rejectResult) => {
     const startedAt = Date.now();
     const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const maxBuffer = opts?.maxBuffer ?? 64 * 1024 * 1024;
     const env = opts?.env ?? (process.env.LEVERET_SANITIZE_CHILD_ENV === "1" ? safeChildEnvironment() : undefined);
-    const child = spawn(cmd, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+    const policy = currentSecretPolicy();
+    const child = spawn(cmd, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     let stdoutBytes = 0;
@@ -144,10 +156,22 @@ export function runStreaming(cmd: string, args: string[], cwd: string, opts?: St
     let stderrTruncated = false;
     let spawnError: string | undefined;
     let forceTimer: ReturnType<typeof setTimeout> | undefined;
-    const terminate = (): void => {
-      child.kill("SIGTERM");
-      forceTimer ??= setTimeout(() => child.kill("SIGKILL"), 5000);
+    let terminated = false;
+    const signalGroup = (signal: NodeJS.Signals): void => {
+      try {
+        if (child.pid !== undefined) process.kill(-child.pid, signal);
+        else child.kill(signal);
+      } catch { /* group already gone */ }
     };
+    const killOnHostExit = (): void => signalGroup("SIGKILL");
+    process.once("exit", killOnHostExit);
+    const terminate = (): void => {
+      terminated = true;
+      signalGroup("SIGTERM");
+      forceTimer ??= setTimeout(() => signalGroup("SIGKILL"), 5000);
+    };
+    opts?.signal?.addEventListener("abort", terminate, { once: true });
+    if (opts?.signal?.aborted) terminate();
     const keep = (chunks: Buffer[], chunk: Buffer, used: number, stream: "stdout" | "stderr"): number => {
       const remaining = Math.max(0, maxBuffer - used);
       if (remaining > 0) chunks.push(chunk.subarray(0, remaining));
@@ -159,15 +183,26 @@ export function runStreaming(cmd: string, args: string[], cwd: string, opts?: St
       }
       return used + Math.min(chunk.length, remaining);
     };
-    child.stdout.on("data", (chunk: Buffer) => { stdoutBytes = keep(stdout, chunk, stdoutBytes, "stdout"); opts?.onStdout?.(chunk); });
-    child.stderr.on("data", (chunk: Buffer) => { stderrBytes = keep(stderr, chunk, stderrBytes, "stderr"); opts?.onStderr?.(chunk); });
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdoutBytes = keep(stdout, chunk, stdoutBytes, "stdout");
+      if (!policy) opts?.onStdout?.(chunk);
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderrBytes = keep(stderr, chunk, stderrBytes, "stderr");
+      if (!policy) opts?.onStderr?.(chunk);
+    });
     child.on("error", (error) => { spawnError = error.message; });
-    const timer = setTimeout(() => { timedOut = true; terminate(); }, timeoutMs);
+    const timer = setTimeout(() => {
+      if (!opts?.signal?.aborted) { timedOut = true; terminate(); }
+    }, timeoutMs);
     child.on("close", (code, signal) => {
+      opts?.signal?.removeEventListener("abort", terminate);
+      process.removeListener("exit", killOnHostExit);
       clearTimeout(timer);
-      if (forceTimer) clearTimeout(forceTimer);
+      clearTimeout(forceTimer);
       const result: ExecResult = {
-        code: code ?? -1,
+        // A run that was cancelled, timed out or cut off never reads as success, even when the root exited 0 first.
+        code: terminated && code === 0 ? -1 : code ?? -1,
         stdout: Buffer.concat(stdout).toString("utf8"),
         stderr: Buffer.concat(stderr).toString("utf8"),
         ...(signal ? { signal } : {}),
@@ -178,9 +213,29 @@ export function runStreaming(cmd: string, args: string[], cwd: string, opts?: St
         ...(spawnError ? { spawnError } : {}),
       };
       if (spawnError) result.stderr = `${result.stderr}${result.stderr ? "\n" : ""}${spawnError}`;
-      const captured = captureSubprocess(cmd, args, cwd, env, timeoutMs, startedAt, result);
-      if (captured) void captured.then(() => resolveResult(result), () => resolveResult(result));
-      else resolveResult(result);
+      const finish = async () => {
+        if (policy) {
+          await withSecretPolicy(policy, async () => {
+            await refreshSecretPolicy(policy);
+            const exposed = sanitizeAuditValue(result);
+            if (!policy.available) {
+              exposed.stdout = "[output withheld: screening unavailable]";
+              exposed.stderr = "[output withheld: screening unavailable]";
+            } else {
+              if (stdoutTruncated) exposed.stdout = "[output withheld: truncated capture]";
+              if (stderrTruncated) exposed.stderr = "[output withheld: truncated capture]";
+            }
+            if (stdoutBytes > 0) opts?.onStdout?.(Buffer.from(exposed.stdout));
+            if (stderrBytes > 0) opts?.onStderr?.(Buffer.from(exposed.stderr));
+            await captureSubprocess(cmd, args, cwd, env, timeoutMs, startedAt, exposed);
+          });
+        } else {
+          const captured = captureSubprocess(cmd, args, cwd, env, timeoutMs, startedAt, result);
+          if (captured) await captured.catch(() => {}); // flush() retains the existing audit failure contract.
+        }
+        resolveResult(result);
+      };
+      void finish().catch(rejectResult);
     });
   });
 }

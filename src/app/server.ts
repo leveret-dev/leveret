@@ -503,6 +503,8 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
         wall_ms: null,
         summed_worker_compute_ms: typeof suppliedTimings.summed_worker_compute_ms === "number" ? suppliedTimings.summed_worker_compute_ms : null,
       };
+      const runnerIdentities = runConfiguration.identities as Record<string, unknown> | undefined;
+      const semanticConfiguration = runnerIdentities?.cache_sha256;
       const resultKey = cache.key("final-result", base, job.headSha, {
         evidence_pack_sha256: evidencePackFile.sha256,
         guidance_sha256: guidanceFile.sha256,
@@ -511,12 +513,14 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
         provider: process.env.LEVERET_RUNNER_PROVIDER ?? "openai",
         model: process.env.LEVERET_RUNNER_MODEL ?? "gpt-5.6-sol",
         effort: process.env.LEVERET_RUNNER_EFFORT ?? "high",
-        system_prompt: JSON.parse(stableJson(runConfiguration.system_prompt ?? null)),
+        semantic_configuration_sha256: typeof semanticConfiguration === "string" && /^[a-f0-9]{64}$/.test(semanticConfiguration)
+          ? semanticConfiguration : null,
       }, boundary);
       const priorResult = await cache.get(resultKey);
       await audit?.record("repository", "cache_decision", priorResult.decision);
       if (priorResult.value) {
-        await audit?.record("repository", "cache_decision", cache.fallback(resultKey, "prior result retained as data; prompts, policy, knowledge, and verdicts are reevaluated"));
+        await audit?.record("repository", "cache_decision", cache.fallback(resultKey,
+          "prior semantic-equivalent result retained with its original manifest/domain/citation provenance; current evidence and publication authorization are reevaluated"));
       }
       cacheConfiguration.artifacts = cache.decisions;
       cache.stage(resultKey, verify);

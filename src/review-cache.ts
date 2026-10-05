@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 import { z } from "zod";
 import { pathIsInside } from "./path.js";
+import type { BuildEvidenceAdmission } from "./build-evidence.js";
 
 export const REVIEW_CACHE_VERSION = 1 as const;
 export const CACHE_ARTIFACTS = [
@@ -182,6 +183,28 @@ export function stableJson(value: unknown): string {
     throw new Error(`cache identity contains unsupported ${typeof item}`);
   };
   return JSON.stringify(visit(value));
+}
+
+/**
+ * Semantic environment identity, separate from the exact manifest/citation pin. No withheld byte hashes or
+ * credential values enter it. A format-only hit retains the old payload's provenance; it never rebinds citations.
+ */
+export function buildEvidenceSemanticIdentity(admission: BuildEvidenceAdmission): string {
+  const common = { repositoryId: admission.repositoryId, revision: admission.revision, side: admission.side,
+    outcome: admission.outcome, secretPolicyId: admission.secretPolicyId };
+  if (admission.outcome !== "admitted") return digest(stableJson({
+    ...common, reason: admission.outcome === "rejected" ? admission.reason : null,
+  }));
+  const artifacts = admission.manifest.artifacts.map((artifact) => {
+    const state = admission.artifacts.get(artifact.id)?.state ?? "rejected";
+    return state === "available" ? artifact : {
+      id: artifact.id, role: artifact.role, origin: artifact.origin, repositoryPath: artifact.repositoryPath, state,
+    };
+  });
+  return digest(stableJson({
+    ...common, selection: admission.selection, manifest: { ...admission.manifest, artifacts },
+    diagnostics: admission.diagnostics, scopes: admission.scopes,
+  }));
 }
 
 export function canonicalRepositoryIdentity(value: string): string {

@@ -2,11 +2,18 @@ import { mkdtemp, readFile, readdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { auditConfig, createAuditRun, openRunnerAudit, verifyChecksums } from "../src/audit.js";
+import { auditConfig, createAuditRun, openRunnerAudit, verifyChecksums, withAuditTrace } from "../src/audit.js";
 import { inspectAudit, readAuditEvents } from "../src/audit-inspect.js";
-import { withSecretPolicy } from "../src/secret-screening.js";
+import { refreshSecretPolicy, withSecretPolicy } from "../src/secret-screening.js";
 import { classifyToolOutcome, runPhase } from "../src/runner/pi.js";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import * as piRunner from "../src/runner/pi.js";
+import { buildPiTools } from "../src/runner/pi-tools.js";
+import { ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
+import { createServer } from "node:http";
+import { mkdir, writeFile } from "node:fs/promises";
+import type { ChangeEvidence } from "../src/change-evidence.js";
+import type { PiToolsBundle } from "../src/runner/pi-tools.js";
+import { runStreaming } from "../src/exec.js";
 import { Type } from "typebox";
 
 const created: string[] = [];
@@ -555,4 +562,132 @@ it("classifies timeout only from execution metadata, never result text", () => {
   expect(classifyToolOutcome(false, false)).toBe("success");
   expect(classifyToolOutcome(true, false)).toBe("error");
   expect(classifyToolOutcome(true, true)).toBe("timeout");
+});
+
+it("refreshes active SDK credentials before real probe capture and native-session persistence", async () => {
+  const data = await root();
+  const runtimeDir = join(data, "runtime");
+  const agentDir = join(data, "agent");
+  await mkdir(runtimeDir);
+  await mkdir(agentDir);
+  const marker = "rotated-native-opaque-value";
+  const requests: string[] = [];
+  let calls = 0;
+  let runtime: ModelRuntime;
+  const server = createServer(async (request, response) => {
+    let body = "";
+    for await (const chunk of request) body += chunk;
+    requests.push(body);
+    const call = ++calls;
+    if (call === 1) await runtime.setRuntimeApiKey("fixture", marker);
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    const delta = call === 1
+      ? { tool_calls: [{ index: 0, id: "probe-rotated", type: "function", function: { name: "leveret_probe",
+          arguments: JSON.stringify({ command: "node", args: ["-e", `process.stdout.write('${marker}')`] }) } }] }
+      : call === 2
+        ? { tool_calls: [{ index: 0, id: "submit-native", type: "function", function: { name: "leveret_submit_phase", arguments: '{"concerns":[]}' } }] }
+        : { content: marker };
+    const chunk = (delta: unknown, finish_reason: string | null) => JSON.stringify({
+      id: "fixture-completion", object: "chat.completion.chunk", created: 1, model: "fixture",
+      choices: [{ index: 0, delta, finish_reason }],
+    });
+    response.end(`data: ${chunk(delta, null)}\n\ndata: ${chunk({}, call <= 2 ? "tool_calls" : "stop")}\n\ndata: [DONE]\n\n`);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const oldAgent = process.env.LEVERET_PI_AGENT_DIR;
+  let tools: PiToolsBundle | undefined;
+  try {
+  if (!address || typeof address === "string") throw new Error("fixture server unavailable");
+  await writeFile(join(agentDir, "models.json"), JSON.stringify({ providers: { fixture: {
+    baseUrl: `http://127.0.0.1:${address.port}/v1`, api: "openai-completions", apiKey: "initial-native-opaque-value", models: [{ id: "fixture" }],
+  } } }));
+  runtime = await ModelRuntime.create({ authPath: join(agentDir, "auth.json"), modelsPath: join(agentDir, "models.json"),
+    allowModelNetwork: false, refreshOnCreate: false });
+  const model = runtime.getModel("fixture", "fixture")!;
+  const policy = await piRunner.createPiSecretPolicy(runtime, [model], undefined, {});
+  const audit = (await createAuditRun(auditConfig(data, { LEVERET_TRACE_SINKS: "private" }), "sdk-native"))!;
+  const evidence: ChangeEvidence = {
+    manifest: { schema: 1, base: "0".repeat(40), head: "1".repeat(40), range: "fixture", files: [], errors: [], truncated: false },
+    async retrieve() { throw new Error("unused fixture evidence"); }, async auditPatch() { throw new Error("unused fixture evidence"); },
+  };
+  process.env.LEVERET_PI_AGENT_DIR = agentDir;
+  tools = await buildPiTools({ repo: runtimeDir, base: "HEAD", graphLive: false, sandboxed: true,
+    profilePath: join(data, "profile.yml"), rulesRoot: data, memoryRepo: data, evidence });
+    const runDir = await withSecretPolicy(policy, () => withAuditTrace(audit, async () => {
+      const result = await runPhase({
+        phase: "review", prompt: "fixture", repo: runtimeDir, runtimeDir,
+        runtime: { model: "fixture", provider: "fixture", thinking: "off", deadlineMs: 30_000, discoveryMode: "single",
+          discoveryScheduler: { id: "serial/v1", concurrency_bound: 1 } },
+        modelRuntime: runtime, model, systemPrompt: "fixture", tools: tools!.tools,
+        submission: { parameters: Type.Object({ concerns: Type.Array(Type.Unknown()) }), parse: (value) => value },
+        metrics: [], toolOutcomes: new Map(), audit,
+      });
+      expect(result).toEqual({ concerns: [] });
+      await refreshSecretPolicy(policy);
+      return (await audit.finalize("complete")).runDir!;
+    }));
+    const allBytes = async (dir: string): Promise<string> => {
+      const chunks: string[] = [];
+      for (const entry of await readdir(dir, { withFileTypes: true })) chunks.push(entry.isDirectory()
+        ? await allBytes(join(dir, entry.name)) : await readFile(join(dir, entry.name), "utf8"));
+      return chunks.join("\n");
+    };
+    expect(await allBytes(runDir)).not.toContain(marker);
+    expect(await allBytes(runDir)).toContain("[REDACTED]");
+    expect(requests).toHaveLength(3);
+    const second = JSON.parse(requests[1]!);
+    const probeReply = second.messages.find((message: { role: string }) => message.role === "tool");
+    expect(probeReply.content).not.toContain(marker);
+    expect(probeReply.content).toContain("[REDACTED]");
+    const native = await readFile(join(runDir, "sessions", "review-attempt-1.jsonl"), "utf8");
+    expect(native).not.toContain(marker);
+    expect(native).toContain("probe-rotated");
+  } finally {
+    if (oldAgent === undefined) delete process.env.LEVERET_PI_AGENT_DIR;
+    else process.env.LEVERET_PI_AGENT_DIR = oldAgent;
+    await tools?.close();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+}, 60_000);
+
+it("screens a credential split across real worker stdout chunks before any raw chunk audit", async () => {
+  const data = await root();
+  const credential = "worker-split-opaque-credential-b45e";
+  const keyPath = join(data, "credential.fixture");
+  const worker = join(data, "split-worker.mjs");
+  await writeFile(keyPath, credential);
+  // Real OS pipe/timed writes: fake timers cannot drive another Node process's pipe delivery.
+  await writeFile(worker, [
+    "import {readFileSync,writeSync} from 'node:fs';",
+    "const value=readFileSync(process.argv[2],'utf8');const half=Math.floor(value.length/2);",
+    "writeSync(2,'READY\\n');writeSync(1,value.slice(0,half));",
+    "setTimeout(()=>{writeSync(1,value.slice(half));},200);",
+  ].join("\n"));
+  const policy = { id: "split-worker-policy", available: true, knownValues: new Set([credential]),
+    refreshKnownValues: async () => [credential], additionalRules: [], nonSecretValues: new Set<string>() };
+  const audit = (await createAuditRun(auditConfig(data, { LEVERET_TRACE_SINKS: "private" }), "split-worker"))!;
+  const callbacks: string[] = [];
+  const pending: Promise<void>[] = [];
+  const runDir = await withSecretPolicy(policy, () => withAuditTrace(audit, async () => {
+    const result = await runStreaming(process.execPath, [worker, keyPath], data, {
+      timeoutMs: 5000,
+      onStdout(chunk) {
+        const text = chunk.toString("utf8");
+        callbacks.push(text);
+        pending.push(audit.record("subprocess", "stdout_chunk", { text }));
+      },
+    });
+    expect(result.code).toBe(0);
+    await Promise.all(pending);
+    return (await audit.finalize("complete")).runDir!;
+  }));
+  const events = (await readFile(join(runDir, "app.ndjson"), "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+  const reconstructed = events.filter((event) => event.event === "stdout_chunk").map((event) => event.payload.text).join("");
+  expect(reconstructed).not.toContain(credential);
+  expect(callbacks.join("")).not.toContain(credential);
+  expect(callbacks.join("")).toContain("[REDACTED]");
+  const completed = events.find((event) => event.event === "completed");
+  expect(completed.payload.stdout).toBe("[REDACTED]");
+  expect(JSON.stringify(completed.payload.argv)).not.toContain(credential);
 });

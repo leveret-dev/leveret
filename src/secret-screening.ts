@@ -74,6 +74,27 @@ function* privateKeyBlocks(text: string): Generator<readonly [start: number, end
 const redactionOf = (policy: SecretPolicy | undefined) => (match: string): string => (policy?.nonSecretValues.has(match) ? match : REDACTED);
 
 const active = new AsyncLocalStorage<SecretPolicy>();
+const generations = new WeakMap<SecretPolicy, { count: number; available: boolean; generation: number }>();
+
+/** Private authorization epoch, never a credential digest or a persisted identity. */
+export function secretPolicyGeneration(policy: SecretPolicy): number {
+  const previous = generations.get(policy);
+  if (previous && previous.count === policy.knownValues.size && previous.available === policy.available) return previous.generation;
+  const generation = (previous?.generation ?? 0) + 1;
+  generations.set(policy, { count: policy.knownValues.size, available: policy.available, generation });
+  return generation;
+}
+
+export function currentSecretPolicy(): SecretPolicy | undefined {
+  return active.getStore();
+}
+
+/** Refresh at a host exposure boundary; absence preserves the legacy no-import path. */
+export async function refreshActiveSecretPolicy(): Promise<SecretPolicy | undefined> {
+  const policy = active.getStore();
+  if (policy) await refreshSecretPolicy(policy);
+  return policy;
+}
 
 // A supplied pattern may be global, sticky or carry a stale lastIndex. Matching always uses a private global
 // copy whose position is reset before every use, so repeated checks cannot skip a match.
@@ -117,6 +138,7 @@ export async function refreshSecretPolicy(policy: SecretPolicy): Promise<void> {
   } catch {
     policy.available = false;
   }
+  secretPolicyGeneration(policy);
 }
 
 export function screenText(text: string, policy: SecretPolicy): ExposureDecision {

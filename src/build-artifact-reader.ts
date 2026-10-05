@@ -2,10 +2,16 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { BuildArtifact, BuildTransformation } from "./build-evidence-contract.js";
 import type { ArtifactState, BuildEvidenceAdmission } from "./build-evidence.js";
-import { refreshSecretPolicy, screenText, type SecretPolicy } from "./secret-screening.js";
+import { refreshSecretPolicy, screenText, secretPolicyGeneration, type SecretPolicy } from "./secret-screening.js";
 
 type Admitted = Extract<BuildEvidenceAdmission, { outcome: "admitted" }>;
 type TextArtifact = Extract<BuildArtifact, { availability: "available"; kind: "file" }>;
+const readAuthorizations = new WeakMap<object, { policy: SecretPolicy; generation: number }>();
+
+/** Host-only authorization of this exact reply object; never serialized into tool/citation/cache output. */
+export function buildArtifactReadAuthorization(result: BuildArtifactReadResult): Readonly<{ policy: SecretPolicy; generation: number }> | undefined {
+  return readAuthorizations.get(result);
+}
 
 export type BuildArtifactReadRequest = {
   manifestSha256: string;
@@ -355,6 +361,7 @@ export async function readBuildArtifact(
   if (!loaded.ok) return loaded.reply;
   const { artifact, text } = loaded;
   await refreshSecretPolicy(policy);
+  const generation = secretPolicyGeneration(policy);
   const exposure = screenText(text, policy);
   if (exposure.state === "withheld") return failure(exposure.reason, "Build artifact is withheld by the secret policy");
 
@@ -378,6 +385,7 @@ export async function readBuildArtifact(
   if (metadataExposure?.state === "withheld") {
     return failure(metadataExposure.reason, "Build artifact metadata is withheld by the secret policy");
   }
+  if (secretPolicyGeneration(policy) !== generation) return failure("screening-unavailable", "Secret policy changed during the artifact read");
 
   const total = model.lines.length;
   const requestedStart = request.range?.startLine ?? 1;
@@ -456,7 +464,11 @@ export async function readBuildArtifact(
   };
   if (end < requestedEnd) {
     const whole = completeBytes(request.byteBudget);
-    if (whole !== null && whole <= request.byteBudget) return { ok: true, result: finish(requestedEnd) };
+    if (whole !== null && whole <= request.byteBudget) {
+      const result = finish(requestedEnd);
+      readAuthorizations.set(result, { policy, generation });
+      return { ok: true, result };
+    }
   }
   if (end < start) {
     // Nothing fits as an incomplete page and the whole range does not fit either: report the true minimum of the two.
@@ -473,6 +485,7 @@ export async function readBuildArtifact(
     end -= 1;
     result = finish(end);
   }
+  readAuthorizations.set(result, { policy, generation });
   return { ok: true, result };
 }
 

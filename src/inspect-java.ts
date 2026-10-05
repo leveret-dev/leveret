@@ -17,8 +17,9 @@ import type { BuildEvidencePin } from "./build-evidence-contract.js";
 import {
   admitBuildEvidence, buildEvidenceSummary, type BuildEvidenceAdmission, type PublicBuildEvidenceSummary,
 } from "./build-evidence.js";
-import { refreshSecretPolicy, screenText, type SecretPolicy } from "./secret-screening.js";
+import { refreshSecretPolicy, screenText, withSecretPolicy, type SecretPolicy } from "./secret-screening.js";
 import { analysisSummarySchema, inspectErrorSchema, referenceReplySchema, type AnalysisSummary, type InspectError, type ReferencePage, type ReferenceRequest } from "./inspect-java-contract.js";
+import { buildEvidenceSemanticIdentity, stableJson } from "./review-cache.js";
 
 const hex = z.string().regex(/^[a-f0-9]{64}$/);
 const positive = z.number().int().positive();
@@ -66,7 +67,7 @@ export type InspectJavaBuildEvidence = PublicBuildEvidenceSummary & {
 };
 export interface InspectJavaBridge {
   summaries: { base: AnalysisSummary; head: AnalysisSummary };
-  identity: { configSha256: string; distributionSha256: string; jdkSha256: string };
+  identity: { configSha256: string; distributionSha256: string; jdkSha256: string; semanticSha256: string };
   buildEvidence: { base: InspectJavaBuildEvidence; head: InspectJavaBuildEvidence };
   /** Retrievable text artifact IDs per side as admitted; empty unless that side is admitted. */
   buildArtifacts: { base: BuildArtifactInventory; head: BuildArtifactInventory };
@@ -297,8 +298,9 @@ async function snapshot(
 
 async function sandbox(
   config: InspectJavaConfig, inputs: { snapshotDir?: string; preparedDir?: string; mixed?: boolean },
-  storeDir: string, work: string, command: object,
+  storeDir: string, work: string, command: object, policy: SecretPolicy, signal?: AbortSignal,
 ): Promise<unknown> {
+  signal?.throwIfAborted();
   await mkdir(work, { recursive: true, mode: 0o700 });
   await writeFile(join(work, "request.json"), JSON.stringify(command), { mode: 0o600 });
   const limits = config.limits;
@@ -336,10 +338,11 @@ async function sandbox(
     "--setenv", "LANG", "C.UTF-8", "--setenv", "PATH", "/usr/bin", "--setenv", "JAVA_HOME", "/jdk",
     "--setenv", "JAVA_OPTS", jvm, "--chdir", "/work", "/tool/bin/leveret-inspect", "java", "--request", "/work/request.json",
   ];
-  const result = await runStreaming("/usr/bin/prlimit", args, "/", {
+  const result = await withSecretPolicy(policy, () => runStreaming("/usr/bin/prlimit", args, "/", {
     env: { PATH: "/usr/bin", HOME: "/nonexistent" }, timeoutMs: limits.deadlineMs,
-    maxBuffer: limits.maxOutputBytes,
-  });
+    maxBuffer: limits.maxOutputBytes, signal,
+  }));
+  signal?.throwIfAborted();
   if (result.timedOut || result.truncated || result.signal || result.spawnError) {
     throw new InspectJavaError(result.timedOut || result.truncated ? "resource-exhausted" : "worker-failed", "Java worker terminated or exceeded limits");
   }
@@ -364,17 +367,18 @@ async function sandbox(
 }
 
 function secretPolicy(config: InspectJavaConfig, supplied?: SecretPolicy): SecretPolicy {
-  if (!config.screening && supplied) return supplied;
-  const configuredRules = (config.screening?.rules ?? []).map((rule) => ({
-    id: rule.id, pattern: new RegExp(rule.source, rule.flags),
-  }));
+  const screening = config.buildEvidence?.base || config.buildEvidence?.head ? config.screening : undefined;
+  const configuredRules = (screening?.rules ?? []).map((rule) => ({ id: rule.id, pattern: new RegExp(rule.source, rule.flags) }));
+  if (supplied) {
+    const extra = configuredRules.filter((rule) => !supplied.additionalRules.some((known) => known.id === rule.id
+      && known.pattern.source === rule.pattern.source && known.pattern.flags === rule.pattern.flags));
+    if (extra.length) supplied.additionalRules = [...supplied.additionalRules, ...extra];
+    if (screening?.nonSecretValues.length) supplied.nonSecretValues = new Set([...supplied.nonSecretValues, ...screening.nonSecretValues]);
+    return supplied; // One active policy object, including refresh availability and the private receipt epoch.
+  }
   return {
-    id: supplied?.id ?? `inspect-java:${config.configSha256}`,
-    available: supplied?.available ?? false,
-    knownValues: supplied?.knownValues ?? new Set(),
-    refreshKnownValues: supplied?.refreshKnownValues ?? (async () => []),
-    additionalRules: [...(supplied?.additionalRules ?? []), ...configuredRules],
-    nonSecretValues: new Set([...(supplied?.nonSecretValues ?? []), ...(config.screening?.nonSecretValues ?? [])]),
+    id: `inspect-java:${config.configSha256}`, available: false, knownValues: new Set(),
+    refreshKnownValues: async () => [], additionalRules: configuredRules, nonSecretValues: new Set(screening?.nonSecretValues ?? []),
   };
 }
 
@@ -504,8 +508,9 @@ function javaEvidenceSummary(admission: BuildEvidenceAdmission, decision: BuildJ
 }
 
 export async function openInspectJava(
-  repo: string, manifest: ChangeManifest, config: InspectJavaConfig, runtimeDir: string, suppliedPolicy?: SecretPolicy,
+  repo: string, manifest: ChangeManifest, config: InspectJavaConfig, runtimeDir: string, suppliedPolicy?: SecretPolicy, signal?: AbortSignal,
 ): Promise<InspectJavaBridge> {
+  signal?.throwIfAborted();
   await validateChangeManifestCheckout(repo, manifest);
   await verifyToolchain(config);
   const repository = await realpath(repo);
@@ -538,10 +543,11 @@ export async function openInspectJava(
     const modes = {} as Record<"base" | "head", "cache-only" | "prepared" | "mixed">;
     const preparedCompilations = {} as Record<"base" | "head", readonly PreparedJavaCompilation[]>;
     for (const side of ["base", "head"] as const) {
+      signal?.throwIfAborted();
       const revision = manifest[side];
       const admission = await admitBuildEvidence({
         repo, repositoryId: config.repositoryId, revision, side, pin: config.buildEvidence?.[side],
-        runtimeDir: join(scratch, `admission-${side}`),
+        runtimeDir: join(scratch, `admission-${side}`), signal,
       }, policy);
       admissions[side] = admission;
       const decision = await prepareBuildJavaInputs(admission, config);
@@ -566,7 +572,7 @@ export async function openInspectJava(
         result = await sandbox(config, { preparedDir: join(admission.frozen.scratch, "java-worker-view") },
           storeDir, join(scratch, `work-${side}`), {
             schema: 2, kind: "analyze", store: "/store/refs", input: command.input,
-          });
+          }, policy, signal);
       } else if (mode === "mixed" && admission.outcome === "admitted") {
         await verifyAdmission(admission);
         const folder = join(scratch, `source-${side}`);
@@ -595,7 +601,7 @@ export async function openInspectJava(
             skippedFiles, preparedCompilations: imported, fallbackRoles, diagnostics,
             buildIdentity: `mixed:${admission.manifestSha256}`,
           },
-        });
+        }, policy, signal);
       } else {
         const folder = join(scratch, `source-${side}`);
         await mkdir(folder);
@@ -617,7 +623,7 @@ export async function openInspectJava(
             fallbackRoles: decision.scopes.filter((scope) => scope.outcome === "fallback").map((scope) => scope.role),
             diagnostics: [], buildIdentity: "cache-only",
           },
-        });
+        }, policy, signal);
       }
       const decoded = preparedSchema.parse(result);
       summaries[side] = decoded.summary;
@@ -661,6 +667,7 @@ export async function openInspectJava(
      * clean artifact read needs nothing more: the reader screens that artifact and every counterpart it exposes itself.
      */
     const verifyIntegrity = async () => {
+      signal?.throwIfAborted();
       await verifyToolchain(config);
       if (await digestFile(config.configPath) !== config.configSha256) {
         throw new InspectJavaError("configuration-mismatch", "Java configuration changed during review");
@@ -701,6 +708,13 @@ export async function openInspectJava(
         configSha256: config.configSha256,
         distributionSha256: createHash("sha256").update(JSON.stringify(Object.entries(config.distributionFiles).sort())).digest("hex"),
         jdkSha256: createHash("sha256").update(JSON.stringify(Object.entries(config.jdkFiles).sort())).digest("hex"),
+        semanticSha256: createHash("sha256").update(stableJson({
+          schema: 2, repositoryId: config.repositoryId, module: config.module, build: config.build,
+          mainRoots: config.mainRoots, testRoots: config.testRoots, javaLevel: config.javaLevel, maxJavaFiles: config.maxJavaFiles ?? null,
+          limits: config.limits, distributionFiles: config.distributionFiles, jdkFiles: config.jdkFiles,
+          secretPolicyId: policy.id, fallbackArtifacts: artifacts,
+          base: buildEvidenceSemanticIdentity(admissions.base), head: buildEvidenceSemanticIdentity(admissions.head),
+        })).digest("hex"),
       },
       buildEvidence: {
         base: javaEvidenceSummary(admissions.base, decisions.base),
@@ -731,7 +745,7 @@ export async function openInspectJava(
               ...rest, target, referenceScope: request.referenceScope ?? "outside-diff",
               byteBudget: request.byteBudget ?? 65536, cursor: request.cursor ?? null,
             },
-          }) as ReferencePage;
+          }, policy, signal) as ReferencePage;
         };
         const next = serial.then(action);
         serial = next.then(() => undefined, () => undefined);

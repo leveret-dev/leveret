@@ -22,7 +22,7 @@ import { hostname, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { pathIsInside } from "./path.js";
-import { REDACTED, redactAuditText } from "./secret-screening.js";
+import { REDACTED, redactAuditText, refreshActiveSecretPolicy } from "./secret-screening.js";
 
 export const AUDIT_SCHEMA_VERSION = 1;
 export const AUDIT_CATEGORIES = [
@@ -277,6 +277,9 @@ function sanitize(value: unknown, redacted: Set<string>, path = "payload"): unkn
   }
   if (value && typeof value === "object") {
     const result: Record<string, unknown> = {};
+    const packet = value as Record<string, unknown>;
+    const isTextPacket = packet.type === "text";
+    const isProcessResult = typeof packet.code === "number" && typeof packet.stdout === "string" && typeof packet.stderr === "string";
     for (const [key, child] of Object.entries(value)) {
       // A key is persisted text like any value. Entries that collapse to the same redacted text stay distinct, and
       // the field path uses the stored name, so neither the key nor redacted_fields can carry the raw credential.
@@ -289,12 +292,27 @@ function sanitize(value: unknown, redacted: Set<string>, path = "payload"): unkn
         result[name] = REDACTED;
         redacted.add(childPath);
       } else {
+        // Decode transport JSON before screening; raw source/artifact `text` is not a transport packet.
+        const structured = (key === "text" && isTextPacket) || ((key === "stdout" || key === "stderr") && isProcessResult);
+        if (structured && typeof child === "string" && /^[{\[]/.test(child.trimStart())) {
+          try {
+            result[name] = JSON.stringify(sanitize(JSON.parse(child), redacted, childPath), null, child.includes("\n") ? 1 : undefined);
+            continue;
+          } catch {
+            // Non-JSON operational/source text still uses the canonical text rules.
+          }
+        }
         result[name] = sanitize(child, redacted, childPath);
       }
     }
     return result;
   }
   return value;
+}
+
+/** Reuse audit's structured sanitizer at model/public boundaries, including key-collision preservation. */
+export function sanitizeAuditValue<T>(value: T, redacted: Set<string> = new Set()): T {
+  return sanitize(value, redacted) as T;
 }
 
 function digest(value: string | Buffer): string {
@@ -549,7 +567,9 @@ export class AuditWriter {
     if (context.completeness && context.completeness !== "complete") this.gaps.add(`${category}/${event} was ${context.completeness}`);
     const sequence = ++this.sequence;
     return this.queue(async () => {
+      await refreshActiveSecretPolicy();
       const touched = new Set<string>();
+      context = sanitize(context, touched, "context") as AuditContext;
       const clean = sanitize(payload ?? {}, touched);
       for (const field of touched) this.redacted.add(field);
       const encoded = JSON.stringify(clean);
@@ -562,7 +582,7 @@ export class AuditWriter {
         wall_time: new Date().toISOString(),
         monotonic_ms: Math.max(0, performance.now() - this.startedMono),
         category,
-        event,
+        event: redactAuditText(event),
         ...(context.phase ? { phase: context.phase } : {}),
         ...(context.attempt !== undefined ? { attempt: context.attempt } : {}),
         ...(context.sessionId ? { session_id: context.sessionId } : {}),
@@ -610,7 +630,7 @@ export class AuditWriter {
   }
 
   gap(message: string): void {
-    this.gaps.add(message);
+    this.gaps.add(redactAuditText(message));
   }
 
   nativeSessionsEnabled(): boolean {
@@ -662,6 +682,7 @@ export class AuditWriter {
   async writeCapabilities(value: unknown): Promise<void> {
     if (!this.config.enabled) return;
     await this.flush();
+    await refreshActiveSecretPolicy();
     const clean = sanitize(value, this.redacted);
     const path = join(this.partialDir, `${this.producer}-capabilities.json`);
     let previous: { capabilities?: unknown; redacted_fields?: string[]; gaps?: string[] } = {};
@@ -679,6 +700,7 @@ export class AuditWriter {
   async persistNativeSession(entries: unknown[], name: string): Promise<string> {
     if (basename(name) !== name || !name.endsWith(".jsonl")) throw new Error(`invalid native session name: ${name}`);
     await this.flush();
+    await refreshActiveSecretPolicy();
     const target = join(this.sessionsDir, name);
     await secureWrite(target, "");
     for (const entry of entries) await appendFile(target, `${JSON.stringify(sanitize(entry, this.redacted))}\n`, { mode: 0o600 });
@@ -688,6 +710,7 @@ export class AuditWriter {
   async writeResult(value: unknown): Promise<void> {
     if (!this.config.enabled || this.config.policies.result === "off") return;
     await this.flush();
+    await refreshActiveSecretPolicy();
     const clean = sanitize(value, this.redacted);
     const encoded = JSON.stringify(clean, null, 2);
     const hasPrivateSink = this.config.categorySinks.result.some((sink) => sink === "private" || sink === "archive" || sink === "export");
@@ -718,6 +741,7 @@ export class AuditWriter {
   async finalize(status: "complete" | "failed", error?: unknown): Promise<AuditFinalization> {
     if (!this.config.enabled) return { status: "disabled", completeness: "disabled" };
     await this.validateCapturedEvents();
+    await refreshActiveSecretPolicy();
     const capabilitySidecars: Record<string, unknown> = {};
     for (const producer of ["app", "runner"] as const) {
       try {

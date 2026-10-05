@@ -16,6 +16,8 @@ import type { BuildArtifactInventory } from "../build-artifact-reader.js";
 import { BuildEvidenceLedger, type BuildCitable, type BuildResolution } from "../build-citations.js";
 import { z } from "zod";
 import { pathIsInside } from "../path.js";
+import { sanitizeAuditValue } from "../audit.js";
+import { currentSecretPolicy, redactAuditText, refreshActiveSecretPolicy, screenText, type ExposureDecision, type SecretPolicy } from "../secret-screening.js";
 
 function json(value: unknown, details: Record<string, unknown> = {}) {
   return { content: [{ type: "text" as const, text: JSON.stringify(value, null, 1) }], details };
@@ -85,6 +87,7 @@ export const PHASE_SUBMISSION_TOOL = "leveret_submit_phase";
 export interface PhaseSubmission<T = unknown> {
   parameters: TSchema;
   parse(value: unknown): T;
+  beforeParse?(): Promise<void>;
 }
 
 export function zodPhaseSubmission<T>(schema: z.ZodType<T>): PhaseSubmission<T>;
@@ -112,10 +115,36 @@ export function createPhaseSubmissionTool<T>(
     description: "Submit the completed phase result. This is the terminal output channel; call it once after all required evidence and accounting are complete.",
     parameters: submission.parameters,
     async execute(_id, params) {
-      accept(submission.parse(params));
+      await refreshActiveSecretPolicy();
+      await submission.beforeParse?.();
+      accept(submission.parse(sanitizeAuditValue(params)));
       return text("Phase result accepted.");
     },
   });
+}
+
+/** Screen decoded transport fields without rewriting exact source, artifact, citation or semantic evidence. */
+function toolExposure(value: unknown, policy: SecretPolicy): ExposureDecision {
+  if (typeof value === "string") return screenText(value, policy);
+  if (Array.isArray(value)) {
+    for (const child of value) {
+      const decision = toolExposure(child, policy);
+      if (decision.state === "withheld") return decision;
+    }
+  } else if (value && typeof value === "object") {
+    const packet = value as Record<string, unknown>;
+    for (const [key, child] of Object.entries(packet)) {
+      const name = screenText(key, policy);
+      if (name.state === "withheld") return name;
+      let decoded = child;
+      if (packet.type === "text" && key === "text" && typeof child === "string" && /^[{\[]/.test(child.trimStart())) {
+        try { decoded = JSON.parse(child); } catch { /* Plain source, never a serialization to rewrite. */ }
+      }
+      const decision = toolExposure(decoded, policy);
+      if (decision.state === "withheld") return decision;
+    }
+  }
+  return { state: "available" };
 }
 
 function annotateEvidence(tool: ToolDefinition, onOutcome?: (toolCallId: string, outcome: PiToolOutcome) => void): ToolDefinition {
@@ -123,17 +152,36 @@ function annotateEvidence(tool: ToolDefinition, onOutcome?: (toolCallId: string,
   return {
     ...tool,
     async execute(toolCallId, params, signal, onUpdate, context) {
+      const withheld = (reason: "secret-detected" | "screening-unavailable") => {
+        onOutcome?.(toolCallId, { timedOut: false, nonzeroExit: true });
+        const reply = json({ ok: false, error: { code: reason, message: "Tool evidence is withheld by the secret policy" } }, { nonzeroExit: true });
+        return sanitizeAuditValue({
+          ...reply, content: [{ type: "text" as const, text: `evidence_id: ${toolCallId}` }, ...reply.content],
+        });
+      };
       try {
-        const result = await execute(toolCallId, params as never, signal, onUpdate, context);
+        const policy = await refreshActiveSecretPolicy();
+        if (policy && !policy.available) return withheld("screening-unavailable");
+        // Fragments cannot be independently screened: expose the complete reply only under an active policy.
+        const result = await execute(toolCallId, params as never, signal, policy ? undefined : onUpdate, context);
+        await refreshActiveSecretPolicy();
+        if (policy && !policy.available) return withheld("screening-unavailable");
+        const annotated = { ...result, content: [{ type: "text" as const, text: `evidence_id: ${toolCallId}` }, ...result.content] };
+        if (policy && tool.name !== "leveret_probe") {
+          const exposure = toolExposure(annotated, policy);
+          if (exposure.state === "withheld") return withheld(exposure.reason);
+        }
         const details = result.details as { timedOut?: unknown; nonzeroExit?: unknown } | undefined;
         const timedOut = details?.timedOut === true;
         onOutcome?.(toolCallId, { timedOut, nonzeroExit: details?.nonzeroExit === true });
-        return {
-          ...result,
-          content: [{ type: "text" as const, text: `evidence_id: ${toolCallId}` }, ...result.content],
-        };
+        // Operational probes may redact. Exact source/semantic replies are either unchanged or withheld.
+        return tool.name === "leveret_probe" ? sanitizeAuditValue(annotated) : annotated;
       } catch (error) {
         onOutcome?.(toolCallId, { timedOut: error instanceof ToolExecutionError && error.timedOut, nonzeroExit: false });
+        await refreshActiveSecretPolicy();
+        if (currentSecretPolicy()?.available === false) throw new ToolExecutionError("Tool evidence is withheld: screening-unavailable");
+        const safe = redactAuditText(String(error));
+        if (safe !== String(error)) throw new ToolExecutionError(safe, error instanceof ToolExecutionError && error.timedOut);
         throw error;
       }
     },
@@ -215,6 +263,7 @@ export interface PiToolsBundle {
   close(): Promise<void>;
   /** Present only when a build export was admitted for a side: resolves a finding's citations against this phase's reads. */
   resolveBuildCitations?: (finding: BuildCitable, evidenceIds: ReadonlySet<string>) => BuildResolution;
+  refreshBuildCitations?: (evidenceIds: ReadonlySet<string>) => Promise<void>;
   capabilities: {
     graph: boolean;
     lsp: boolean;
@@ -231,6 +280,8 @@ export interface PiToolsBundle {
           jdk_sha256: string;
         };
     build_evidence: BuildEvidenceCapability;
+    java_semantic_sha256?: string;
+    secret_policy?: { id: string; availability: "available" | "unavailable" };
     serena_indexed_languages?: string[];
     serena_seed_files?: Record<string, string>;
     graphify_indexed_nodes?: number;
@@ -476,7 +527,7 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
     }));
 
     if (bridge.buildEvidence.base.outcome === "admitted" || bridge.buildEvidence.head.outcome === "admitted") {
-      const retrievals = new BuildEvidenceLedger();
+      const retrievals = new BuildEvidenceLedger(currentSecretPolicy());
       ledger = retrievals;
       tools.push(defineTool({
         name: "leveret_build_artifact",
@@ -634,7 +685,7 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
         cwd: Type.Optional(Type.String()),
         timeout_ms: Type.Optional(Type.Number({ minimum: 1, maximum: 120_000 })),
       }),
-      async execute(_id, params) {
+      async execute(_id, params, signal) {
         const cwd = resolve(repo, params.cwd ?? ".");
         if (!pathIsInside(repo, cwd)) throw new Error("probe cwd must stay inside the reviewed checkout");
         let command = params.command;
@@ -646,12 +697,16 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
         const result = await runStreaming(command, params.args ?? [], cwd, {
           timeoutMs: params.timeout_ms ?? 30_000,
           env: safeChildEnvironment(),
-          maxBuffer: PROBE_AUDIT_MAX_BYTES,
+          maxBuffer: PROBE_AUDIT_MAX_BYTES, signal,
         });
         if (result.spawnError) throw new ToolExecutionError(`probe spawn failed: ${result.spawnError}`);
         const timedOut = result.timedOut === true;
-        const stdout = presentProbeOutput(result.stdout);
-        const stderr = presentProbeOutput(result.stderr);
+        await refreshActiveSecretPolicy();
+        const exposed = sanitizeAuditValue(result);
+        if (result.stdoutTruncated) exposed.stdout = "[output withheld: truncated capture]";
+        if (result.stderrTruncated) exposed.stderr = "[output withheld: truncated capture]";
+        const stdout = presentProbeOutput(exposed.stdout);
+        const stderr = presentProbeOutput(exposed.stderr);
         return json({
           outcome: timedOut ? "timed-out" : result.signal ? "signaled" : "exited",
           code: result.code,
@@ -673,14 +728,20 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
   const toolSchemaSha256 = createHash("sha256").update(JSON.stringify(annotatedTools.map((tool) => ({ name: tool.name, description: tool.description, parameters: tool.parameters })))).digest("hex");
   const sourceHash = createHash("sha256");
   const extension = import.meta.url.endsWith(".ts") ? ".ts" : ".js";
-  for (const source of [new URL(import.meta.url), new URL(`../inspect-java${extension}`, import.meta.url), new URL(`../inspect-java-contract${extension}`, import.meta.url)]) {
-    sourceHash.update(await readFile(source));
+  for (const name of ["runner/pi-tools", "inspect-java", "inspect-java-contract", "build-evidence-contract", "build-evidence",
+    "build-artifacts", "build-java-inputs", "build-artifact-reader", "build-citations", "secret-screening", "git-objects",
+    "review-cache", "audit", "exec"]) {
+    const bytes = await readFile(new URL(`../${name}${extension}`, import.meta.url));
+    sourceHash.update(`${name}\0${bytes.length}\0`).update(bytes);
   }
   const toolSourceSha256 = sourceHash.digest("hex");
   const retrievals = ledger;
   return {
     tools: annotatedTools,
-    ...(retrievals ? { resolveBuildCitations: (finding: BuildCitable, evidenceIds: ReadonlySet<string>) => retrievals.resolve(finding, evidenceIds) } : {}),
+    ...(retrievals ? {
+      resolveBuildCitations: (finding: BuildCitable, evidenceIds: ReadonlySet<string>) => retrievals.resolve(finding, evidenceIds),
+      refreshBuildCitations: (evidenceIds: ReadonlySet<string>) => retrievals.refresh(options.inspectJava!.readArtifact.bind(options.inspectJava), evidenceIds),
+    } : {}),
     capabilities: {
       graph: options.graphLive,
       lsp: Boolean(options.serena?.tools.length),
@@ -697,6 +758,10 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
           } as const
         : { availability: "unavailable", reason: "trusted Java configuration not supplied" } as const,
       build_evidence: buildEvidenceCapability(options.inspectJava),
+      ...(options.inspectJava ? { java_semantic_sha256: options.inspectJava.identity.semanticSha256 } : {}),
+      ...(currentSecretPolicy() ? { secret_policy: {
+        id: currentSecretPolicy()!.id, availability: currentSecretPolicy()!.available ? "available" as const : "unavailable" as const,
+      } } : {}),
       ...(options.serena?.version ? { serena_version: options.serena.version } : {}),
       ...(options.serena?.indexing ? {
         serena_indexed_languages: options.serena.indexing.languages,
