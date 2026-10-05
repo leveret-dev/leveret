@@ -3,7 +3,7 @@ import {
   buildArtifactReadAuthorization, lastLine, positionBefore, spanInExcerpt,
   type BuildArtifactMap, type BuildArtifactReadResult, type SourceRange,
 } from "./build-artifact-reader.js";
-import { screenText, secretPolicyGeneration } from "./secret-screening.js";
+import { secretPolicyGeneration } from "./secret-screening.js";
 import type { SecretPolicy } from "./secret-screening.js";
 import type { BuildArtifactReadReply, BuildArtifactReadRequest } from "./build-artifact-reader.js";
 
@@ -101,15 +101,15 @@ export class BuildEvidenceLedger {
   constructor(policy?: SecretPolicy) { this.#policy = policy; }
 
   record(evidenceId: string, side: "base" | "head", result: BuildArtifactReadResult): void {
+    // Only a reply the host reader itself authorized (under the active policy) can become a receipt: no current-epoch fallback.
     const authorization = buildArtifactReadAuthorization(result);
-    if (authorization) {
-      if (this.#policy && authorization.policy !== this.#policy) return;
-      this.#policy = authorization.policy;
-    }
+    if (!authorization) return;
+    if (this.#policy && authorization.policy !== this.#policy) return;
+    this.#policy = authorization.policy;
     this.#receipts.push({
       evidenceId, side, manifestSha256: result.citation.manifestSha256, artifactId: result.citation.artifactId, origin: result.origin,
       repositoryPath: result.repositoryPath, lineCount: result.lineCount, range: result.range, text: result.text, maps: result.maps,
-      generation: authorization?.generation ?? (this.#policy ? secretPolicyGeneration(this.#policy) : 0),
+      generation: authorization.generation,
     });
   }
 
@@ -150,8 +150,8 @@ export class BuildEvidenceLedger {
     const cited = finding.build_citations ?? [];
     if (cited.length === 0) return { ok: true, citations: [], anchor: null };
     const generation = this.#policy ? secretPolicyGeneration(this.#policy) : 0;
-    const receipts = this.#receipts.filter((item) => evidenceIds.has(item.evidenceId) && item.generation === generation
-      && (!this.#policy || screenText(JSON.stringify(item), this.#policy).state === "available"));
+    // The private epoch is the authority: any credential change since a receipt was authorized leaves it stale until a refresh re-reads it.
+    const receipts = this.#receipts.filter((item) => evidenceIds.has(item.evidenceId) && item.generation === generation);
     const fail = (index: number, why: string): BuildResolution => ({ ok: false, reason: `build citation ${index} ${why}` });
     const seen = new Set<string>();
     for (const [index, citation] of cited.entries()) {

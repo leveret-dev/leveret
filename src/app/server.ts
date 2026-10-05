@@ -41,6 +41,7 @@ import { writeWorkItem } from "../work-item.js";
 import {
   ReviewCache,
   findingSnapshot,
+  finalResultKeyInputs,
   incrementalDependencyBoundary,
   publicationDecisions,
   reconcileFindings,
@@ -503,19 +504,16 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, access?: GitHubA
         wall_ms: null,
         summed_worker_compute_ms: typeof suppliedTimings.summed_worker_compute_ms === "number" ? suppliedTimings.summed_worker_compute_ms : null,
       };
-      const runnerIdentities = runConfiguration.identities as Record<string, unknown> | undefined;
-      const semanticConfiguration = runnerIdentities?.cache_sha256;
-      const resultKey = cache.key("final-result", base, job.headSha, {
-        evidence_pack_sha256: evidencePackFile.sha256,
-        guidance_sha256: guidanceFile.sha256,
-        trusted_base: base,
+      const resultKey = cache.key("final-result", base, job.headSha, finalResultKeyInputs({
+        evidencePackSha256: evidencePackFile.sha256,
+        guidanceSha256: guidanceFile.sha256,
+        trustedBase: base,
         runner: process.env.LEVERET_RUNNER ?? "deterministic-only",
         provider: process.env.LEVERET_RUNNER_PROVIDER ?? "openai",
         model: process.env.LEVERET_RUNNER_MODEL ?? "gpt-5.6-sol",
         effort: process.env.LEVERET_RUNNER_EFFORT ?? "high",
-        semantic_configuration_sha256: typeof semanticConfiguration === "string" && /^[a-f0-9]{64}$/.test(semanticConfiguration)
-          ? semanticConfiguration : null,
-      }, boundary);
+        runConfiguration,
+      }), boundary);
       const priorResult = await cache.get(resultKey);
       await audit?.record("repository", "cache_decision", priorResult.decision);
       if (priorResult.value) {

@@ -10,5 +10,6 @@ const watcher = process.env.LEVERET_FIXTURE_CANCEL === "1" ? watch(process.env.T
     process.kill(process.pid, "SIGTERM");
   }
 }) : undefined;
-await main().catch(() => { process.exitCode = 1; });
+// main() throws only host-sanitized text (redactAuditText), so surfacing it keeps failed launches diagnosable.
+await main().catch((error) => { console.error(String(error)); process.exitCode = 1; });
 watcher?.close();

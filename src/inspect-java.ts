@@ -340,7 +340,7 @@ async function sandbox(
   ];
   const result = await withSecretPolicy(policy, () => runStreaming("/usr/bin/prlimit", args, "/", {
     env: { PATH: "/usr/bin", HOME: "/nonexistent" }, timeoutMs: limits.deadlineMs,
-    maxBuffer: limits.maxOutputBytes, signal,
+    maxBuffer: limits.maxOutputBytes, signal, ...(signal ? { ownProcessGroup: true } : {}), // prlimit execs bwrap: pid == pgid
   }));
   signal?.throwIfAborted();
   if (result.timedOut || result.truncated || result.signal || result.spawnError) {

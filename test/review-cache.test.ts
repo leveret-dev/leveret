@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -188,6 +188,59 @@ describe("host-owned review cache", () => {
       await identity(() => {}, false, "policy-two"),
     ]) expect((await cache.get(key(changed))).decision.outcome).toBe("miss");
   }, 180_000);
+
+  it("changes semantic identity when an admitted artifact's bytes and manifest claim change consistently", async () => {
+    const fixture = repository();
+    const exported = await createBuildFixture(join(fixture.root, "export"), "valid");
+    const policy = { id: "policy-one", available: false, knownValues: new Set<string>(), refreshKnownValues: async () => [],
+      additionalRules: [], nonSecretValues: new Set<string>() };
+    const admitCopy = async (mutate: boolean, name: string) => {
+      const payloadRoot = join(fixture.root, `payload-${name}`);
+      cpSync(exported.pins.head.payloadRoot, payloadRoot, { recursive: true });
+      const manifest = structuredClone(exported.manifests.head);
+      if (mutate) {
+        const artifact = manifest.artifacts.find((item) => item.id === "pricing-output")!;
+        if (artifact.availability !== "available" || artifact.kind !== "file") throw new Error("output missing");
+        const path = join(payloadRoot, artifact.content.location.path);
+        const changed = Buffer.from(readFileSync(path, "utf8").replace("Pricing", "Pricinx"));
+        writeFileSync(path, changed);
+        artifact.content.sha256 = sha256(changed.toString("utf8"));
+        artifact.content.sizeBytes = changed.length;
+      }
+      const bytes = JSON.stringify(manifest);
+      const manifestPath = join(fixture.root, `consistent-${name}.json`);
+      writeFileSync(manifestPath, bytes);
+      const request = fixtureRequest(exported, "head", join(fixture.root, `admission-${name}`));
+      const admission = await admitBuildEvidence({ ...request, pin: { ...request.pin!, manifestPath, manifestSha256: sha256(bytes), payloadRoot } }, policy);
+      expect(admission.outcome).toBe("admitted");
+      const artifact = admission.outcome === "admitted" ? admission.artifacts.get("pricing-output") : undefined;
+      expect(artifact?.state).toBe("available"); // a genuinely admitted, readable artifact: not a rejected one
+      return reviewCache.buildEvidenceSemanticIdentity(admission);
+    };
+    expect(await admitCopy(false, "same")).toBe(await admitCopy(false, "same-again"));
+    expect(await admitCopy(true, "changed")).not.toBe(await admitCopy(false, "unchanged"));
+  }, 180_000);
+
+  it("builds the host final-result cache inputs from the runner's semantic configuration identity", async () => {
+    const fixture = repository();
+    const inputs = (identity: unknown) => reviewCache.finalResultKeyInputs({
+      evidencePackSha256: "a".repeat(64), guidanceSha256: "b".repeat(64), trustedBase: fixture.base,
+      runner: "pi", provider: "local", model: "fixture", effort: "off", runConfiguration: { identities: { cache_sha256: identity } },
+    });
+    const identity = "c".repeat(64);
+    expect(inputs(identity).semantic_configuration_sha256).toBe(identity);
+    for (const malformed of [undefined, "short", 7]) expect(inputs(malformed).semantic_configuration_sha256).toBeNull();
+    expect(reviewCache.finalResultKeyInputs({
+      evidencePackSha256: "a".repeat(64), guidanceSha256: "b".repeat(64), trustedBase: fixture.base,
+      runner: "pi", provider: "local", model: "fixture", effort: "off", runConfiguration: {},
+    }).semantic_configuration_sha256).toBeNull();
+    const cache = await ReviewCache.open({ dataRoot: fixture.data, repoRoot: fixture.repo, repository: "owner/key", pullRequest: 4 });
+    const boundary = await incrementalDependencyBoundary(fixture.repo, null, fixture.base);
+    const digest = (value: unknown) => cache.keyDigest(cache.key("final-result", fixture.base, fixture.base, inputs(value), boundary));
+    expect(digest(identity)).toBe(digest(identity));
+    expect(digest(identity)).not.toBe(digest("d".repeat(64)));
+    expect(digest(identity)).not.toBe(digest(undefined));
+  });
 });
 
 describe("verified finding lifecycle", () => {

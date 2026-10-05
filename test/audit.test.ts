@@ -2,7 +2,7 @@ import { mkdtemp, readFile, readdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { auditConfig, createAuditRun, openRunnerAudit, verifyChecksums, withAuditTrace } from "../src/audit.js";
+import { auditConfig, createAuditRun, openRunnerAudit, sanitizeAuditValue, verifyChecksums, withAuditTrace } from "../src/audit.js";
 import { inspectAudit, readAuditEvents } from "../src/audit-inspect.js";
 import { refreshSecretPolicy, withSecretPolicy } from "../src/secret-screening.js";
 import { classifyToolOutcome, runPhase } from "../src/runner/pi.js";
@@ -690,4 +690,33 @@ it("screens a credential split across real worker stdout chunks before any raw c
   const completed = events.find((event) => event.event === "completed");
   expect(completed.payload.stdout).toBe("[REDACTED]");
   expect(JSON.stringify(completed.payload.argv)).not.toContain(credential);
+});
+
+describe("canonical sanitizer preserves clean operational strings byte for byte", () => {
+  const layouts = [
+    '{"n":12345678901234567890,"p":10.50,"d":1,"d":2}\n',
+    '{\n   "spaced" : [ 1,  2 ]\n}\n\n',
+    "[1e3, 0.10, -0]",
+  ];
+  for (const clean of layouts) {
+    it(`keeps ${JSON.stringify(clean.slice(0, 24))} unchanged in process results and text packets`, () => {
+      const redacted = new Set<string>();
+      expect(sanitizeAuditValue({ code: 0, stdout: clean, stderr: clean }, redacted)).toEqual({ code: 0, stdout: clean, stderr: clean });
+      expect(sanitizeAuditValue({ type: "text", text: clean }, redacted)).toEqual({ type: "text", text: clean });
+      expect(redacted.size).toBe(0);
+    });
+  }
+
+  it("still decodes, redacts and keeps valid JSON when a known value occurs, including in a collapsed duplicate key", async () => {
+    const known = "dup-key-opaque-credential";
+    const policy = { id: "sanitize-exact", available: true, knownValues: new Set([known]), refreshKnownValues: async () => [known],
+      additionalRules: [], nonSecretValues: new Set<string>() };
+    await withSecretPolicy(policy, async () => {
+      for (const stdout of [`{"a":"${known}","b":10.5}\n`, `{"a":"${known}","a":"clean"}\n`]) {
+        const result = sanitizeAuditValue({ code: 0, stdout, stderr: "" });
+        expect(result.stdout).not.toContain(known);
+        expect(() => JSON.parse(result.stdout)).not.toThrow();
+      }
+    });
+  });
 });

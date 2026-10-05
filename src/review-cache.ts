@@ -207,6 +207,25 @@ export function buildEvidenceSemanticIdentity(admission: BuildEvidenceAdmission)
   }));
 }
 
+/**
+ * Cache inputs of a final review result as the host app keys it. `semantic_configuration_sha256` is the runner's
+ * content-addressed semantic identity (prompts, legs, tools, sources, routing, policy, exported environment); a
+ * missing or malformed identity yields null and never a fabricated one.
+ */
+export function finalResultKeyInputs(input: {
+  evidencePackSha256: string; guidanceSha256: string; trustedBase: string;
+  runner: string; provider: string; model: string; effort: string; runConfiguration: Record<string, unknown>;
+}): Record<string, JsonValue> {
+  const identities = input.runConfiguration.identities;
+  const semantic = identities && typeof identities === "object" && !Array.isArray(identities)
+    ? (identities as Record<string, unknown>).cache_sha256 : undefined;
+  return {
+    evidence_pack_sha256: input.evidencePackSha256, guidance_sha256: input.guidanceSha256, trusted_base: input.trustedBase,
+    runner: input.runner, provider: input.provider, model: input.model, effort: input.effort,
+    semantic_configuration_sha256: typeof semantic === "string" && /^[a-f0-9]{64}$/.test(semantic) ? semantic : null,
+  };
+}
+
 export function canonicalRepositoryIdentity(value: string): string {
   let normalized = value.trim().replace(/^https?:\/\/github\.com\//i, "").replace(/^git@github\.com:/i, "").replace(/\.git$/i, "");
   normalized = normalized.replace(/^\/+|\/+$/g, "");

@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os";
 import { createServer } from "node:http";
 import { dirname, join, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { readAuditEvents } from "../src/audit-inspect.js";
@@ -1396,51 +1396,321 @@ describe("current-policy source exactness and bounded probe exposure", () => {
   });
 });
 
-describe("streaming worker inherited-pipe cancellation", () => {
-  for (const boundary of ["abort", "deadline"] as const) {
-    it(`terminates owned descendants holding output after their worker exits at ${boundary}`, async () => {
-      // Real OS pipes, root reaping and subprocess deadlines cannot be driven with this process's fake timers.
-      const home = mkdtempSync(join(tmpdir(), "leveret-stream-descendant-"));
-      const pidPath = join(home, "descendant.pid");
-      const descendant = [
-        "const fs=require('node:fs');fs.writeFileSync(process.argv[2],String(process.pid));",
-        "function ready(){try{process.kill(Number(process.argv[1]),0);setTimeout(ready,10)}",
-        "catch{fs.writeSync(1,'descendant-ready');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)}}ready();",
-      ].join("");
-      const worker = [
-        "const {spawn}=require('node:child_process');",
-        `spawn(process.execPath,['-e',${JSON.stringify(descendant)},String(process.pid),${JSON.stringify(pidPath)}],`,
-        "{stdio:['ignore','inherit','inherit']}).unref();process.exit(0);",
-      ].join("");
-      const controller = new AbortController();
-      let watchdog: NodeJS.Timeout | undefined;
-      let ready = false;
-      try {
-        const result = await Promise.race([
-          runStreaming(process.execPath, ["-e", worker], home, {
-            timeoutMs: boundary === "deadline" ? 1500 : 10000,
-            signal: controller.signal,
-            onStdout(chunk) {
-              if (chunk.toString("utf8").includes("descendant-ready")) {
-                ready = true;
-                if (boundary === "abort") controller.abort();
-              }
-            },
-          }),
-          new Promise<never>((_, reject) => {
-            watchdog = setTimeout(() => reject(new Error("Owned descendant kept the output pipe open after termination")), 4000);
-          }),
-        ]);
-        expect(ready).toBe(true); // The root was actually reaped before the descendant announced readiness.
-        expect(result.code).not.toBe(0);
-        expect(result.timedOut === true).toBe(boundary === "deadline");
-      } finally {
-        clearTimeout(watchdog);
-        if (existsSync(pidPath)) {
-          try { process.kill(Number(readFileSync(pidPath, "utf8")), "SIGKILL"); } catch { /* already terminated */ }
+describe("streaming worker process ownership and bounded cancellation", () => {
+  const ps = (...args: string[]) => execFileSync("ps", args, { encoding: "utf8" }).trim();
+  for (const escaped of [false, true]) {
+    for (const boundary of ["abort", "deadline"] as const) {
+      it(`settles when a ${escaped ? "setsid-escaped" : "same-group"} descendant holds output after its worker exits at ${boundary}`, async () => {
+        // Real OS pipes, root reaping and subprocess deadlines cannot be driven with this process's fake timers.
+        const home = mkdtempSync(join(tmpdir(), "leveret-stream-descendant-"));
+        const pidPath = join(home, "descendant.pid");
+        const descendant = [
+          "const fs=require('node:fs');fs.writeFileSync(process.argv[2],String(process.pid));",
+          "function ready(){try{process.kill(Number(process.argv[1]),0);setTimeout(ready,10)}",
+          "catch{fs.writeSync(1,'descendant-ready');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)}}ready();",
+        ].join("");
+        const worker = [
+          "const {spawn}=require('node:child_process');",
+          `spawn(process.execPath,['-e',${JSON.stringify(descendant)},String(process.pid),${JSON.stringify(pidPath)}],`,
+          `{stdio:['ignore','inherit','inherit'],detached:${escaped}}).unref();process.exit(0);`,
+        ].join("");
+        const controller = new AbortController();
+        let watchdog: NodeJS.Timeout | undefined;
+        let ready = false;
+        try {
+          const result = await Promise.race([
+            runStreaming(process.execPath, ["-e", worker], home, {
+              timeoutMs: boundary === "deadline" ? 1500 : 10000,
+              signal: controller.signal, ownProcessGroup: true,
+              onStdout(chunk) {
+                if (chunk.toString("utf8").includes("descendant-ready")) {
+                  ready = true;
+                  if (boundary === "abort") controller.abort();
+                }
+              },
+            }),
+            new Promise<never>((_, reject) => {
+              watchdog = setTimeout(() => reject(new Error("A descendant kept the output pipe open after termination")), 7000);
+            }),
+          ]);
+          expect(ready).toBe(true); // The root was actually reaped before the descendant announced readiness.
+          expect(result.code).not.toBe(0);
+          expect(result.timedOut === true).toBe(boundary === "deadline");
+        } finally {
+          clearTimeout(watchdog);
+          if (existsSync(pidPath)) {
+            try { process.kill(Number(readFileSync(pidPath, "utf8")), "SIGKILL"); } catch { /* already terminated */ }
+          }
+          rmSync(home, { recursive: true, force: true });
         }
-        rmSync(home, { recursive: true, force: true });
-      }
+      }, 20_000);
+    }
+  }
+
+  for (const owned of [false, true]) {
+    it(`${owned ? "gives an opted-in caller its own process group" : "leaves an ordinary caller in the host process group"}`, async () => {
+      const controller = new AbortController();
+      let child = "";
+      let group = "";
+      await runStreaming(process.execPath, ["-e", "require('fs').writeSync(1,String(process.pid));Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)"], "/tmp", {
+        timeoutMs: 8000, signal: controller.signal, ...(owned ? { ownProcessGroup: true } : {}),
+        onStdout(chunk) {
+          child = chunk.toString("utf8");
+          group = ps("-o", "pgid=", "-p", child);
+          controller.abort();
+        },
+      });
+      expect(group).toBe(owned ? child : ps("-o", "pgid=", "-p", String(process.pid)));
     });
   }
+
+  it("kills an opted-in owned group when its host exits, never signalling a broader group", async () => {
+    const home = mkdtempSync(join(tmpdir(), "leveret-stream-host-exit-"));
+    const pidPath = join(home, "owned.pid");
+    const script = join(home, "host.mts");
+    writeFileSync(script, [
+      `import { existsSync } from "node:fs";`,
+      `import { runStreaming } from ${JSON.stringify(resolve("src/exec.ts"))};`,
+      `const owned = ${JSON.stringify(`require('fs').writeFileSync(${JSON.stringify(pidPath)},String(process.pid));setInterval(()=>{},1000)`)};`,
+      `void runStreaming(process.execPath, ["-e", owned], "/tmp", { ownProcessGroup: true, timeoutMs: 60000 });`,
+      `const until = Date.now() + 15000;`,
+      `while (!existsSync(${JSON.stringify(pidPath)}) && Date.now() < until) await new Promise((done) => setTimeout(done, 20));`,
+      `process.exit(0);`,
+    ].join("\n"));
+    try {
+      const host = await run(process.execPath, [resolve("node_modules/tsx/dist/cli.mjs"), script], resolve("."), { timeoutMs: 60_000 });
+      expect(host.code, host.stderr).toBe(0);
+      const owned = Number(readFileSync(pidPath, "utf8"));
+      const alive = () => { try { process.kill(owned, 0); return true; } catch { return false; } };
+      const until = Date.now() + 5000;
+      while (alive() && Date.now() < until) await new Promise((done) => setTimeout(done, 50)); // Real OS reaping, not a guess at duration.
+      expect(alive()).toBe(false);
+    } finally {
+      if (existsSync(pidPath)) {
+        try { process.kill(Number(readFileSync(pidPath, "utf8")), "SIGKILL"); } catch { /* already terminated */ }
+      }
+      rmSync(home, { recursive: true, force: true });
+    }
+  }, 90_000);
+});
+
+describe("full runner publication tail through the real SDK and host screening declarations", () => {
+  const LENSES = ["correctness-hostile-inputs", "contract-conformance", "test-honesty", "blast-radius", "leads-triage"];
+  let home = "";
+  let fixture: Awaited<ReturnType<typeof createBuildFixture>>;
+  beforeAll(async () => {
+    home = mkdtempSync(join(tmpdir(), "leveret-full-run-"));
+    fixture = await createBuildFixture(join(home, "fixture"), "valid");
+  }, 120_000);
+  afterAll(() => { rmSync(home, { recursive: true, force: true }); });
+
+  const flatten = (content: unknown): string => typeof content === "string" ? content
+    : Array.isArray(content) ? content.map((part: { text?: string }) => part.text ?? "").join("") : "";
+
+  /** The documented keyless local provider (apiKey "local") plus a public attribution header, with audit ON and no Java imports. */
+  async function launch(name: string, nonSecretValues: string[] | undefined) {
+    const requests: string[] = [];
+    let submissions = 0;
+    const submit = (args: unknown) => ({ tool_calls: [{ index: 0, id: `submit-${++submissions}`, type: "function",
+      function: { name: "leveret_submit_phase", arguments: JSON.stringify(args) } }] });
+    const server = createServer(async (request, response) => {
+      let body = "";
+      for await (const chunk of request) body += chunk;
+      requests.push(body);
+      const parsed: { messages: { role: string; content: unknown }[] } = JSON.parse(body);
+      const everything = parsed.messages.map((message) => flatten(message.content)).join("\n");
+      let delta: unknown;
+      if (parsed.messages.at(-1)?.role === "tool") delta = { content: "submitted" };
+      else if (!everything.includes("targeted verification and publication gate")) {
+        delta = submit({ concerns: [], coverage: { lenses: LENSES.map((lens) => ({ lens, outcome: "clean" })), files: [] } });
+      } else {
+        const tail = everything.split("An actionable unmatched lead must use its lead ID as its report ID.\n")[1]
+          ?.split("\n## Host Java reference evidence")[0] ?? "{}";
+        let ids: string[] = [];
+        try {
+          const handoff: { supplied: { items: { id: string }[] } } = JSON.parse(tail);
+          ids = handoff.supplied.items.map((item) => item.id);
+        } catch { /* no routed leads */ }
+        delta = submit({
+          decisions: ids.map((id) => ({ id, grade: "dropped", reason: "fixture lead is not supported by evidence" })),
+          lenses: LENSES.map((lens) => ({ lens, outcome: "clean" })),
+        });
+      }
+      const chunk = (value: unknown, finish: string | null) => JSON.stringify({
+        id: "fixture", object: "chat.completion.chunk", created: 1, model: "fixture", choices: [{ index: 0, delta: value, finish_reason: finish }],
+      });
+      const tool = typeof delta === "object" && delta !== null && "tool_calls" in delta;
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.end(`data: ${chunk(delta, null)}\n\ndata: ${chunk({}, tool ? "tool_calls" : "stop")}\n\ndata: [DONE]\n\n`);
+    });
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("fixture transport unavailable");
+      const agent = join(home, `agent-${name}`);
+      const scratch = join(home, `scratch-${name}`);
+      mkdirSync(agent); mkdirSync(scratch);
+      writeFileSync(join(agent, "models.json"), JSON.stringify({ providers: { local: {
+        baseUrl: `http://127.0.0.1:${address.port}/v1`, api: "openai-completions", apiKey: "local",
+        headers: { "X-Title": "Leveret" }, models: [{ id: "fixture" }],
+      } } }));
+      const result = await run(process.execPath, [resolve("node_modules/tsx/dist/cli.mjs"), resolve("test/fixtures/pi-main.mts")], resolve("."), {
+        timeoutMs: 180_000, maxBuffer: 16 * 1024 * 1024,
+        env: { PATH: process.env.PATH ?? "", HOME: home, TMPDIR: scratch, LEVERET_REPO: fixture.repo, LEVERET_BASE: fixture.base,
+          LEVERET_PI_AGENT_DIR: agent, LEVERET_DATA: join(home, `data-${name}`), LEVERET_RUNNER_PROVIDER: "local",
+          LEVERET_RUNNER_MODEL: "fixture", LEVERET_RUNNER_EFFORT: "off", LEVERET_DISCOVERY_MODE: "single", LEVERET_REQUIRE_INDEXES: "0",
+          ...(nonSecretValues ? { LEVERET_NON_SECRET_VALUES: JSON.stringify(nonSecretValues) } : {}) },
+      });
+      return { result, requests };
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((done) => server.close(() => done()));
+    }
+  }
+
+  it("completes the real review and verification publication tail with host-declared keyless placeholders and audit on", async () => {
+    const { result, requests } = await launch("declared", ["local", "Leveret"]);
+    expect(result.code, result.stderr).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output).toMatchObject({ report: [], coverage: { lenses: expect.any(Array) } });
+    expect(output.verdicts).toEqual(expect.any(Array));
+    expect(output.run_configuration.identities.cache_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(output.post_walk_leads).toBeDefined();
+    expect(requests.length).toBeGreaterThanOrEqual(4); // review submission+ack, verifier submission+ack
+  }, 240_000);
+
+  it("withholds before any model request when the active keyless credential and header are not host-declared", async () => {
+    const { result, requests } = await launch("undeclared", undefined);
+    expect(result.code).not.toBe(0);
+    expect(requests).toHaveLength(0);
+  }, 240_000);
+
+  it("merges Java and host environment placeholder declarations and rejects a malformed declaration", () => {
+    expect(piRunner.hostScreening({ LEVERET_NON_SECRET_VALUES: JSON.stringify(["local"]) }, {
+      rules: [{ id: "r", source: "x", flags: "" }], nonSecretValues: ["Bearer local"],
+    })).toEqual({ rules: [{ id: "r", source: "x", flags: "" }], nonSecretValues: ["Bearer local", "local"] });
+    expect(piRunner.hostScreening({}, undefined)).toEqual({ rules: [], nonSecretValues: [] });
+    for (const bad of ["not json", '{"a":1}', '["", "x"]', "[1]"]) {
+      expect(() => piRunner.hostScreening({ LEVERET_NON_SECRET_VALUES: bad }, undefined)).toThrow(/LEVERET_NON_SECRET_VALUES/);
+    }
+  });
+});
+
+describe("semantic prompt content identity", () => {
+  it("hashes the actual system prompt, verifier tail, leg definitions, checklist set and contract bytes", () => {
+    const base = piRunner.promptContentIdentity({ reviewContract: "review text", verifyContract: "verify text" });
+    expect(Object.keys(base.parts).sort()).toEqual([
+      "leg_definitions", "mechanism_checklist_set", "review_contract", "system_prompt_template", "verifier_phase_prompt", "verify_contract",
+    ]);
+    expect(base.sha256).toMatch(/^[a-f0-9]{64}$/);
+    const review = piRunner.promptContentIdentity({ reviewContract: "review text edited", verifyContract: "verify text" });
+    const verify = piRunner.promptContentIdentity({ reviewContract: "review text", verifyContract: "verify text edited" });
+    expect(review.sha256).not.toBe(base.sha256);
+    expect(verify.sha256).not.toBe(base.sha256);
+    expect(review.sha256).not.toBe(verify.sha256);
+    expect(review.parts.review_contract).not.toBe(base.parts.review_contract);
+    expect(review.parts.system_prompt_template).toBe(base.parts.system_prompt_template);
+    expect(base.parts.system_prompt_template).toBe(createHash("sha256").update(buildPiSystemPrompt(["<tools>"])).digest("hex"));
+  });
+});
+
+describe("operational stdout is byte exact unless a redaction occurs", () => {
+  const stdout = '{"n":12345678901234567890,"p":10.50,"d":1,"d":2}\n';
+  const withPolicy = (known: string[]) => ({ id: "exact-policy", available: true, knownValues: new Set(known),
+    refreshKnownValues: async () => known, additionalRules: [], nonSecretValues: new Set<string>() });
+
+  for (const policy of [false, true]) {
+    it(`returns clean JSON probe stdout unchanged ${policy ? "under" : "without"} an active policy`, async () => {
+      const home = mkdtempSync(join(tmpdir(), "leveret-probe-exact-"));
+      const bundle = await buildPiTools(toolOptions(home, true));
+      try {
+        const probe = bundle.tools.find((tool) => tool.name === "leveret_probe")!;
+        const call = async () => toolPayload(await probe.execute("exact", {
+          command: "node", args: ["-e", `process.stdout.write(${JSON.stringify(stdout)})`],
+        }, undefined, undefined, {} as never));
+        const reply = policy ? await withSecretPolicy(withPolicy(["unrelated-credential"]), call) : await call();
+        expect(reply.stdout).toBe(stdout);
+      } finally { await bundle.close(); rmSync(home, { recursive: true, force: true }); }
+    });
+  }
+});
+
+describe("cached receipt lifecycle and resource authority controls", () => {
+  async function admitted(values: { current: readonly string[] }) {
+    const home = mkdtempSync(join(tmpdir(), "leveret-receipt-lifecycle-"));
+    const policy = { id: "lifecycle-policy", available: false, knownValues: new Set<string>(), refreshKnownValues: async () => values.current,
+      additionalRules: [], nonSecretValues: new Set<string>() };
+    const fixture = await createBuildFixture(join(home, "fixture"), "template-defect");
+    const admission = await admitBuildEvidence(fixtureRequest(fixture, "head", join(home, "admission")), policy);
+    if (admission.outcome !== "admitted") throw new Error("fixture not admitted");
+    const read = (request: Parameters<typeof readBuildArtifact>[1]) => readBuildArtifact(admission, request, policy);
+    const output = await read({ manifestSha256: admission.manifestSha256, artifactId: "pricing-output", range: null, byteBudget: 262144 });
+    if (!output.ok) throw new Error("output not readable");
+    const cite = (artifactId: string, endColumn: number) => ({
+      manifestSha256: admission.manifestSha256, artifactId, range: { startLine: 4, endLine: 4 },
+      span: { start: { line: 4, column: 62 }, end: { line: 4, column: endColumn } },
+    });
+    return { home, policy, admission, read, output, cite,
+      outputClaim: { file: "build/generated/example/Pricing.java", line: 4, build_citations: [cite("pricing-output", 64)] },
+      mappedClaim: { file: "templates/Pricing.java.tpl", line: 4, build_citations: [cite("pricing-output", 64), cite("pricing-template", 71)] } };
+  }
+
+  it("heals receipts after a non-matching rotation and revokes them after a matching or counterpart rotation", async () => {
+    const values = { current: [] as readonly string[] };
+    const f = await admitted(values);
+    try {
+      const ledger = new BuildEvidenceLedger(f.policy);
+      ledger.record("read", "head", f.output.result);
+      const ids = new Set(["read"]);
+      const heal = () => ledger.refresh((_side, request) => f.read(request), ids);
+      expect(ledger.resolve(f.mappedClaim, ids)).toMatchObject({ ok: true });
+      values.current = ["unrelated-rotation-value"];
+      await refreshSecretPolicy(f.policy);
+      expect(ledger.resolve(f.outputClaim, ids)).toMatchObject({ ok: false }); // stale epoch fails closed...
+      await heal();
+      expect(ledger.resolve(f.mappedClaim, ids)).toMatchObject({ ok: true }); // ...and a clean re-read heals it
+      values.current = ["${factor}"]; // the mapped counterpart template now matches
+      await refreshSecretPolicy(f.policy);
+      await heal();
+      expect(ledger.resolve(f.outputClaim, ids)).toMatchObject({ ok: true });
+      expect(ledger.resolve(f.mappedClaim, ids)).toMatchObject({ ok: false });
+      values.current = ["quantity / 10"]; // the output text itself now matches
+      await refreshSecretPolicy(f.policy);
+      await heal();
+      expect(ledger.resolve(f.outputClaim, ids)).toMatchObject({ ok: false });
+      values.current = [];
+      await heal();
+      expect(ledger.resolve(f.outputClaim, ids)).toMatchObject({ ok: false }); // a revoked receipt never heals
+    } finally { rmSync(f.home, { recursive: true, force: true }); }
+  }, 180_000);
+
+  it("does not authorize a receipt that did not come from the host reader", async () => {
+    const f = await admitted({ current: [] });
+    try {
+      const ledger = new BuildEvidenceLedger(f.policy);
+      ledger.record("forged", "head", structuredClone(f.output.result)); // identical bytes, no host read authorization
+      expect(ledger.resolve(f.outputClaim, new Set(["forged"]))).toMatchObject({ ok: false });
+      ledger.record("genuine", "head", f.output.result);
+      expect(ledger.resolve(f.outputClaim, new Set(["genuine"]))).toMatchObject({ ok: true });
+    } finally { rmSync(f.home, { recursive: true, force: true }); }
+  }, 180_000);
+
+  it("loads project resources from its working directory only, so a payload-root view is a detectable positive control", async () => {
+    const home = mkdtempSync(join(tmpdir(), "leveret-resource-control-"));
+    const hostile = join(home, "payload");
+    const runtimeDir = join(home, "runtime");
+    const agentDir = join(home, "agent");
+    mkdirSync(join(hostile, ".pi", "extensions"), { recursive: true });
+    mkdirSync(runtimeDir); mkdirSync(agentDir);
+    const extension = join(hostile, ".pi", "extensions", "evil.js");
+    writeFileSync(extension, "export default function () {}\n");
+    try {
+      const control = buildPiResourceLoader("trusted prompt", { cwd: hostile, agentDir, home, env: {} });
+      await control.reload({ resolveProjectTrust: async () => true });
+      expect(control.getExtensions().extensions.map((item) => item.resolvedPath)).toContain(extension);
+      const host = buildPiResourceLoader("trusted prompt", { cwd: runtimeDir, agentDir, home, env: {} });
+      await host.reload({ resolveProjectTrust: async () => true });
+      expect(host.getExtensions().extensions.map((item) => item.resolvedPath)).not.toContain(extension);
+    } finally { rmSync(home, { recursive: true, force: true }); }
+  });
 });

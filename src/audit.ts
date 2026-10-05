@@ -251,6 +251,16 @@ export function auditConfig(dataDir: string, env: NodeJS.ProcessEnv = process.en
   };
 }
 
+/** Whether any string token of valid JSON text, decoded, would be redacted: sees values `JSON.parse` collapses away. */
+function jsonStringTokensSensitive(text: string): boolean {
+  for (const [token] of text.matchAll(/"(?:[^"\\]|\\.)*"/gs)) {
+    let decoded: string;
+    try { decoded = JSON.parse(token); } catch { return true; }
+    if (redactAuditText(decoded) !== decoded) return true;
+  }
+  return false;
+}
+
 function sanitize(value: unknown, redacted: Set<string>, path = "payload"): unknown {
   if (value instanceof Error) {
     const raw = value.stack ?? String(value);
@@ -295,11 +305,22 @@ function sanitize(value: unknown, redacted: Set<string>, path = "payload"): unkn
         // Decode transport JSON before screening; raw source/artifact `text` is not a transport packet.
         const structured = (key === "text" && isTextPacket) || ((key === "stdout" || key === "stderr") && isProcessResult);
         if (structured && typeof child === "string" && /^[{\[]/.test(child.trimStart())) {
-          try {
-            result[name] = JSON.stringify(sanitize(JSON.parse(child), redacted, childPath), null, child.includes("\n") ? 1 : undefined);
+          let parsed: unknown;
+          let valid = true;
+          try { parsed = JSON.parse(child); } catch { valid = false; /* Non-JSON operational/source text uses the canonical text rules. */ }
+          if (valid) {
+            const touched = new Set<string>();
+            const decoded = sanitize(parsed, touched, childPath);
+            // Clean evidence stays byte exact (numbers, duplicate keys, layout). Every string token is decoded and screened, so a
+            // secret that JSON.parse would drop (an overwritten duplicate key, an escaped spelling) still forces a rewrite.
+            if (touched.size === 0 && !jsonStringTokensSensitive(child)) {
+              result[name] = child;
+              continue;
+            }
+            for (const field of touched) redacted.add(field);
+            if (touched.size === 0) redacted.add(childPath);
+            result[name] = JSON.stringify(decoded, null, child.includes("\n") ? 1 : undefined);
             continue;
-          } catch {
-            // Non-JSON operational/source text still uses the canonical text rules.
           }
         }
         result[name] = sanitize(child, redacted, childPath);

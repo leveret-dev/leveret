@@ -697,7 +697,7 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
         const result = await runStreaming(command, params.args ?? [], cwd, {
           timeoutMs: params.timeout_ms ?? 30_000,
           env: safeChildEnvironment(),
-          maxBuffer: PROBE_AUDIT_MAX_BYTES, signal,
+          maxBuffer: PROBE_AUDIT_MAX_BYTES, signal, ...(signal ? { ownProcessGroup: true } : {}),
         });
         if (result.spawnError) throw new ToolExecutionError(`probe spawn failed: ${result.spawnError}`);
         const timedOut = result.timedOut === true;

@@ -35,8 +35,6 @@ export interface RunOpts {
   env?: NodeJS.ProcessEnv;
   /** output cap; callers handling untrusted tools should keep this small */
   maxBuffer?: number;
-  /** Host cancellation, independent of the subprocess deadline. */
-  signal?: AbortSignal;
 }
 
 const SAFE_ENV_KEYS = [
@@ -96,16 +94,15 @@ export function run(cmd: string, args: string[], cwd: string, opts?: RunOpts): P
     const startedAt = Date.now();
     const env = opts?.env ?? (process.env.LEVERET_SANITIZE_CHILD_ENV === "1" ? safeChildEnvironment() : undefined);
     const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    execFile(cmd, args, { cwd, env, maxBuffer: opts?.maxBuffer ?? 64 * 1024 * 1024, timeout: timeoutMs, signal: opts?.signal }, (err, stdout, stderr) => {
+    execFile(cmd, args, { cwd, env, maxBuffer: opts?.maxBuffer ?? 64 * 1024 * 1024, timeout: timeoutMs }, (err, stdout, stderr) => {
       let code = 0;
       let signal: string | undefined;
       let timedOut = false;
       let truncated = false;
       if (err) {
         const e = err as NodeJS.ErrnoException & { code?: unknown; signal?: string; killed?: boolean };
-        timedOut = opts?.signal?.aborted !== true && e.killed === true && Boolean(e.signal);
+        timedOut = e.killed === true && Boolean(e.signal);
         truncated = e.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER";
-        if (opts?.signal?.aborted) signal = "SIGTERM";
         if (typeof e.signal === "string" && e.signal) {
           // A signal death reports err.code null; `?? 0` would read as success
           // and callers would trust partial stdout from a killed tool.
@@ -126,16 +123,41 @@ export function run(cmd: string, args: string[], cwd: string, opts?: RunOpts): P
 }
 
 export interface StreamRunOpts extends RunOpts {
+  /** Host cancellation, independent of the subprocess deadline. */
+  signal?: AbortSignal;
+  /**
+   * Lead a private process group and signal that whole group on cancellation, deadline, capture limit and host exit.
+   * Opt in only when the caller owns cancellation (passes a `signal` and handles host shutdown): a detached group no
+   * longer receives a terminal Ctrl-C. Ordinary callers keep the child in the host's group and its default signals.
+   */
+  ownProcessGroup?: boolean;
   onStdout?(chunk: Buffer): void;
   onStderr?(chunk: Buffer): void;
 }
 
+/** How long output pipes may stay open after the root exited under termination before they are abandoned. */
+const PIPE_GRACE_MS = 1000;
+
+// One host-exit hook for every owned group; Node emits no 'exit' on default signal death, so owners handle SIGINT/SIGTERM.
+const ownedGroups = new Set<number>();
+let exitHooked = false;
+function registerOwnedGroup(pid: number): void {
+  ownedGroups.add(pid);
+  if (exitHooked) return;
+  exitHooked = true;
+  process.once("exit", () => {
+    for (const group of ownedGroups) {
+      try { process.kill(-group, "SIGKILL"); } catch { /* group already gone */ }
+    }
+  });
+}
+
 /**
- * Streaming child execution for long-running harnesses. The child leads its own process group so cancellation,
- * deadlines and capture limits terminate every descendant that inherited its output pipes, even after the root
- * exited; only that owned group is ever signalled. Under an active secret policy, callbacks receive one screened
- * bounded copy per stream at completion, never independently screened fragments. Private returned stdout/stderr
- * remain exact for host protocol parsing.
+ * Streaming child execution for long-running harnesses. Termination (abort, deadline, capture limit) signals the
+ * child, or its owned process group when the caller opted in, and always settles: once the root has exited, output
+ * pipes still held by an escaped descendant are abandoned after a short grace, so `close` cannot hang the host.
+ * Under an active secret policy, callbacks receive one screened bounded copy per stream at completion, never
+ * independently screened fragments. Private returned stdout/stderr remain exact for host protocol parsing.
  */
 export function runStreaming(cmd: string, args: string[], cwd: string, opts?: StreamRunOpts): Promise<ExecResult> {
   // Keep the executor form for the project's ES2023 standard-library contract (no withResolvers declaration).
@@ -145,7 +167,10 @@ export function runStreaming(cmd: string, args: string[], cwd: string, opts?: St
     const maxBuffer = opts?.maxBuffer ?? 64 * 1024 * 1024;
     const env = opts?.env ?? (process.env.LEVERET_SANITIZE_CHILD_ENV === "1" ? safeChildEnvironment() : undefined);
     const policy = currentSecretPolicy();
-    const child = spawn(cmd, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
+    const owned = opts?.ownProcessGroup === true;
+    const child = spawn(cmd, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: owned });
+    const group = owned ? child.pid : undefined;
+    if (group !== undefined) registerOwnedGroup(group);
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     let stdoutBytes = 0;
@@ -156,20 +181,28 @@ export function runStreaming(cmd: string, args: string[], cwd: string, opts?: St
     let stderrTruncated = false;
     let spawnError: string | undefined;
     let forceTimer: ReturnType<typeof setTimeout> | undefined;
+    let pipeTimer: ReturnType<typeof setTimeout> | undefined;
     let terminated = false;
-    const signalGroup = (signal: NodeJS.Signals): void => {
+    let rootExited = false;
+    const signalTarget = (signal: NodeJS.Signals): void => {
       try {
-        if (child.pid !== undefined) process.kill(-child.pid, signal);
+        if (group !== undefined) process.kill(-group, signal);
         else child.kill(signal);
-      } catch { /* group already gone */ }
+      } catch { /* already gone */ }
     };
-    const killOnHostExit = (): void => signalGroup("SIGKILL");
-    process.once("exit", killOnHostExit);
+    const abandonPipesSoon = (): void => {
+      pipeTimer ??= setTimeout(() => { child.stdout.destroy(); child.stderr.destroy(); }, PIPE_GRACE_MS);
+    };
     const terminate = (): void => {
       terminated = true;
-      signalGroup("SIGTERM");
-      forceTimer ??= setTimeout(() => signalGroup("SIGKILL"), 5000);
+      signalTarget("SIGTERM");
+      forceTimer ??= setTimeout(() => signalTarget("SIGKILL"), 5000);
+      if (rootExited) abandonPipesSoon();
     };
+    child.on("exit", () => {
+      rootExited = true;
+      if (terminated) abandonPipesSoon();
+    });
     opts?.signal?.addEventListener("abort", terminate, { once: true });
     if (opts?.signal?.aborted) terminate();
     const keep = (chunks: Buffer[], chunk: Buffer, used: number, stream: "stdout" | "stderr"): number => {
@@ -197,9 +230,10 @@ export function runStreaming(cmd: string, args: string[], cwd: string, opts?: St
     }, timeoutMs);
     child.on("close", (code, signal) => {
       opts?.signal?.removeEventListener("abort", terminate);
-      process.removeListener("exit", killOnHostExit);
+      if (group !== undefined) ownedGroups.delete(group);
       clearTimeout(timer);
       clearTimeout(forceTimer);
+      clearTimeout(pipeTimer);
       const result: ExecResult = {
         // A run that was cancelled, timed out or cut off never reads as success, even when the root exited 0 first.
         code: terminated && code === 0 ? -1 : code ?? -1,
@@ -227,7 +261,8 @@ export function runStreaming(cmd: string, args: string[], cwd: string, opts?: St
             }
             if (stdoutBytes > 0) opts?.onStdout?.(Buffer.from(exposed.stdout));
             if (stderrBytes > 0) opts?.onStderr?.(Buffer.from(exposed.stderr));
-            await captureSubprocess(cmd, args, cwd, env, timeoutMs, startedAt, exposed);
+            const captured = captureSubprocess(cmd, args, cwd, env, timeoutMs, startedAt, exposed);
+            if (captured) await captured.catch(() => {}); // flush() retains the existing audit failure contract.
           });
         } else {
           const captured = captureSubprocess(cmd, args, cwd, env, timeoutMs, startedAt, result);

@@ -260,6 +260,28 @@ export function piContract(text: string): string {
     .replace("Return the JSON object immediately; no prose and no further tool calls.", "Call `leveret_submit_phase` immediately; no prose and no further tool calls.");
 }
 
+/** The verifier's phase instruction appended to the shared system prompt; part of the semantic prompt identity. */
+export const VERIFIER_PHASE_PROMPT = "You are the targeted verification and publication gate. Work from the supplied concern/lead ledger, not a broad new review. Submit one compact decision row per supplied ID; include a finding body only for actionable decisions. The runner assembles verdicts, reports, coverage, and publication structures. Check exact IDs, no empty optional strings, correlation only for out-of-diff findings, and all five lenses. When evidence is insufficient, grade dropped with a reason. Once the ledger is complete, call leveret_submit_phase without further investigation.";
+
+export interface PromptContentIdentity {
+  sha256: string;
+  parts: Record<"system_prompt_template" | "verifier_phase_prompt" | "leg_definitions" | "mechanism_checklist_set" | "review_contract" | "verify_contract", string>;
+}
+
+/** Content hashes of every instruction a phase can receive, so a prompt edit without a version bump still changes the cache identity. */
+export function promptContentIdentity(contracts: { reviewContract: string; verifyContract: string }): PromptContentIdentity {
+  const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+  const parts: PromptContentIdentity["parts"] = {
+    system_prompt_template: sha(buildPiSystemPrompt(["<tools>"])),
+    verifier_phase_prompt: sha(VERIFIER_PHASE_PROMPT),
+    leg_definitions: sha(JSON.stringify(SPECIALIZED_LEG_DEFINITIONS.map((leg) => [leg.id, leg.version, leg.definitionSha256]))),
+    mechanism_checklist_set: MECHANISM_CHECKLIST_SET_SHA256,
+    review_contract: sha(contracts.reviewContract),
+    verify_contract: sha(contracts.verifyContract),
+  };
+  return { parts, sha256: stableSha256(parts) };
+}
+
 function phaseToolIdentityWithSubmission(tools: PiToolsBundle["tools"], submission: PhaseSubmission) {
   return phaseToolIdentity([...tools, createPhaseSubmissionTool(submission, () => undefined)]);
 }
@@ -601,6 +623,27 @@ export async function createPiSecretPolicy(
   return policy;
 }
 
+/**
+ * Host-declared screening: the trusted Java configuration (whenever one is supplied, imports or not) plus the host
+ * environment's LEVERET_NON_SECRET_VALUES, a strict JSON array of exact nonsecret placeholder values (for example a
+ * keyless local provider's literal key). Never read from a reviewed checkout or an export; nothing is inferred.
+ */
+export function hostScreening(
+  env: Record<string, string | undefined>, java: InspectJavaConfig["screening"],
+): NonNullable<InspectJavaConfig["screening"]> {
+  const declared = env.LEVERET_NON_SECRET_VALUES;
+  let fromEnvironment: string[] = [];
+  if (declared !== undefined && declared !== "") {
+    let parsed: unknown;
+    try { parsed = JSON.parse(declared); } catch { parsed = undefined; }
+    if (!Array.isArray(parsed) || parsed.some((value) => typeof value !== "string" || value.length === 0)) {
+      throw new Error("LEVERET_NON_SECRET_VALUES must be a JSON array of non-empty strings");
+    }
+    fromEnvironment = parsed;
+  }
+  return { rules: [...(java?.rules ?? [])], nonSecretValues: [...new Set([...(java?.nonSecretValues ?? []), ...fromEnvironment])] };
+}
+
 interface PiHostRuntime {
   runtime: PiRuntimeConfig;
   modelRuntime: ModelRuntime;
@@ -645,7 +688,7 @@ async function preparePiHostRuntime(repo: string, auditEnabled: boolean): Promis
     : undefined;
   const importsConfigured = Boolean(javaConfig?.buildEvidence?.base || javaConfig?.buildEvidence?.head);
   const policy = auditEnabled || importsConfigured
-    ? await createPiSecretPolicy(modelRuntime, Object.values(routing.models), importsConfigured ? javaConfig?.screening : undefined)
+    ? await createPiSecretPolicy(modelRuntime, Object.values(routing.models), hostScreening(process.env, javaConfig?.screening))
     : undefined;
   return { runtime, modelRuntime, routing, javaConfig, policy };
 }
@@ -883,8 +926,14 @@ async function runMain(runtimeDir: string, host: PiHostRuntime, audit: AuditWrit
       selectPhaseTools(bundle.tools, TARGETED_VERIFIER_TOOLS.required, TARGETED_VERIFIER_TOOLS.optional, true),
       verifierSubmissionShape,
     );
+    // Repo path and base commit differ per run; the identity covers the contract with rulings but neutral run coordinates.
+    const promptContent = promptContentIdentity({
+      reviewContract: piContract(await loadContract("review", { repo: "<repo>", base: "<base>", rulingsRepo: trusted.root })),
+      verifyContract: piContract(await loadContract("verify", { repo: "<repo>", base: "<base>", rulingsRepo: trusted.root })),
+    });
     const semanticConfiguration = {
       system_prompt_version: PI_SYSTEM_PROMPT_VERSION,
+      prompt_content_sha256: promptContent.sha256,
       discovery_contract: runtime.discoveryMode === "specialized/v1" ? SPECIALIZED_DISCOVERY : "single",
       phase_tools: { discovery: identityDiscoveryTools, verifier: identityVerifierTools },
       tool_source_sha256: bundle.capabilities.tool_source_sha256,
@@ -896,6 +945,7 @@ async function runMain(runtimeDir: string, host: PiHostRuntime, audit: AuditWrit
       knowledge_sha256: guidance.provenance.dataSha256, phase_deadline_ms: runtime.deadlineMs,
     };
     const configurationIdentities = {
+      prompt_content_sha256: promptContent.sha256,
       prompt_sha256: stableSha256({
         discovery: runtime.discoveryMode === "specialized/v1"
           ? SPECIALIZED_DISCOVERY
@@ -1094,9 +1144,7 @@ async function runMain(runtimeDir: string, host: PiHostRuntime, audit: AuditWrit
     if (new Set(priorThreadIds).size !== priorThreadIds.length) throw new Error("LEVERET_PRIOR contains duplicate threadId values");
     const verifierTools = selectPhaseTools(bundle.tools, TARGETED_VERIFIER_TOOLS.required, TARGETED_VERIFIER_TOOLS.optional, true);
     const verifierToolIdentity = phaseToolIdentityWithSubmission(verifierTools, verifierSubmissionShape);
-    const verifierSystemPrompt = `${buildPiSystemPrompt(verifierToolIdentity.names)}
-
-You are the targeted verification and publication gate. Work from the supplied concern/lead ledger, not a broad new review. Submit one compact decision row per supplied ID; include a finding body only for actionable decisions. The runner assembles verdicts, reports, coverage, and publication structures. Check exact IDs, no empty optional strings, correlation only for out-of-diff findings, and all five lenses. When evidence is insufficient, grade dropped with a reason. Once the ledger is complete, call leveret_submit_phase without further investigation.`;
+    const verifierSystemPrompt = `${buildPiSystemPrompt(verifierToolIdentity.names)}\n\n${VERIFIER_PHASE_PROMPT}`;
     const specializedCoverage = specialized?.outputs.map(({ plan, output }) => ({
       leg_id: plan.definition.id,
       assigned: plan.assignedFiles,
@@ -1157,6 +1205,7 @@ You are the targeted verification and publication gate. Work from the supplied c
       audit,
       signal: abortSignal,
     });
+    const verifierContract = structuredClone(verify);
     const mergedVerify = completeVerificationCoverage(
       mergeVerificationCoverage(reviewOutput, verify, leadExpectations),
       changedFiles,
@@ -1299,7 +1348,9 @@ You are the targeted verification and publication gate. Work from the supplied c
       },
     };
     await refreshBuildEvidenceFor("verify");
-    const publicationGaps = verifySchemaGaps(out, expectations);
+    // Publication re-validates the verifier's own contract object, taken before run/accounting extras were attached, with the
+    // freshly refreshed policy: the strict verifier schema never describes run_configuration or post_walk_leads.
+    const publicationGaps = verifySchemaGaps(verifierContract, expectations);
     if (publicationGaps.length) throw new Error(`publication evidence unavailable: ${publicationGaps.join(", ")}`);
     await audit?.record("result", "runner_result", out);
     process.stdout.write(JSON.stringify(sanitizeAuditValue(out), null, 1));
