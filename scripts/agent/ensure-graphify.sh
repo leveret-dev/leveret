@@ -43,7 +43,7 @@ main() {
 	# as pfBlockerNG does. Its `leiden` extra pulls the native Leiden binding on every
 	# interpreter, so clustering never silently falls back to Louvain. Bump the SHA
 	# when the fork's integration branch advances.
-	uv tool install --upgrade 'graphifyy[leiden] @ git+https://github.com/pfBlockerNG/graphify@ff80347d986a7fd25864dd7aa5c1fb14dc5e2a18' 1>&2 ||
+	uv tool install --upgrade 'graphifyy[leiden] @ git+https://github.com/pfBlockerNG/graphify@61354f59626c0add974edc5e06272dc42001b1cf' 1>&2 ||
 		fail 'Graphify installation failed'
 	graphify_bin=$(resolve_graphify_launcher) ||
 		fail 'cannot resolve the installed Graphify launcher'
