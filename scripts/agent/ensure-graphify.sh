@@ -39,11 +39,11 @@ main() {
 	patch_graphify=$root/scripts/agent/patch-graphify.sh
 	[ -f "$patch_graphify" ] || patch_graphify=$(dirname "$0")/patch-graphify.sh
 
-	# Install the pfBlockerNG fork's integration head at an immutable commit (0.9.85),
+	# Install the pfBlockerNG fork's integration head at an immutable commit (0.9.86),
 	# as pfBlockerNG does. Its `leiden` extra pulls the native Leiden binding on every
 	# interpreter, so clustering never silently falls back to Louvain. Bump the SHA
 	# when the fork's integration branch advances.
-	uv tool install --upgrade 'graphifyy[leiden] @ git+https://github.com/pfBlockerNG/graphify@78ff0f95f3f84d5327fb032daf9351106101d12b' 1>&2 ||
+	uv tool install --upgrade 'graphifyy[leiden] @ git+https://github.com/pfBlockerNG/graphify@c1baa4222d400ccf9f8c1e9a05818ff256b6a6a1' 1>&2 ||
 		fail 'Graphify installation failed'
 	graphify_bin=$(resolve_graphify_launcher) ||
 		fail 'cannot resolve the installed Graphify launcher'
