@@ -27,7 +27,7 @@ Describe 'ensure-graphify-merge-driver.sh'
     cat > "$stubdir/uv" <<'UV'
 #!/bin/sh
 case "$*" in
-  "tool install --upgrade graphifyy[leiden] @ git+https://github.com/pfBlockerNG/graphify@c1baa4222d400ccf9f8c1e9a05818ff256b6a6a1")
+  "tool install --upgrade graphifyy[leiden] @ git+https://github.com/pfBlockerNG/graphify@90ba0cf5f0470347f637077dbad6a82053308a89")
     printf '%s\n' "$*" >> "$UV_LOG"
     if [ "${UV_PROGRESS_FIXTURE:-0}" = 1 ]; then printf '%s\n' 'uv progress'; fi
     ;;
@@ -70,7 +70,7 @@ PATCH_GRAPHIFY
     When run sh "$script_abs" "$repo"
     The status should equal 0
     The contents of file "$uv_log" should equal \
-      'tool install --upgrade graphifyy[leiden] @ git+https://github.com/pfBlockerNG/graphify@c1baa4222d400ccf9f8c1e9a05818ff256b6a6a1'
+      'tool install --upgrade graphifyy[leiden] @ git+https://github.com/pfBlockerNG/graphify@90ba0cf5f0470347f637077dbad6a82053308a89'
     The contents of file "$graphify_log" should equal \
       "$(printf 'patch-graphify\t\n%s\thook install' "$repo")"
     The value "$(git_fixture -C "$repo" config --get merge.graphify.driver)" should include 'graphify merge-driver %O %A %B'
