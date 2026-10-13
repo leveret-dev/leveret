@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -33,14 +34,16 @@ function reply(options: { complete: boolean; side?: "base" | "head"; targetBindi
   } };
 }
 
-/** Writes a real-shaped audit trace: one Java reference call, then the given submitted phase payload. */
-function trace(dir: string, result: ReturnType<typeof reply>, submitted: unknown, side = result.result.side, submitTool = "leveret_submit_phase") {
+/** Writes a real-shaped audit trace: one Java reference call, then the given submitted phase payload and its outcome. */
+function trace(dir: string, result: ReturnType<typeof reply>, submitted: unknown, side = result.result.side, submitTool = "leveret_submit_phase", accepted = true) {
   const events = [
     { sequence: 1, category: "tools", event: "execution_start", tool_call_id: "call_java", payload: { tool: "leveret_java_references", args: { side } } },
     { sequence: 2, category: "tools", event: "execution_end", tool_call_id: "call_java", payload: { tool: "leveret_java_references",
       result: { content: [{ type: "text", text: "evidence_id: call_java" }, { type: "text", text: JSON.stringify(result) }] } } },
     { sequence: 3, category: "assistant", event: "message_end", payload: { thinking: `call_java ${caller} unresolved` } },
     { sequence: 4, category: "tools", event: "execution_start", tool_call_id: "call_submit", payload: { tool: submitTool, args: submitted } },
+    { sequence: 5, category: "tools", event: "execution_end", tool_call_id: "call_submit", payload: { tool: submitTool, is_error: !accepted,
+      result: { content: [{ type: "text", text: accepted ? "Phase result accepted." : "Validation failed" }] } } },
   ];
   writeFileSync(join(dir, "runner.ndjson"), events.map((event) => JSON.stringify(event)).join("\n"));
   return dir;
@@ -95,6 +98,29 @@ describe("Inspect Java evaluation", () => {
       expect((await verdict(reply({ complete: true, targetBindingKey: "Lexample/Pricing;.price(Ljava/lang/String;)I" }),
         finding(caller), false)).evidenceReturned).toBe(false);
       expect((await verdict(reply({ complete: true }), finding(`${caller} unresolved`), true)).evidenceReturned).toBe(false);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("counts only an accepted submission and refuses audit payloads that fail their checksum", async () => {
+    const home = mkdtempSync(join(tmpdir(), "leveret-java-submit-"));
+    const finding = { findings: [{ evidence_ids: ["call_java"], evidence_hint: `sole checked caller ${caller}:3` }] };
+    try {
+      // A validation-rejected submit call is not a submitted record.
+      expect(await traceConsumption(trace(home, reply({ complete: true }), finding, "head", "leveret_submit_phase", false), ["call_java"], false))
+        .toEqual({ evidenceReturned: true, subsequentUse: false, disclosedGap: true });
+      const dir = trace(home, reply({ complete: true }), finding);
+      const events = readFileSync(join(dir, "runner.ndjson"), "utf8").split("\n").map((line) => JSON.parse(line));
+      const body = events[1].payload;
+      const sha = createHash("sha256").update(JSON.stringify(body)).digest("hex");
+      mkdirSync(join(dir, "blobs/sha256"), { recursive: true });
+      events[1] = { ...events[1], payload: undefined, payload_ref: { sha256: sha, bytes: 1, media_type: "application/json", encoding: "json" } };
+      writeFileSync(join(dir, "runner.ndjson"), events.map((event) => JSON.stringify(event)).join("\n"));
+      writeFileSync(join(dir, "blobs/sha256", sha), JSON.stringify(body));
+      expect(await traceConsumption(dir, ["call_java"], false)).toEqual({ evidenceReturned: true, subsequentUse: true, disclosedGap: true });
+      writeFileSync(join(dir, "blobs/sha256", sha), JSON.stringify({ ...body, tampered: true }));
+      await expect(traceConsumption(dir, ["call_java"], false)).rejects.toThrow(/checksum/);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

@@ -16,6 +16,7 @@
     "bench:replay-scan": "tsx bench/replay-scan.mts",
     "bench:report": "tsx bench/report.mts",
     "bench:parity": "tsx bench/parity.mts",
+    "bench:build-evidence": "tsx bench/build-evidence.mts",
     "build": "tsc",
     "build:inspect": "./inspect/gradlew -p inspect build",
     "build:all": "npm run build && npm run build:inspect",

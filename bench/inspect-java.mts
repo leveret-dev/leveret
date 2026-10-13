@@ -1,18 +1,20 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { buildChangeManifest, type ChangeManifest } from "../src/change-evidence.js";
-import { InspectJavaError, loadInspectJavaConfig, openInspectJava, type InspectJavaBridge, type InspectJavaConfig } from "../src/inspect-java.js";
+import { InspectJavaError, openInspectJava, type InspectJavaBridge, type InspectJavaConfig } from "../src/inspect-java.js";
 import { referenceReplySchema, type ReferencePage } from "../src/inspect-java-contract.js";
 import { pathIsInside } from "../src/path.js";
-import { runStreaming } from "../src/exec.js";
 import { connectSerena, serenaBundleProblem } from "../src/runner/serena.js";
+import {
+  citingRecords, eventPayload, evaluationArguments, hashFile, pinnedConfig, readRunnerEvents, runPiReview, submittedPayloads,
+  templateSchema, toolReply, type OperatorTemplate,
+} from "./review-evidence.mjs";
 
 const corpusRevision = "620f4ff4b4b0934e6dc46465fe5c92fd7e1fb997";
 const corpusCandidates = [
@@ -23,12 +25,7 @@ const oracleHashes = {
   "oracle-compile.txt": "40d4238e3e537ef7e6f78086095fd93557624184998fd0fde8e95ab24a55d8df",
   "oracle-test.txt": "115961f299e56e2a5225653868471aba1c740fab409300c2b7d72a894d92a0fe",
 };
-const limitsSchema = z.object({ heapBytes: z.number().int().positive(), addressSpaceBytes: z.number().int().positive(), deadlineMs: z.number().int().positive(), maxOutputBytes: z.number().int().positive() }).strict();
-const templateSchema = z.object({
-  schema: z.literal(1), distribution: z.string().min(1), jdkHome: z.string().min(1), cache: z.string().min(1),
-  limits: limitsSchema, distributionFiles: z.record(z.string(), z.string()).optional(),
-  jdkFiles: z.record(z.string(), z.string()).optional(),
-}).passthrough();
+
 const checkedPath = "src/test/java/example/PricingTest.java";
 const targetPath = "src/main/java/example/Pricing.java";
 const target = { path: targetPath, position: { line: 3, column: 17 } };
@@ -37,28 +34,8 @@ const baseSource = "package example;\nfinal class Pricing {\n    static int pric
 const headSource = baseSource.replace("quantity * 10", "quantity * 12");
 const testSource = "package example;\nfinal class PricingTest {\n    int numeric() { return Pricing.price(3); }\n    int textual() { return Pricing.price(\"ABC\"); }\n}\n";
 
-interface Options { mode: "deterministic" | "review"; config: string; configSha256: string; output: string }
 interface Fixture { repo: string; base: string; head: string; manifest: ChangeManifest }
 interface FixtureEvaluation { cases: Record<string, unknown>; missingRevision: string }
-function options(args: string[]): Options {
-  const raw: Record<string, string> = {};
-  for (let i = 0; i < args.length; i += 2) {
-    const name = args[i];
-    if (!name?.startsWith("--") || !args[i + 1] || raw[name]) throw new Error("Expected distinct --mode, --config, --config-sha256, and --output values");
-    raw[name] = args[i + 1]!;
-  }
-  if (Object.keys(raw).sort().join(",") !== ["--config", "--config-sha256", "--mode", "--output"].join(",") ||
-    !["deterministic", "review"].includes(raw["--mode"] ?? "") || !/^[a-f0-9]{64}$/.test(raw["--config-sha256"] ?? "")) {
-    throw new Error("Invalid evaluation arguments");
-  }
-  return { mode: raw["--mode"] as Options["mode"], config: raw["--config"]!, configSha256: raw["--config-sha256"]!, output: raw["--output"]! };
-}
-
-async function hashFile(file: string): Promise<string> {
-  const hash = createHash("sha256");
-  for await (const chunk of createReadStream(file)) hash.update(chunk as Buffer);
-  return hash.digest("hex");
-}
 
 const gitEnv = {
   PATH: "/usr/bin:/bin", HOME: "/nonexistent", GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1",
@@ -91,26 +68,6 @@ async function fixture(out: string): Promise<Fixture> {
     throw new Error("Deterministic fixture changed more than price(int)");
   }
   return { repo, base, head, manifest };
-}
-
-async function pinnedConfig(template: z.infer<typeof templateSchema>, output: string, repo: string,
-  label: string, overrides: Record<string, unknown>): Promise<{ config: InspectJavaConfig; path: string; sha256: string }> {
-  const bin = ["bin/leveret-inspect", ...(await readdir(join(template.distribution, "lib"))).map((name) => `lib/${name}`)];
-  const distributionFiles = Object.fromEntries(await Promise.all(bin.map(async (name) => [name, await hashFile(join(template.distribution, name))])));
-  const jdkFiles = Object.fromEntries(await Promise.all(["bin/java", "release", "lib/modules", "lib/server/libjvm.so"]
-    .map(async (name) => [name, await hashFile(join(template.jdkHome, name))])));
-  if (template.distributionFiles && JSON.stringify(Object.entries(template.distributionFiles).sort()) !== JSON.stringify(Object.entries(distributionFiles).sort())) {
-    throw new InspectJavaError("configuration-mismatch", "Operator-pinned distribution changed");
-  }
-  if (template.jdkFiles && JSON.stringify(Object.entries(template.jdkFiles).sort()) !== JSON.stringify(Object.entries(jdkFiles).sort())) {
-    throw new InspectJavaError("configuration-mismatch", "Operator-pinned JDK changed");
-  }
-  const payload = JSON.stringify({ schema: 1, distribution: template.distribution, distributionFiles,
-    jdkHome: template.jdkHome, jdkFiles, cache: template.cache, limits: template.limits, ...overrides });
-  const path = join(output, `${label}-config.json`);
-  await writeFile(path, payload, { mode: 0o600 });
-  const sha256 = createHash("sha256").update(payload).digest("hex");
-  return { config: await loadInspectJavaConfig(repo, path, sha256), path, sha256 };
 }
 
 function checked(page: ReferencePage, expected: number): void {
@@ -342,7 +299,7 @@ async function pinnedCorpus(): Promise<{ repo: string; cache: string; cacheSha25
   throw new Error("Provisioned Commons Lang checkout and artifact cache are unavailable; cold provisioning is forbidden");
 }
 
-async function evaluateCorpus(repo: string, cache: string, output: string, template: z.infer<typeof templateSchema>) {
+async function evaluateCorpus(repo: string, cache: string, output: string, template: OperatorTemplate) {
   const { selected, enumerated } = await selectors(repo);
   await writeFile(join(output, "frozen-selectors.json"), JSON.stringify({ revision: corpusRevision, selected, enumerated }, null, 2));
   const javaLevel = /<maven\.compiler\.source>([^<]+)<\/maven\.compiler\.source>/.exec(await readFile(join(repo, "pom.xml"), "utf8"))?.[1];
@@ -448,58 +405,29 @@ async function evaluateCorpus(repo: string, cache: string, output: string, templ
     serena, selectors: rows };
 }
 
-interface RunnerEvent {
-  sequence: number;
-  category: string;
-  event: string;
-  tool_call_id?: string;
-  payload?: unknown;
-  payload_ref?: { sha256: string };
-}
-
 async function review(fixed: Fixture, config: { path: string; sha256: string }, out: string,
   variant: "fixed" | "missing", revision: string, base: string, incomplete: boolean) {
   git(fixed.repo, ["reset", "--hard", revision]);
   const trace = join(out, `private-review-trace-${variant}`);
-  await mkdir(trace, { recursive: true, mode: 0o700 });
-  const env = {
-    ...process.env,
-    LEVERET_REPO: fixed.repo, LEVERET_BASE: base,
-    LEVERET_INSPECT_JAVA_CONFIG: config.path, LEVERET_INSPECT_JAVA_CONFIG_SHA256: config.sha256,
-    LEVERET_TRACE_DIR: trace, LEVERET_RUN_ID: randomUUID(), LEVERET_TRACE_ENABLED: "1",
-    LEVERET_TRACE_FAILURE: "fail", LEVERET_DATA: join(out, "review-data"),
-  };
-  const result = await runStreaming(process.execPath, [join(resolve(), "dist/runner/pi.js")], resolve(),
-    { env, timeoutMs: 30 * 60_000, maxBuffer: 32 * 1024 * 1024 });
-  if (result.code !== 0 || result.timedOut || result.truncated) throw new Error(`Real ${variant} review failed: ${result.stderr.slice(0, 1000)}`);
-  const value = JSON.parse(result.stdout) as { run_configuration?: {
-    tool_calls?: Array<{ toolCallId: string; toolName: string }>;
-    model?: string; thinking?: string; identities?: unknown;
-  } };
-  const ids = value.run_configuration?.tool_calls?.filter((call) => call.toolName === "leveret_java_references")
+  const { output } = await runPiReview({ label: variant, repo: fixed.repo, base, config, trace, data: join(out, "review-data") });
+  const run = output.run_configuration;
+  const ids = run?.tool_calls?.filter((call) => call.toolName === "leveret_java_references")
     .map((call) => call.toolCallId) ?? [];
   const verdict = await traceConsumption(trace, ids, incomplete);
   return {
     status: verdict.evidenceReturned && verdict.subsequentUse && verdict.disclosedGap ? "verified" : "unverified",
     tool_call_ids: ids, expected_evidence_returned: verdict.evidenceReturned, subsequent_evidence_use: verdict.subsequentUse,
     incomplete_coverage_disclosed: verdict.disclosedGap,
-    model: value.run_configuration?.model, thinking: value.run_configuration?.thinking,
-    identities: value.run_configuration?.identities, audit_directory: trace,
+    model: run?.model, thinking: run?.thinking,
+    identities: run?.identities, audit_directory: trace,
   };
 }
 
+const toolArguments = z.looseObject({ args: z.looseObject({ side: z.string().optional() }).optional() });
+
 /** Checks a real review's audit trace: the expected Java evidence was returned, then cited in later reasoning. */
 export async function traceConsumption(trace: string, ids: string[], incomplete: boolean) {
-  const events = (await readFile(join(trace, "runner.ndjson"), "utf8")).split("\n").filter(Boolean)
-    .map((line) => JSON.parse(line) as RunnerEvent);
-  async function payload(event: RunnerEvent): Promise<Record<string, unknown>> {
-    if (event.payload_ref) {
-      const bytes = await readFile(join(trace, "blobs/sha256", event.payload_ref.sha256));
-      if (createHash("sha256").update(bytes).digest("hex") !== event.payload_ref.sha256) throw new Error("Audit tool evidence checksum mismatch");
-      return JSON.parse(bytes.toString("utf8")) as Record<string, unknown>;
-    }
-    return event.payload && typeof event.payload === "object" ? event.payload as Record<string, unknown> : {};
-  }
+  const events = await readRunnerEvents(trace);
   let evidenceReturned = false;
   let subsequentUse = false;
   let disclosedGap = !incomplete;
@@ -507,11 +435,8 @@ export async function traceConsumption(trace: string, ids: string[], incomplete:
     const started = events.find((event) => event.category === "tools" && event.event === "execution_start" && event.tool_call_id === id);
     const ended = events.find((event) => event.category === "tools" && event.event === "execution_end" && event.tool_call_id === id);
     if (!started || !ended || ended.sequence <= started.sequence) continue;
-    const args = (await payload(started)).args as { side?: string } | undefined;
-    if (args?.side !== "head") continue;
-    const toolResult = (await payload(ended)).result as { content?: Array<{ type?: string; text?: string }> } | undefined;
-    const text = toolResult?.content?.find((part) => part.type === "text" && part.text?.startsWith("{"))?.text;
-    const reply = referenceReplySchema.safeParse(JSON.parse(text ?? "null"));
+    if (toolArguments.safeParse(await eventPayload(trace, started)).data?.args?.side !== "head") continue;
+    const reply = referenceReplySchema.safeParse(toolReply(await eventPayload(trace, ended)));
     if (!reply.success || !reply.data.ok) continue;
     const { result } = reply.data;
     // Select by what the tool resolved, not by the exact column the model chose inside the name token.
@@ -522,17 +447,11 @@ export async function traceConsumption(trace: string, ids: string[], incomplete:
       item.reference.location.path === checkedPath && item.reference.location.buildArtifact === null &&
       item.reference.diffStatus === "outside-diff" && item.reference.basis === "checked")) continue;
     evidenceReturned = true;
-    // Only submitted phase output counts as use; the citing record itself must name the caller file and, for an
+    // Only an accepted phase submission counts as use; the citing record itself must name the caller file and, for an
     // incomplete analysis, disclose the gap. Thinking text and unrelated neighbouring records do not qualify.
-    for (const event of events) {
+    for await (const { args } of submittedPayloads(trace, events, ended.sequence)) {
       if (subsequentUse && disclosedGap) break;
-      if (event.sequence <= ended.sequence) continue;
-      const submitted = event.category === "result" && event.event === "phase_submitted" ||
-        event.category === "tools" && event.event === "execution_start";
-      if (!submitted) continue;
-      const data = await payload(event);
-      if (event.category === "tools" && data.tool !== "leveret_submit_phase") continue;
-      for (const record of citingRecords(data, id)) {
+      for (const record of citingRecords(args, id)) {
         if (!record.includes(checkedPath)) continue;
         subsequentUse = true;
         if (incomplete && /unresolved|incomplete|complete=false|missing dependency/i.test(record)) disclosedGap = true;
@@ -542,26 +461,8 @@ export async function traceConsumption(trace: string, ids: string[], incomplete:
   return { evidenceReturned, subsequentUse, disclosedGap };
 }
 
-/** Own text of every object in `value` that directly cites `id` in a string field or string-array field. */
-function citingRecords(value: unknown, id: string, found: string[] = []): string[] {
-  if (Array.isArray(value)) {
-    for (const item of value) citingRecords(item, id, found);
-  } else if (value && typeof value === "object") {
-    const own: string[] = [];
-    for (const field of Object.values(value)) {
-      if (typeof field === "string") own.push(field);
-      else if (Array.isArray(field) && field.every((item) => typeof item === "string")) own.push(...field);
-      else citingRecords(field, id, found);
-    }
-    if (own.some((text) => text.includes(id))) found.push(own.join("\n"));
-  } else if (typeof value === "string" && value.startsWith("{")) {
-    try { citingRecords(JSON.parse(value), id, found); } catch { /* plain text, not a record */ }
-  }
-  return found;
-}
-
 async function main(): Promise<void> {
-  const args = options(process.argv.slice(2));
+  const args = evaluationArguments(process.argv.slice(2));
   if (args.mode === "review" && process.env.LEVERET_PAID_MODEL_APPROVED !== "1") {
     console.log(JSON.stringify({ ok: false, error: { code: "approval-required", message: "Separate model-execution approval is required" } }));
     process.exitCode = 2;
