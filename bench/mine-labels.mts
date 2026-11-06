@@ -31,6 +31,12 @@ export function isBot(user: { login: string; type: string }): boolean {
   return user.type === "Bot" || user.login.endsWith("[bot]") || KNOWN_BOTS.has(user.login);
 }
 
+// Accounts that post as the same reviewer under different logins.
+const BOT_ALIASES: Record<string, string> = { Copilot: "copilot-pull-request-reviewer[bot]" };
+export function botName(login: string): string {
+  return BOT_ALIASES[login] ?? login;
+}
+
 type Kind = LabelRow["kind"];
 // One row per known non-finding format. Review/conversation bodies that only summarize inline
 // comments, report limits, or answer chat are notices; anything else a bot says is a finding.
@@ -41,28 +47,41 @@ const NOTICES: Array<{ bot: string; kinds: Kind[]; pattern: RegExp }> = [
   // shortcut: Kilo summaries are treated as notices because their findings repeat inline; parse them if a summary-only finding shows up.
   { bot: "kilo-code-bot", kinds: ["conversation", "review"], pattern: /<!-- kilo-review -->/ },
   { bot: "roboomp", kinds: ["review"], pattern: /[\s\S]/ },
+  // Copilot review bodies are overviews, verdicts, or quota notices; its findings are inline.
+  { bot: "copilot-pull-request-reviewer", kinds: ["review", "conversation"], pattern: /[\s\S]/ },
   { bot: "openwrt-ai", kinds: ["conversation", "review"], pattern: /no new issues found/i },
 ];
 
 export function isNotice(bot: string, kind: Kind, body: string): boolean {
   if (body.trim() === "") return true;
-  const login = bot.replace(/\[bot\]$/, "");
+  const login = botName(bot).replace(/\[bot\]$/, "");
   return NOTICES.some((notice) => notice.bot === login && notice.kinds.includes(kind) && notice.pattern.test(body));
 }
 
-export interface Hunk { oldStart: number; oldLines: number }
+/** Old-side line ranges a unified diff actually changes; an insertion counts as touching the line before it. */
+export interface Hunk { start: number; end: number }
 export function parseHunks(patch: string): Hunk[] {
-  return [...patch.matchAll(/^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@/gm)].map((match) => ({
-    oldStart: Number(match[1]),
-    oldLines: match[2] === undefined ? 1 : Number(match[2]),
-  }));
+  const changed: Hunk[] = [];
+  let cursor = 0;
+  for (const line of patch.split("\n")) {
+    const header = line.match(/^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@/);
+    if (header) {
+      // With a zero count, the header names the line before the hunk.
+      cursor = Number(header[1]) + (header[2] === "0" ? 1 : 0);
+    } else if (line.startsWith("-")) {
+      changed.push({ start: cursor, end: cursor });
+      cursor++;
+    } else if (line.startsWith("+")) {
+      changed.push({ start: Math.max(cursor - 1, 1), end: Math.max(cursor - 1, 1) });
+    } else if (line.startsWith(" ")) {
+      cursor++;
+    }
+  }
+  return changed;
 }
 
 export function touchesWindow(hunks: Hunk[], start: number, end: number): boolean {
-  const low = start - LINE_WINDOW;
-  const high = end + LINE_WINDOW;
-  // A pure insertion (oldLines 0) sits after oldStart; treat it as touching that line.
-  return hunks.some((hunk) => hunk.oldStart <= high && hunk.oldStart + Math.max(hunk.oldLines, 1) - 1 >= low);
+  return hunks.some((hunk) => hunk.start <= end + LINE_WINDOW && hunk.end >= start - LINE_WINDOW);
 }
 
 export interface Signals { fixed: boolean | null; resolved: boolean; replied: boolean; notice: boolean }

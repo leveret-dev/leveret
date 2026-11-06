@@ -30,6 +30,18 @@ describe("stratifiedSample", () => {
     expect((await stratifiedSample(rows, 3, 4)).map((c) => `${c.repository}#${c.pull_request}`)).toEqual(sample.map((c) => `${c.repository}#${c.pull_request}`));
   });
 
+  it("splits one repository into strata by bot and category, and samples only inline findings", async () => {
+    const mixed = [
+      ...[1, 2, 3].map((pr) => accepted("o/m", pr)),
+      accepted("o/m", 4, { bot: "chatgpt-codex-connector[bot]" }),
+      accepted("o/m", 5, { category: "security" }),
+      accepted("o/m", 6, { kind: "review", path: null, line: null }),
+    ];
+    const sample = await stratifiedSample(mixed, 3, 3);
+    expect(sample.map((c) => c.stratum).sort()).toEqual(["o/m|chatgpt-codex-connector[bot]|bug", "o/m|coderabbitai[bot]|bug", "o/m|coderabbitai[bot]|security"]);
+    expect((await stratifiedSample(mixed, 3, 10)).some((c) => c.pull_request === 6)).toBe(false);
+  });
+
   it("replaces an unusable PR from its own stratum", async () => {
     const rejectedB: Candidate[] = [];
     const twoB = [...rows, accepted("o/b", 2)];

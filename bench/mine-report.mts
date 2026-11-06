@@ -1,8 +1,12 @@
 // Gap report rendering for the bot review miner. Counts and URLs only; never comment text.
-import { CATEGORIES, LINE_WINDOW, type LabelRow } from "./mine-labels.mjs";
+import { z } from "zod";
+import { CATEGORIES, LINE_WINDOW, labelRowSchema, type LabelRow } from "./mine-labels.mjs";
 
 type Disposition = LabelRow["disposition"];
-export interface AuditEntry { url: string; auto: Disposition; label_source: LabelRow["label_source"]; hand: Disposition | null }
+const disposition = labelRowSchema.shape.disposition;
+// The owner edits `hand` by hand, so a typo must fail loudly rather than count as disagreement.
+export const auditEntrySchema = z.object({ url: z.url(), auto: disposition, label_source: labelRowSchema.shape.label_source, hand: disposition.nullable() }).strict();
+export type AuditEntry = z.infer<typeof auditEntrySchema>;
 export interface Comparison {
   repository: string;
   pull_request: number;
@@ -96,8 +100,8 @@ export function renderReport(allRows: LabelRow[], audit: AuditEntry[], compariso
     out.push(`| ${category} | ${items.length} | ${accepted} | ${ratio(accepted, accepted + count(items, "rejected"))} | ${byBot} |`);
   }
 
-  out.push("", "## 3. Overlap on PRs reviewed by two or more bots", "", `An accepted finding is unique when no other bot raised a finding on the same PR and path within ±${LINE_WINDOW} lines. This is location-based, not semantic.`, "", "| bot | accepted | unique accepted |", "| --- | ---: | ---: |");
-  const shared = new Map(groupBy(findings, prKey).filter(([, items]) => new Set(items.map((row) => row.bot)).size >= 2));
+  out.push("", "## 3. Overlap on PRs reviewed by two or more bots", "", `Inline findings only. An accepted finding is unique when no other bot raised an inline finding on the same PR and path within ±${LINE_WINDOW} lines. This is location-based, not semantic.`, "", "| bot | accepted | unique accepted |", "| --- | ---: | ---: |");
+  const shared = new Map(groupBy(findings.filter((row) => row.kind === "inline"), prKey).filter(([, items]) => new Set(items.map((row) => row.bot)).size >= 2));
   const overlap = new Map<string, { accepted: number; unique: number }>();
   for (const items of shared.values()) {
     for (const row of items.filter((item) => item.disposition === "accepted")) {
@@ -135,6 +139,7 @@ export function renderReport(allRows: LabelRow[], audit: AuditEntry[], compariso
     const agree = audited.filter((entry) => entry.hand === entry.auto).length;
     out.push(`| ${source} | ${audited.length} | ${agree} | ${ratio(agree, audited.length)} |`);
   }
-  out.push("", `Findings with an unknown fix signal: ${findings.filter((row) => row.signals.includes("unknown")).length}. Unclear findings: ${count(findings, "unclear")}.`, "");
+  // Review and conversation findings never have a fix signal by design, so only inline unknowns are data loss.
+  out.push("", `Inline findings with an unknown fix signal: ${findings.filter((row) => row.kind === "inline" && row.signals.includes("unknown")).length}. Unclear findings: ${count(findings, "unclear")}.`, "");
   return out.join("\n");
 }

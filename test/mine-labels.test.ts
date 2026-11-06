@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  botName,
   isBot,
   isNotice,
   labelRowSchema,
@@ -38,6 +39,13 @@ describe("line window", () => {
     expect(touchesWindow(parseHunks("@@ -10,0 +11,2 @@\n+a\n+b"), 13, 13)).toBe(true);
     expect(touchesWindow(parseHunks("@@ -10 +10 @@\n-a\n+b"), 14, 14)).toBe(false);
   });
+
+  it("counts only changed lines, not hunk context", () => {
+    const hunks = parseHunks("@@ -10,7 +10,7 @@\n a\n b\n c\n-d\n+D\n e\n f\n g");
+    expect(touchesWindow(hunks, 16, 16)).toBe(true);
+    expect(touchesWindow(hunks, 17, 17)).toBe(false);
+    expect(touchesWindow(hunks, 9, 9)).toBe(false);
+  });
 });
 
 describe("bot detection", () => {
@@ -46,6 +54,14 @@ describe("bot detection", () => {
     expect(isBot({ login: "new-reviewer[bot]", type: "User" })).toBe(true);
     for (const login of ["openwrt-ai", "roboomp", "kilo-code-bot"]) expect(isBot({ login, type: "User" })).toBe(true);
     expect(isBot({ login: "andrebrait", type: "User" })).toBe(false);
+  });
+});
+
+describe("bot names", () => {
+  it("reports Copilot's inline and review accounts as one bot", () => {
+    expect(botName("Copilot")).toBe("copilot-pull-request-reviewer[bot]");
+    expect(botName("copilot-pull-request-reviewer[bot]")).toBe("copilot-pull-request-reviewer[bot]");
+    expect(botName("coderabbitai[bot]")).toBe("coderabbitai[bot]");
   });
 });
 
@@ -70,6 +86,9 @@ describe("notice detection", () => {
     ["kilo-code-bot[bot]", "inline", "**CRITICAL:** unchecked index", false],
     ["roboomp", "inline", "**should-fix:** missing attribution", false],
     ["openwrt-ai", "inline", "The device is recorded even when qdisc add failed", false],
+    ["copilot-pull-request-reviewer[bot]", "review", "<!-- ccr-overview-v2 -->\n## Copilot review overview", true],
+    ["copilot-pull-request-reviewer[bot]", "review", "### 🟢 Approval recommended\nNo unresolved review issues remain.", true],
+    ["Copilot", "inline", "This guard skips the null path.", false],
   ];
   it.each(cases)("%s %s #%#", (bot, kind, body, expected) => {
     expect(isNotice(bot, kind, body)).toBe(expected);
@@ -108,9 +127,11 @@ describe("duplicates", () => {
     expect(up!.duplicate_of).toBeNull();
     expect(fork!.duplicate_of).toBe(up!.url);
   });
-  it("leaves findings on different lines alone", () => {
-    const [a, b] = markDuplicates([row("me/repo", 7), { ...row("org/repo", 1), line: 43 }], new Set(["me/repo"]));
-    expect(a!.duplicate_of).toBeNull();
-    expect(b!.duplicate_of).toBeNull();
+  it("leaves findings on different lines or reviewed commits alone", () => {
+    for (const other of [{ line: 43 }, { head_sha: "e".repeat(40) }]) {
+      const [a, b] = markDuplicates([row("me/repo", 7), { ...row("org/repo", 1), ...other }], new Set(["me/repo"]));
+      expect(a!.duplicate_of).toBeNull();
+      expect(b!.duplicate_of).toBeNull();
+    }
   });
 });
