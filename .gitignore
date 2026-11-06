@@ -12,3 +12,6 @@ graphify-out/*
 !graphify-out/memory/
 
 # CodeGraph's index is per-machine; .codegraph/ carries its own ignore file.
+
+# Bot review miner cache: raw comment text and diffs never leave this directory.
+.cache/
