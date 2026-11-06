@@ -395,7 +395,7 @@ export const LABELS_PATH = "bench/review-labels.v1.jsonl";
 
 const MECHANICAL_REASONS = {
   accepted: `Mechanical rule: a later commit changed lines within ±${LINE_WINDOW} of the finding, the thread is resolved, and no human replied.`,
-  rejected: `Mechanical rule: the thread is resolved, no later commit changed lines within ±${LINE_WINDOW} of the finding, and the PR merged.`,
+  rejected: `Mechanical rule: the thread is resolved, no later commit changed lines within ±${LINE_WINDOW} of the finding, no human replied, and the PR merged.`,
 } as const;
 
 export async function runLabel(opts: { complete: Complete; model: string; cacheRoot?: string; outPath?: string; concurrency?: number }): Promise<LabelRow[]> {

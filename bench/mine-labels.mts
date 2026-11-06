@@ -101,9 +101,10 @@ export function signalList(signals: Signals): LabelRow["signals"] {
   return list.sort();
 }
 
-/** The spec's two mechanical rules; null sends the finding to the judge. */
+/** The spec's two mechanical rules, both only without a human reply; null sends the finding to the judge. */
 export function mechanicalDisposition(signals: Signals, merged: boolean): "accepted" | "rejected" | null {
-  if (signals.fixed === true && signals.resolved && !signals.replied) return "accepted";
+  if (signals.replied) return null;
+  if (signals.fixed === true && signals.resolved) return "accepted";
   if (signals.fixed === false && signals.resolved && merged) return "rejected";
   return null;
 }

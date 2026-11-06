@@ -108,6 +108,8 @@ describe("mechanical disposition", () => {
     expect(mechanicalDisposition({ ...base, fixed: true, resolved: true }, true)).toBe("accepted");
     expect(mechanicalDisposition({ ...base, fixed: true, resolved: true, replied: true }, true)).toBeNull();
     expect(mechanicalDisposition({ ...base, resolved: true }, true)).toBe("rejected");
+    // A reply ("fixed in another file", "won't fix because…") decides it, not the absence of a nearby change.
+    expect(mechanicalDisposition({ ...base, resolved: true, replied: true }, true)).toBeNull();
     expect(mechanicalDisposition({ ...base, resolved: true }, false)).toBeNull();
     expect(mechanicalDisposition({ ...base, fixed: true }, true)).toBeNull();
   });
