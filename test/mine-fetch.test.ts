@@ -13,7 +13,7 @@ function httpError(status: number) {
 }
 
 /** Serves GitHub-shaped responses by route; records every call. */
-function fakeGh(options: { failPr?: number; compare404?: boolean; searchTotal?: (q: string) => number } = {}) {
+function fakeGh(options: { failPr?: number; compare404?: boolean; diverged?: boolean; searchTotal?: (q: string) => number } = {}) {
   const calls: string[] = [];
   const gh: Gh = {
     async request(route, params = {}) {
@@ -26,7 +26,18 @@ function fakeGh(options: { failPr?: number; compare404?: boolean; searchTotal?: 
       if (route === "GET /repos/{owner}/{repo}") return { data: { fork: p.owner === "me", language: "TypeScript" } };
       if (route === "GET /repos/{owner}/{repo}/compare/{basehead}") {
         if (options.compare404) throw httpError(404);
+        if (options.diverged) return { data: { status: "diverged", files: [{ filename: "unrelated.ts", patch: "@@ -1 +1 @@\n-a\n+b" }] } };
         return { data: { status: "ahead", files: [{ filename: "src/x.ts", patch: "@@ -10,1 +10,1 @@\n-a\n+b" }] } };
+      }
+      if (route === "GET /repos/{owner}/{repo}/contents/{path}") {
+        // src/x.ts line 11 changes between the reviewed commit and the head; src/y.ts is deleted at the head.
+        const lines = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`);
+        if (p.path === "src/y.ts") {
+          if (p.ref === SHA("f")) throw httpError(404);
+          return { data: lines.join("\n") + "\n" };
+        }
+        if (p.ref === SHA("f")) lines[10] = "changed";
+        return { data: lines.join("\n") + "\n" };
       }
       if (route === "GET /search/issues") {
         const total = options.searchTotal?.(String(p.q)) ?? 1;
@@ -79,6 +90,17 @@ describe("fetchPr", () => {
     const { gh } = fakeGh({ compare404: true });
     const pr = await fetchPr(gh, "o/r", 1);
     expect(pr.compares[SHA("c")]).toEqual({ status: "unavailable" });
+  });
+
+  it("diffs the commented files directly when history was rewritten after the review", async () => {
+    const { gh } = fakeGh({ diverged: true });
+    const pr = await fetchPr(gh, "o/r", 1);
+    const compare = pr.compares[SHA("c")];
+    expect(compare?.status).toBe("ok");
+    const files = compare?.status === "ok" ? compare.files : [];
+    expect(files.map((f) => f.filename).sort()).toEqual(["src/x.ts", "src/y.ts"]);
+    expect(files.find((f) => f.filename === "src/x.ts")!.patch).toMatch(/^@@ -11 \+11 @@/m);
+    expect(files.find((f) => f.filename === "src/y.ts")!.patch).toMatch(/^@@ -1,20 \+0,0 @@/m);
   });
 });
 

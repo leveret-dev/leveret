@@ -3,7 +3,7 @@
 // Raw comment text stays in the gitignored cache; stdout prints progress counts only.
 import { createHash } from "node:crypto";
 import { execFile, execFileSync } from "node:child_process";
-import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -131,21 +131,62 @@ export async function fetchPr(gh: Gh, repository: string, number: number, repos 
     if (!page.pageInfo.hasNextPage) break;
     after = page.pageInfo.endCursor;
   }
-  const reviewed = new Set(reviewComments.filter((c) => c.in_reply_to_id === null && isBot(c.user)).map((c) => c.original_commit_id));
-  for (const commit of reviewed) {
+  const roots = reviewComments.filter((c) => c.in_reply_to_id === null && isBot(c.user));
+  for (const commit of new Set(roots.map((c) => c.original_commit_id))) {
     try {
       const { data } = await gh.request("GET /repos/{owner}/{repo}/compare/{basehead}", { owner, repo, basehead: `${commit}...${cached.head_sha}` });
-      // Only a straight line from the reviewed commit to the final head says which reviewed lines changed.
-      cached.compares[commit] = data.status === "ahead" || data.status === "identical"
-        ? { status: "ok", files: (data.files ?? []).map((f: any) => ({ filename: f.filename, ...(f.previous_filename ? { previous_filename: f.previous_filename } : {}), ...(f.patch ? { patch: f.patch } : {}) })) }
-        : { status: "unavailable" };
+      if (data.status === "ahead" || data.status === "identical") {
+        cached.compares[commit] = { status: "ok", files: (data.files ?? []).map((f: any) => ({ filename: f.filename, ...(f.previous_filename ? { previous_filename: f.previous_filename } : {}), ...(f.patch ? { patch: f.patch } : {}) })) };
+      } else {
+        // Rebased after the review: the three-dot diff would include the whole PR, so diff each commented file directly.
+        const paths = [...new Set(roots.filter((c) => c.original_commit_id === commit).map((c) => c.path))];
+        const files = [];
+        for (const path of paths) {
+          const before = await fileAt(gh, owner, repo, path, commit);
+          // The bot commented on this file, so it existed at the reviewed commit unless that commit is gone.
+          if (before === null) throw Object.assign(new Error(`reviewed file unavailable: ${path}@${commit}`), { status: 404 });
+          files.push({ filename: path, patch: await diffText(before, (await fileAt(gh, owner, repo, path, cached.head_sha)) ?? "") });
+        }
+        cached.compares[commit] = { status: "ok", files: files.filter((f) => f.patch !== "") };
+      }
     } catch (error) {
-      const status = error && typeof error === "object" && "status" in error ? error.status : undefined;
-      if (status !== 404 && status !== 422) throw error;
+      if (!isHttpStatus(error, 404, 422)) throw error;
       cached.compares[commit] = { status: "unavailable" };
     }
   }
   return cached;
+}
+
+const isHttpStatus = (error: unknown, ...statuses: number[]) => Boolean(error && typeof error === "object" && "status" in error && typeof error.status === "number" && statuses.includes(error.status));
+
+/** File text at a commit, or null when the path does not exist there. */
+async function fileAt(gh: Gh, owner: string, repo: string, path: string, ref: string): Promise<string | null> {
+  try {
+    const { data } = await gh.request("GET /repos/{owner}/{repo}/contents/{path}", { owner, repo, path, ref, mediaType: { format: "raw" } });
+    return typeof data === "string" ? data : Buffer.from(data as ArrayBuffer).toString("utf8");
+  } catch (error) {
+    if (isHttpStatus(error, 404)) return null;
+    throw error;
+  }
+}
+
+/** Unified diff hunks (old-side line numbers) between two texts, via `git diff --no-index`. */
+async function diffText(before: string, after: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "mine-diff-"));
+  try {
+    await writeFile(join(dir, "a"), before);
+    await writeFile(join(dir, "b"), after);
+    try {
+      await exec("git", ["diff", "--no-index", "--no-color", "-U0", "a", "b"], { cwd: dir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+      return "";
+    } catch (error) {
+      // Exit code 1 means the files differ; anything else is a real failure.
+      if (!(error && typeof error === "object" && "code" in error && error.code === 1 && "stdout" in error)) throw error;
+      return String(error.stdout).split("\n").filter((line) => !/^(diff |index |--- |\+\+\+ |new file|deleted file)/.test(line)).join("\n");
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }
 
 export const prFile = (cacheRoot: string, repository: string, number: number) => join(cacheRoot, "prs", `${repository.replace("/", "__")}__${number}.json`);

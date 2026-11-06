@@ -548,3 +548,12 @@ including the warm-cache median bound; they are acceptance evidence, not a licen
 to trade review quality for speed. Historical trial results stay as recorded. New
 optimization work is secondary to the quality priorities under "Roadmap" unless a
 gate or measured reliability failure names it as the blocker.
+
+**Bot review labels (2026-11-06).** `npm run bench:mine -- <fetch|label|audit|compare|report>`
+mines every bot finding on the owner's pull requests across repositories and bots
+(spec: `docs/superpowers/specs/2026-11-06-bot-gap-analysis-design.md`). It labels each
+finding accepted, rejected, unclear, or notice from mechanical signals plus a
+Flash-tier judge, then writes `bench/review-labels.v1.jsonl` and a dated gap report in
+`docs/reports/`. The committed files hold URLs, labels, SHAs, paths, and line numbers
+only; comment text, replies, and diffs stay in the gitignored `.cache/mine/`. The
+labels are stage-1 evidence for the multi-repository corpus v2, and are not a gate.
