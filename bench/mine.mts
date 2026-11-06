@@ -543,7 +543,8 @@ async function prepareCheckout(cacheRoot: string, pr: CachedPr, head: string): P
     // Clone beside the target and rename, so an interrupted clone never looks like a usable mirror.
     const partial = `${repo}.${process.pid}.partial`;
     await rm(partial, { recursive: true, force: true });
-    await exec("gh", ["repo", "clone", pr.repository, partial, "--", "--filter=blob:none", "--no-checkout", "--quiet"]);
+    // A full clone: the replay runs git with a sanitized environment that cannot fetch missing blobs later.
+    await exec("gh", ["repo", "clone", pr.repository, partial, "--", "--no-checkout", "--quiet"]);
     await rename(partial, repo);
   }
   await git(repo, "fetch", "--quiet", "origin", `pull/${pr.number}/head`);
@@ -605,7 +606,8 @@ export async function runCompare(opts: { complete: Complete; model: string; runn
       const matched = await matchFindings(c.targets.map((url) => findings.get(url)!), leveret, confirm);
       comparison = { repository: c.repository, pull_request: c.pull_request, replay_head: c.replay_head, targets: c.targets, matched, status: "complete" };
     } else {
-      comparison = { repository: c.repository, pull_request: c.pull_request, replay_head: c.replay_head, targets: c.targets, matched: [], status: "invalid", reason: outcome.reason.code };
+      // The detail stays in the gitignored cache; the report prints only invalid counts.
+      comparison = { repository: c.repository, pull_request: c.pull_request, replay_head: c.replay_head, targets: c.targets, matched: [], status: "invalid", reason: `${outcome.reason.code}: ${outcome.reason.detail.slice(0, 500)}` };
     }
     await writeAtomic(path, JSON.stringify(comparison));
     comparisons.push(comparison);
