@@ -18,13 +18,19 @@ export const labelRowSchema = z.object({
   line: z.number().int().positive().nullable(),
   head_sha: hex(40).nullable(),
   category: z.enum(CATEGORIES).nullable(),
-  disposition: z.enum(["accepted", "rejected", "unclear", "notice"]),
+  // notice: a message from a review that is not a finding; no-review: the bot hit a limit or failed, so it reviewed nothing.
+  disposition: z.enum(["accepted", "rejected", "unclear", "notice", "no-review"]),
   signals: z.array(z.enum(SIGNALS)),
   label_source: z.enum(["mechanical", "judge"]),
   judge: z.object({ model: z.string().min(1), prompt_sha256: hex(64) }).strict().nullable(),
   duplicate_of: z.url().nullable(),
-}).strict().refine((row) => (row.category === null) === (row.disposition === "notice"), "category is null exactly on notice rows");
+}).strict().refine((row) => (row.category === null) === (row.disposition === "notice" || row.disposition === "no-review"), "category is null exactly on notice and no-review rows");
 export type LabelRow = z.infer<typeof labelRowSchema>;
+
+/** Limit and failure notices: the bot posted, but did not review the revision. */
+export function isNoReview(body: string): boolean {
+  return /usage limits have been reached|reached their quota limit|unable to review|wasn't able to review|rate limited|Action not completed|did not finish/i.test(body);
+}
 
 const KNOWN_BOTS = new Set(["openwrt-ai", "roboomp", "kilo-code-bot"]);
 export function isBot(user: { login: string; type: string }): boolean {

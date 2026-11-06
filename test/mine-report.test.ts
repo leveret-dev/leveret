@@ -92,9 +92,14 @@ describe("renderReport", () => {
     row(5, { repository: "me/r", url: "https://github.com/me/r/pull/9#discussion_r5", duplicate_of: "https://github.com/o/r/pull/1#discussion_r1" }),
     row(6, { kind: "conversation", path: null, line: null, disposition: "notice", category: null, judge: null, signals: ["notice", "unknown"] }),
     row(7, { line: 30, disposition: "unclear", label_source: "judge", signals: ["unknown"] }),
-    row(8, { bot: "chatgpt-codex-connector[bot]", kind: "conversation", path: null, line: null, signals: ["unknown"], url: "https://github.com/o/r/pull/1#issuecomment-8" }),
+    row(8, { bot: "chatgpt-codex-connector[bot]", kind: "conversation", path: null, line: null, head_sha: null, signals: ["unknown"], url: "https://github.com/o/r/pull/1#issuecomment-8" }),
     // Four lines from Codex's line 90: outside the window, so Codex's finding stays unique.
     row(9, { bot: "kilo-code-bot[bot]", line: 94, disposition: "rejected", label_source: "judge" }),
+    // Codex alone on a later revision: counts per PR, but not as a shared revision.
+    row(10, { bot: "chatgpt-codex-connector[bot]", head_sha: "d".repeat(40), line: 200 }),
+    // Copilot: a clean review of revision c (reviewed, zero findings) and a quota failure on revision d (not a review).
+    row(11, { bot: "copilot-pull-request-reviewer[bot]", kind: "review", path: null, line: null, disposition: "notice", category: null, judge: null, signals: ["notice", "unknown"] }),
+    row(12, { bot: "copilot-pull-request-reviewer[bot]", kind: "review", path: null, line: null, head_sha: "d".repeat(40), disposition: "no-review", category: null, judge: null, signals: ["notice", "unknown"] }),
   ];
   const comparisons: Comparison[] = [
     { repository: "o/r", pull_request: 1, replay_head: SHA, targets: [rows[0]!.url, rows[3]!.url], matched: [rows[0]!.url], status: "complete" },
@@ -107,15 +112,21 @@ describe("renderReport", () => {
   ];
   const report = renderReport(rows, audit, comparisons, "2026-11-06", { "o/r": "TypeScript" });
 
-  it("reports per-bot counts and noise without counting duplicates", () => {
-    expect(report).toContain("| coderabbitai[bot] | 3 | 1 | 1 | 1 | 0.50 | 3 | 1 |");
-    expect(report).toContain("| chatgpt-codex-connector[bot] | 3 | 3 | 0 | 0 | 0.00 | 3 | 0 |");
+  it("reports per-bot counts, per-PR rates and noise without counting duplicates", () => {
+    expect(report).toContain("| coderabbitai[bot] | 1 | 3 | 3.00 | 1 | 1.00 | 1 | 1 | 0.50 | 1 | 0 |");
+    expect(report).toContain("| chatgpt-codex-connector[bot] | 1 | 4 | 4.00 | 4 | 4.00 | 0 | 0 | 0.00 | 0 | 0 |");
+    expect(report).toContain("| copilot-pull-request-reviewer[bot] | 1 | 0 | 0.00 | 0 | 0.00 | 0 | 0 | - | 1 | 1 |");
   });
 
-  it("counts inline accepted findings no other bot raised nearby", () => {
-    // r1 (line 10) and r3 (line 12) overlap; r4 (line 90) is unique to Codex; r8 has no location.
-    expect(report).toContain("| chatgpt-codex-connector[bot] | 2 | 1 |");
-    expect(report).toContain("| coderabbitai[bot] | 1 | 0 |");
+  it("compares bots only on revisions two or more of them reviewed", () => {
+    expect(report).toContain("Revisions reviewed by two or more bots: 1.");
+    expect(report).toContain("Findings with no reviewed commit, left out of this section: 1.");
+    // Revision c: CodeRabbit, Codex, Kilo, and Copilot's clean review. Revision d had Codex only.
+    expect(report).toContain("| coderabbitai[bot] | 1 | 3 | 3.00 | 1 | 1.00 | 0 |");
+    // r1 (line 10) and r3 (line 12) overlap; r4 (line 90) is unique to Codex.
+    expect(report).toContain("| chatgpt-codex-connector[bot] | 1 | 2 | 2.00 | 2 | 2.00 | 1 |");
+    expect(report).toContain("| copilot-pull-request-reviewer[bot] | 1 | 0 | 0.00 | 0 | 0.00 | 0 |");
+    expect(report).toContain("| kilo-code-bot[bot] | 1 | 1 | 1.00 | 0 | 0.00 | 0 |");
   });
 
   it("counts unknown fix signals on inline findings only", () => {

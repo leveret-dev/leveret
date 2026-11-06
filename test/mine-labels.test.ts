@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   botName,
+  isNoReview,
   isBot,
   isNotice,
   labelRowSchema,
@@ -100,6 +101,22 @@ describe("notice detection", () => {
   it.each(cases)("%s %s #%#", (bot, kind, body, expected) => {
     expect(isNotice(bot, kind, body)).toBe(expected);
   });
+});
+
+describe("no-review notices", () => {
+  // A bot that hit a limit or failed did not review the revision, so it must not count as a clean review.
+  it.each([
+    "Codex usage limits have been reached for code reviews.",
+    "Copilot was unable to review this pull request because the user who requested the review has reached their quota limit.",
+    "Copilot wasn't able to review any files in this pull request.",
+    "<summary>⚠️ Action not completed</summary>\nReview rate limited.",
+    "**This review did not finish.** The model reached its output limit",
+  ])("%s", (body) => expect(isNoReview(body)).toBe(true));
+  it.each([
+    "<!-- codex-review-receipt:v1 -->\nCodex Review: Didn't find any major issues. Swish!",
+    "### 🟢 Approval recommended\nNo unresolved review issues remain.",
+    "**Actionable comments posted: 0**",
+  ])("%s", (body) => expect(isNoReview(body)).toBe(false));
 });
 
 describe("mechanical disposition", () => {

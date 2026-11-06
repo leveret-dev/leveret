@@ -12,7 +12,7 @@ import { promisify } from "node:util";
 import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Octokit } from "octokit";
 import { z } from "zod";
-import { botName, CATEGORIES, isBot, isNotice, labelRowSchema, LINE_WINDOW, markDuplicates, mechanicalDisposition, parseHunks, signalList, touchesWindow, type LabelRow, type Signals } from "./mine-labels.mjs";
+import { botName, CATEGORIES, isBot, isNoReview, isNotice, labelRowSchema, LINE_WINDOW, markDuplicates, mechanicalDisposition, parseHunks, signalList, touchesWindow, type LabelRow, type Signals } from "./mine-labels.mjs";
 import { auditEntrySchema, auditSample, random, renderReport, shuffle, type AuditEntry, type Comparison } from "./mine-report.mjs";
 import { REPLAY_RESULT_SCHEMA, runTrial, type TrialPlan } from "./replay.mjs";
 import { summarizeResult } from "./report.mjs";
@@ -279,7 +279,9 @@ export function extractFindings(pr: CachedPr): Finding[] {
     replies: humanLater(c.created_at).slice(0, 8).map((h) => h.body),
     signals: { fixed: null, resolved: false, replied: discussed(c), notice: isNotice(c.user.login, kind, c.body) },
   });
-  const findings: Finding[] = pr.issue_comments.filter((c) => isBot(c.user)).map((c) => general("conversation", c, null));
+  // Some summaries record the full commit they reviewed (Codex's review state); that places them on a revision.
+  const reviewedCommit = (body: string) => body.match(/"commit_sha":"([0-9a-f]{40})"/)?.[1] ?? null;
+  const findings: Finding[] = pr.issue_comments.filter((c) => isBot(c.user)).map((c) => general("conversation", c, reviewedCommit(c.body)));
   findings.push(...pr.reviews.filter((r) => isBot(r.user) && r.body.trim() !== "").map((r) => general("review", r, r.commit_id)));
   for (const c of pr.review_comments) {
     if (c.in_reply_to_id !== null || !isBot(c.user)) continue;
@@ -411,7 +413,7 @@ export async function runLabel(opts: { complete: Complete; model: string; cacheR
     const location = { url: f.url, repository: f.repository, pull_request: f.pull_request, bot: f.bot, kind: f.kind, path: f.path, line: f.line, head_sha: f.head_sha, signals: signalList(f.signals), duplicate_of: null };
     let row: LabelRow;
     if (f.signals.notice) {
-      row = { ...location, category: null, disposition: "notice", label_source: "mechanical", judge: null };
+      row = { ...location, category: null, disposition: isNoReview(f.body) ? "no-review" : "notice", label_source: "mechanical", judge: null };
     } else {
       const verdict = await judge(f, opts.complete, opts.model, cacheRoot);
       if (verdict.fallback) fallbacks++;

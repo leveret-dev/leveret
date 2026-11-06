@@ -82,6 +82,14 @@ describe("extractFindings", () => {
     expect(review.signals).toMatchObject({ notice: false, replied: true });
     expect(review.replies).toEqual(["@coderabbitai PLACEHOLDER-NITPICK-ADDRESSED"]);
   });
+
+  it("reads the reviewed commit from a conversation summary that records it", () => {
+    const codex = { login: "chatgpt-codex-connector[bot]", type: "Bot" };
+    const findings = extractFindings(pr({
+      issue_comments: [{ id: 6, html_url: url("issuecomment-6"), user: codex, body: `<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 {"code_review":{"commit_sha":"${SHA("e")}","status":"completed"}} -->`, created_at: at }],
+    }));
+    expect(findings.find((f) => f.url === url("issuecomment-6"))!.head_sha).toBe(SHA("e"));
+  });
 });
 
 describe("runLabel", () => {
@@ -97,6 +105,14 @@ describe("runLabel", () => {
     ]);
     expect(rows[0]!.judge?.model).toBe("test/flash");
     expect(rows[2]!.judge).toBeNull();
+  });
+
+  it("labels limit and failure notices as no-review", async () => {
+    const quota = { id: 7, html_url: url("issuecomment-7"), user: { login: "chatgpt-codex-connector[bot]", type: "Bot" }, body: "Codex usage limits have been reached for code reviews.", created_at: at };
+    const { cacheRoot, outPath } = await seed([pr({ issue_comments: [...pr().issue_comments, quota] })]);
+    const rows = await runLabel({ complete: fakeJudge([verdict("accepted", "bug")]).complete, model: "test/flash", cacheRoot, outPath });
+    expect(rows.find((r) => r.url === url("issuecomment-7"))).toMatchObject({ disposition: "no-review", category: null, judge: null });
+    expect(rows.find((r) => r.url === url("issuecomment-1"))!.disposition).toBe("notice");
   });
 
   it("labels unclear after two invalid judge replies, never rejected, and retries on the next run", async () => {
