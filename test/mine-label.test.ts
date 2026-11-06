@@ -63,6 +63,21 @@ describe("extractFindings", () => {
     const noLine = extractFindings(pr({ review_comments: base.review_comments.map((c) => (c.id === 10 ? { ...c, original_line: null } : c)) }));
     expect(noLine[1]!.signals.fixed).toBeNull();
   });
+
+  it("gives review and conversation findings the later human conversation as replies", () => {
+    const later = "2026-01-02T00:00:00Z";
+    const findings = extractFindings(pr({
+      reviews: [{ id: 2, html_url: url("pullrequestreview-2"), user: bot, body: "<summary>🧹 Nitpick comments (1)</summary> PLACEHOLDER-NIT", created_at: at, commit_id: SHA("c") }],
+      issue_comments: [
+        { id: 3, html_url: url("issuecomment-3"), user: human, body: "PLACEHOLDER-EARLIER", created_at: "2025-12-31T00:00:00Z" },
+        { id: 4, html_url: url("issuecomment-4"), user: human, body: "PLACEHOLDER-NITPICK-ADDRESSED", created_at: later },
+        { id: 5, html_url: url("issuecomment-5"), user: bot, body: "PLACEHOLDER-BOT", created_at: later },
+      ],
+    }));
+    const review = findings.find((f) => f.kind === "review")!;
+    expect(review.signals.notice).toBe(false);
+    expect(review.replies).toEqual(["PLACEHOLDER-NITPICK-ADDRESSED"]);
+  });
 });
 
 describe("runLabel", () => {
