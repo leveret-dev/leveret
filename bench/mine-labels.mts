@@ -50,6 +50,12 @@ const NOTICES: Array<{ bot: string; kinds: Kind[]; pattern: RegExp }> = [
   // Copilot review bodies are overviews, verdicts, or quota notices; its findings are inline.
   { bot: "copilot-pull-request-reviewer", kinds: ["review", "conversation"], pattern: /[\s\S]/ },
   { bot: "openwrt-ai", kinds: ["conversation", "review"], pattern: /no new issues found/i },
+  // Coverage and deploy-preview bots never review code.
+  { bot: "codecov", kinds: ["conversation", "review", "inline"], pattern: /[\s\S]/ },
+  { bot: "cloudflare-workers-and-pages", kinds: ["conversation", "review", "inline"], pattern: /[\s\S]/ },
+  { bot: "netlify", kinds: ["conversation", "review", "inline"], pattern: /[\s\S]/ },
+  { bot: "github-actions", kinds: ["conversation"], pattern: /^Thanks for the pull request/ },
+  { bot: "graphify-labs", kinds: ["conversation", "review"], pattern: /Graphify reviewed this change/ },
 ];
 
 export function isNotice(bot: string, kind: Kind, body: string): boolean {

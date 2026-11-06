@@ -89,6 +89,13 @@ describe("notice detection", () => {
     ["copilot-pull-request-reviewer[bot]", "review", "<!-- ccr-overview-v2 -->\n## Copilot review overview", true],
     ["copilot-pull-request-reviewer[bot]", "review", "### 🟢 Approval recommended\nNo unresolved review issues remain.", true],
     ["Copilot", "inline", "This guard skips the null path.", false],
+    ["codecov[bot]", "conversation", "## [Codecov](https://app.codecov.io/gh/o/r/pull/1) Report", true],
+    ["cloudflare-workers-and-pages[bot]", "conversation", "## Deploying with Cloudflare Workers", true],
+    ["netlify[bot]", "conversation", "### Deploy Preview for *docs* canceled.", true],
+    ["github-actions[bot]", "conversation", "Thanks for the pull request, @andrebrait. A maintainer will review it soon.", true],
+    ["github-actions[bot]", "conversation", "## OpenAI Code Analysis Result\n**FAIL**: missing shebang", false],
+    ["graphify-labs[bot]", "conversation", "**Graphify reviewed this change.**\n3 files", true],
+    ["graphify-labs[bot]", "inline", "⚠️ **Health regression** — `main()`", false],
   ];
   it.each(cases)("%s %s #%#", (bot, kind, body, expected) => {
     expect(isNotice(bot, kind, body)).toBe(expected);
