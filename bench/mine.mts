@@ -11,6 +11,7 @@ import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Octokit } from "octokit";
 import { z } from "zod";
 import { CATEGORIES, isBot, isNotice, labelRowSchema, markDuplicates, mechanicalDisposition, parseHunks, signalList, touchesWindow, type LabelRow, type Signals } from "./mine-labels.mjs";
+import { auditSample, renderReport, type AuditEntry, type Comparison } from "./mine-report.mjs";
 
 export const CACHE_ROOT = ".cache/mine";
 
@@ -349,6 +350,38 @@ export async function runLabel(opts: { complete: Complete; model: string; cacheR
   return labelled;
 }
 
+async function readJsonl<T>(path: string): Promise<T[]> {
+  if (!existsSync(path)) return [];
+  return (await readFile(path, "utf8")).split("\n").filter((line) => line.trim() !== "").map((line) => JSON.parse(line) as T);
+}
+
+export async function readLabels(path = LABELS_PATH): Promise<LabelRow[]> {
+  return (await readJsonl<unknown>(path)).map((row) => labelRowSchema.parse(row));
+}
+
+/** Writes the hand-audit checklist; hand labels already filled in survive a rerun. */
+export async function runAudit(rows: LabelRow[], opts: { cacheRoot?: string; seed: number }): Promise<AuditEntry[]> {
+  const path = join(opts.cacheRoot ?? CACHE_ROOT, "audit.jsonl");
+  const hands = new Map((await readJsonl<AuditEntry>(path)).map((entry) => [entry.url, entry.hand]));
+  const entries = auditSample(rows, opts.seed).map((row): AuditEntry => ({ url: row.url, auto: row.disposition, label_source: row.label_source, hand: hands.get(row.url) ?? null }));
+  await writeAtomic(path, entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n");
+  console.log(`audit ${entries.length} entries, ${entries.filter((entry) => entry.hand !== null).length} hand-labelled: ${path}`);
+  return entries;
+}
+
+export async function runReport(opts: { cacheRoot?: string; date: string; outDir?: string }): Promise<string> {
+  const cacheRoot = opts.cacheRoot ?? CACHE_ROOT;
+  const languages = Object.fromEntries((await readCachedPrs(cacheRoot)).map((pr) => [pr.repository, pr.repo_language]));
+  const compareDir = join(cacheRoot, "compare");
+  const comparisons = existsSync(compareDir)
+    ? await Promise.all((await readdir(compareDir)).filter((name) => name.endsWith(".json")).sort().map(async (name) => JSON.parse(await readFile(join(compareDir, name), "utf8")) as Comparison))
+    : [];
+  const path = join(opts.outDir ?? "docs/reports", `${opts.date}-bot-gap-analysis.md`);
+  await writeAtomic(path, renderReport(await readLabels(), await readJsonl<AuditEntry>(join(cacheRoot, "audit.jsonl")), comparisons, opts.date, languages));
+  console.log(`report written: ${path}`);
+  return path;
+}
+
 export function option(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
   return index < 0 ? undefined : args[index + 1];
@@ -373,8 +406,14 @@ async function main(): Promise<void> {
       await runLabel({ complete: await modelComplete(requiredOption(args, "--judge-provider"), requiredOption(args, "--judge-model")), model });
       return;
     }
+    case "audit":
+      await runAudit(await readLabels(), { seed: Number(option(args, "--seed") ?? "1") });
+      return;
+    case "report":
+      await runReport({ date: new Date().toISOString().slice(0, 10) });
+      return;
     default:
-      throw new Error("usage: mine.mts <fetch|label> [options]");
+      throw new Error("usage: mine.mts <fetch|label|audit|report> [options]");
   }
 }
 
