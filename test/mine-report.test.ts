@@ -72,6 +72,15 @@ describe("runAudit", () => {
     await writeFile(path, `${JSON.stringify({ ...entry, hand: "acepted" })}\n`);
     await expect(runAudit(rows, { cacheRoot: dir, seed: 1 })).rejects.toThrow();
   });
+
+  it("shows each sampled finding's signals and the reason for its label", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mine-audit-"));
+    const rows = [row(1), row(2, { label_source: "judge", disposition: "rejected", signals: ["replied"] })];
+    await writeFile(join(dir, "reasons.jsonl"), `${JSON.stringify({ url: rows[0]!.url, reason: "Mechanical rule: x" })}\n${JSON.stringify({ url: rows[1]!.url, reason: "Author said no change was needed." })}\n`);
+    const entries = await runAudit(rows, { cacheRoot: dir, seed: 1 });
+    expect(entries.find((e) => e.url === rows[1]!.url)).toMatchObject({ auto: "rejected", signals: ["replied"], reason: "Author said no change was needed.", hand: null });
+    expect(entries.find((e) => e.url === rows[0]!.url)).toMatchObject({ signals: ["fixed", "resolved"], reason: "Mechanical rule: x" });
+  });
 });
 
 describe("renderReport", () => {
@@ -91,10 +100,10 @@ describe("renderReport", () => {
     { repository: "o/r", pull_request: 1, replay_head: SHA, targets: [rows[0]!.url, rows[3]!.url], matched: [rows[0]!.url], status: "complete" },
     { repository: "o/r", pull_request: 2, replay_head: SHA, targets: [], matched: [], status: "invalid", reason: "missing-commit" },
   ];
-  const audit = [
-    { url: rows[0]!.url, auto: "accepted" as const, label_source: "mechanical" as const, hand: "accepted" as const },
-    { url: rows[1]!.url, auto: "rejected" as const, label_source: "judge" as const, hand: "accepted" as const },
-    { url: rows[2]!.url, auto: "accepted" as const, label_source: "mechanical" as const, hand: null },
+  const audit: AuditEntry[] = [
+    { url: rows[0]!.url, auto: "accepted", label_source: "mechanical", signals: [], reason: null, hand: "accepted" },
+    { url: rows[1]!.url, auto: "rejected", label_source: "judge", signals: [], reason: null, hand: "accepted" },
+    { url: rows[2]!.url, auto: "accepted", label_source: "mechanical", signals: [], reason: null, hand: null },
   ];
   const report = renderReport(rows, audit, comparisons, "2026-11-06", { "o/r": "TypeScript" });
 

@@ -5,7 +5,12 @@ import { CATEGORIES, LINE_WINDOW, labelRowSchema, type LabelRow } from "./mine-l
 type Disposition = LabelRow["disposition"];
 const disposition = labelRowSchema.shape.disposition;
 // The owner edits `hand` by hand, so a typo must fail loudly rather than count as disagreement.
-export const auditEntrySchema = z.object({ url: z.url(), auto: disposition, label_source: labelRowSchema.shape.label_source, hand: disposition.nullable() }).strict();
+export const auditEntrySchema = z.object({
+  url: z.url(), auto: disposition, label_source: labelRowSchema.shape.label_source,
+  // Why the finding got its label, so the auditor can check the reasoning, not just the verdict.
+  signals: labelRowSchema.shape.signals, reason: z.string().nullable(),
+  hand: disposition.nullable(),
+}).strict();
 export type AuditEntry = z.infer<typeof auditEntrySchema>;
 export interface Comparison {
   repository: string;

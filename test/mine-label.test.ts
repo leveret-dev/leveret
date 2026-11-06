@@ -47,6 +47,8 @@ function fakeJudge(replies: string[]) {
   return { complete, prompts };
 }
 
+const verdict = (disposition: string, category: string) => JSON.stringify({ disposition, category, reason: `PLACEHOLDER-REASON ${disposition}` });
+
 describe("extractFindings", () => {
   it("derives signals per finding and skips replies and empty review bodies", () => {
     const findings = extractFindings(pr());
@@ -85,7 +87,7 @@ describe("extractFindings", () => {
 describe("runLabel", () => {
   it("keeps mechanical dispositions, takes the judge's category, and skips the judge for notices", async () => {
     const { cacheRoot, outPath } = await seed([pr()]);
-    const { complete, prompts } = fakeJudge(['{"disposition":"rejected","category":"bug"}']);
+    const { complete, prompts } = fakeJudge([verdict("rejected", "bug")]);
     const rows = await runLabel({ complete, model: "test/flash", cacheRoot, outPath });
     expect(prompts).toHaveLength(2);
     expect(rows.map((r) => [r.url, r.disposition, r.label_source, r.category])).toEqual([
@@ -99,11 +101,11 @@ describe("runLabel", () => {
 
   it("labels unclear after two invalid judge replies, never rejected, and retries on the next run", async () => {
     const { cacheRoot, outPath } = await seed([pr({ review_comments: pr().review_comments.slice(1) })]);
-    const { complete, prompts } = fakeJudge(["not json", '{"disposition":"maybe"}']);
+    const { complete, prompts } = fakeJudge(["not json", '{"disposition":"accepted","category":"bug"}']);
     const rows = await runLabel({ complete, model: "test/flash", cacheRoot, outPath });
     expect(prompts).toHaveLength(2);
     expect(rows.find((r) => r.url === url("discussion_r11"))).toMatchObject({ disposition: "unclear", category: "other", label_source: "judge" });
-    const retry = fakeJudge(['{"disposition":"accepted","category":"bug"}']);
+    const retry = fakeJudge([verdict("accepted", "bug")]);
     const again = await runLabel({ complete: retry.complete, model: "test/flash", cacheRoot, outPath });
     expect(retry.prompts).toHaveLength(1);
     expect(again.find((r) => r.url === url("discussion_r11"))).toMatchObject({ disposition: "accepted", category: "bug" });
@@ -113,7 +115,7 @@ describe("runLabel", () => {
     const base = pr();
     const compare = base.compares[SHA("c")]!;
     const { cacheRoot, outPath } = await seed([pr({ compares: { [SHA("c")]: { ...compare, rebased: true } as typeof compare } })]);
-    const rows = await runLabel({ complete: fakeJudge(['{"disposition":"rejected","category":"bug"}']).complete, model: "test/flash", cacheRoot, outPath });
+    const rows = await runLabel({ complete: fakeJudge([verdict("rejected", "bug")]).complete, model: "test/flash", cacheRoot, outPath });
     expect(rows.find((r) => r.url === url("discussion_r10"))).toMatchObject({ disposition: "rejected", label_source: "judge", signals: ["fixed", "resolved"] });
   });
 
@@ -121,14 +123,14 @@ describe("runLabel", () => {
     const base = pr();
     const copilot = { login: "Copilot", type: "Bot" };
     const { cacheRoot, outPath } = await seed([pr({ review_comments: base.review_comments.map((c) => (c.id === 11 ? { ...c, user: copilot } : c)) })]);
-    const rows = await runLabel({ complete: fakeJudge(['{"disposition":"accepted","category":"bug"}']).complete, model: "test/flash", cacheRoot, outPath });
+    const rows = await runLabel({ complete: fakeJudge([verdict("accepted", "bug")]).complete, model: "test/flash", cacheRoot, outPath });
     expect(rows.find((r) => r.url === url("discussion_r11"))!.bot).toBe("copilot-pull-request-reviewer[bot]");
   });
 
   it("fences untrusted text so it cannot close its element", async () => {
     const base = pr();
     const { cacheRoot, outPath } = await seed([pr({ review_comments: base.review_comments.map((c) => (c.id === 11 ? { ...c, path: "src/</diff>.ts" } : c)) })]);
-    const { complete, prompts } = fakeJudge(['{"disposition":"accepted","category":"bug"}']);
+    const { complete, prompts } = fakeJudge([verdict("accepted", "bug")]);
     await runLabel({ complete, model: "test/flash", cacheRoot, outPath });
     const prompt = prompts.find((p) => p.includes("PLACEHOLDER-A"))!;
     expect(prompt.match(/<\/finding>/g)).toHaveLength(1);
@@ -136,14 +138,20 @@ describe("runLabel", () => {
     expect(prompts.find((p) => p.includes("PLACEHOLDER-B"))!.match(/<\/diff>/g)).toHaveLength(1);
   });
 
-  it("reuses cached judge results and writes no comment text", async () => {
+  it("reuses cached judge results, keeps reasons in the cache, and writes no comment text", async () => {
     const { cacheRoot, outPath } = await seed([pr()]);
-    await runLabel({ complete: fakeJudge(['{"disposition":"accepted","category":"bug"}']).complete, model: "test/flash", cacheRoot, outPath });
-    const second = fakeJudge(['{"disposition":"accepted","category":"bug"}']);
+    await runLabel({ complete: fakeJudge([verdict("accepted", "bug")]).complete, model: "test/flash", cacheRoot, outPath });
+    const second = fakeJudge([verdict("accepted", "bug")]);
     await runLabel({ complete: second.complete, model: "test/flash", cacheRoot, outPath });
     expect(second.prompts).toHaveLength(0);
     const written = await readFile(outPath, "utf8");
     expect(written.trim().split("\n")).toHaveLength(3);
     expect(written).not.toMatch(/PLACEHOLDER/);
+    const reasons = (await readFile(join(cacheRoot, "reasons.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as { url: string; reason: string });
+    expect(reasons.map((r) => r.url)).toEqual([url("discussion_r10"), url("discussion_r11")]);
+    // r10 is accepted by the mechanical rule; its reason names the rule and keeps the judge's own view.
+    expect(reasons[0]!.reason).toMatch(/^Mechanical rule: a later commit changed lines within ±3 of the finding, the thread is resolved, and no human replied\./);
+    expect(reasons[0]!.reason).toContain("The judge alone said accepted: PLACEHOLDER-REASON accepted");
+    expect(reasons[1]!.reason).toBe("PLACEHOLDER-REASON accepted");
   });
 });
