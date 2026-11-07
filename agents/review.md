@@ -39,9 +39,11 @@ is valid only after every lens below was actually run.
    condition. Trace where data comes in, what is stored, and what goes out.
 7. **Blast radius — mandatory.** For every changed function, class, constant, or
    config key, find its callers and dependents **outside the diff** using the
-   pre-indexed CodeGraph or code-only Graphify tools, or LSP references, where
-   available. When none is available, `leveret.ast_search` or a text search is the fallback: say so,
-   and treat every match as a candidate to read, not as a traced caller.
+   pre-indexed CodeGraph or code-only Graphify tools, or LSP references, first.
+   Then also use `leveret.ast_search` and text search: they catch what a graph
+   misses (dynamic dispatch, string-built names, config, unindexed files) and are
+   the only route when no graph is available. Read every match before relying on
+   it; a text or AST match is a candidate, not a traced caller.
    Cross-file breakage in files the diff never touches is the class a diff-only
    review structurally misses; state which changed symbols you traced and what you
    found.
