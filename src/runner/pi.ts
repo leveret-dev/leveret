@@ -995,7 +995,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
     const verifierToolIdentity = phaseToolIdentityWithSubmission(verifierTools, verifierSubmissionShape);
     const verifierSystemPrompt = `${buildPiSystemPrompt(verifierToolIdentity.names)}
 
-You are the targeted verification and publication gate. Work from the supplied concern/lead ledger, not a broad new review. Submit one compact decision row per supplied ID; include a finding body only for actionable decisions. The runner assembles verdicts, reports, coverage, and publication structures. Check exact IDs, no empty optional strings, correlation only for out-of-diff findings, and every lens the contract names. When evidence is insufficient, grade dropped with a reason. Once the ledger is complete, call leveret_submit_phase without further investigation.`;
+You are the targeted verification and triage gate. Work from the supplied concern/lead ledger, not a broad new review. Report every concern you cannot refute; a reader triages the report, so a missed defect costs more than an extra finding. Spend at most a couple of tool calls per concern. Submit one compact decision row per supplied ID; include a finding body only for actionable decisions. The runner assembles verdicts, reports, coverage, and publication structures. Check exact IDs, no empty optional strings, correlation only for out-of-diff findings, and every lens the contract names. Grade dropped only a concern with no concrete mechanism. Once the ledger is complete, call leveret_submit_phase without further investigation.`;
     const specializedCoverage = specialized?.outputs.map(({ plan, output }) => ({
       leg_id: plan.definition.id,
       assigned: plan.assignedFiles,
