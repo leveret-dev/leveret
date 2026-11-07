@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { run } from "./exec.js";
 import { loadProfile } from "./profile.js";
+import { REVIEW_GUIDANCE_FILES } from "./review-guidance.js";
 import { parse } from "yaml";
 
 export interface TrustedReviewState {
@@ -86,6 +87,12 @@ export async function materializeTrustedReviewState(
     if (memory !== undefined) {
       await mkdir(join(root, ".leveret"), { recursive: true });
       await writeFile(join(root, ".leveret", "memory.jsonl"), memory);
+    }
+    for (const path of REVIEW_GUIDANCE_FILES) {
+      const content = await fileAtRef(repo, base, path);
+      if (content === undefined) continue;
+      await mkdir(dirname(trustedPath(root, path)), { recursive: true });
+      await writeFile(trustedPath(root, path), content);
     }
     return {
       root,

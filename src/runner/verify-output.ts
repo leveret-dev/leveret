@@ -112,6 +112,15 @@ export const reviewSubmissionSchema = z.object({
   coverage: coverageSchema,
 }).strict();
 
+/** What the discovery model submits: a file it calls fine must say what it checked, so "fine" is never free. */
+export const reviewModelSubmissionSchema = reviewSubmissionSchema.superRefine((output, ctx) => {
+  output.coverage.files.forEach((file, index) => {
+    if (file.verdict === "considered-fine" && !file.note) {
+      ctx.addIssue({ code: "custom", path: ["coverage", "files", index, "note"], message: "considered-fine files must name what was checked" });
+    }
+  });
+});
+
 const reviewAccountingSchema = z.looseObject({
   concerns: z.array(z.looseObject({
     id: text,
@@ -253,10 +262,17 @@ export function assembleVerifierOutput(output: unknown, expected: VerifyExpectat
   };
 }
 
-const REQUIRED_LENSES = [
+/** Every lens the review contracts run; the verifier must account for each one exactly once. */
+export const REVIEW_LENSES = [
   "correctness-hostile-inputs",
+  "security",
+  "error-handling-data-loss",
+  "concurrency-scale",
+  "performance",
   "contract-conformance",
+  "compatibility-migration",
   "test-honesty",
+  "maintainability",
   "blast-radius",
   "leads-triage",
 ];
@@ -279,7 +295,7 @@ export function verifySchemaGaps(output: unknown, expected: VerifyExpectations):
 
   const gaps = new Set<string>();
   const value = parsed.data;
-  exactIds(gaps, "coverage.lenses", value.coverage.lenses.map((lens) => lens.lens), REQUIRED_LENSES);
+  exactIds(gaps, "coverage.lenses", value.coverage.lenses.map((lens) => lens.lens), REVIEW_LENSES);
   exactIds(gaps, "verdicts", value.verdicts.map((verdict) => verdict.id), [
     ...expected.concerns.map((concern) => concern.id),
     ...expected.leads.map((lead) => lead.id),

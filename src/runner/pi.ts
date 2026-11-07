@@ -31,7 +31,7 @@ import { MECHANISM_CHECKLISTS, MECHANISM_CHECKLIST_SET_SHA256, selectMechanismCh
 import { buildPiTools, createPhaseSubmissionTool, PHASE_SUBMISSION_TOOL, zodPhaseSubmission, type PhaseSubmission, type PiToolsBundle } from "./pi-tools.js";
 import { connectSerena, serenaBundleProblem } from "./serena.js";
 import { materializeTrustedReviewState, type TrustedReviewState } from "../trusted-state.js";
-import { assembleVerifierOutput, completeVerificationCoverage, mergeVerificationCoverage, parseReviewOutput, reviewSubmissionSchema, verifierModelOutputSchema, verifySchemaGaps, type ReviewOutput } from "./verify-output.js";
+import { assembleVerifierOutput, completeVerificationCoverage, mergeVerificationCoverage, parseReviewOutput, reviewModelSubmissionSchema, verifierModelOutputSchema, verifySchemaGaps, type ReviewOutput } from "./verify-output.js";
 import {
   accountPostWalkLeads,
   buildPostWalkLeadStream,
@@ -785,7 +785,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
         throw new Error("work-item base/head identity does not match the reviewed checkout");
       }
     }
-    const reviewSubmission = zodPhaseSubmission(reviewSubmissionSchema, parseReviewOutput);
+    const reviewSubmission = zodPhaseSubmission(reviewModelSubmissionSchema, (value) => reviewModelSubmissionSchema.parse(value));
     const discoveryLegSubmission = zodPhaseSubmission(localOutputSchema);
     const verifierSubmissionShape = zodPhaseSubmission(verifierModelOutputSchema);
     const javaContext = `\n## Host Java reference evidence availability and coverage\n${JSON.stringify(bundle.capabilities.java_references, null, 1)}\n`;
@@ -854,7 +854,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
     if (runtime.discoveryMode === "single") {
       const discoveryInput = singleDiscoveryInput(evidencePack, guidance);
       const reviewPrompt = [
-        piContract(await loadContract("review", { repo, base: pinnedBase, rulingsRepo: trusted.root })),
+        piContract(await loadContract("review", { repo, base: pinnedBase, policyRoot: trusted.root })),
         "\n## Bounded deterministic scope, applicability, and workflow facts (no routed leads)\n",
         javaContext,
         JSON.stringify(discoveryInput, null, 1),
@@ -995,7 +995,7 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
     const verifierToolIdentity = phaseToolIdentityWithSubmission(verifierTools, verifierSubmissionShape);
     const verifierSystemPrompt = `${buildPiSystemPrompt(verifierToolIdentity.names)}
 
-You are the targeted verification and publication gate. Work from the supplied concern/lead ledger, not a broad new review. Submit one compact decision row per supplied ID; include a finding body only for actionable decisions. The runner assembles verdicts, reports, coverage, and publication structures. Check exact IDs, no empty optional strings, correlation only for out-of-diff findings, and all five lenses. When evidence is insufficient, grade dropped with a reason. Once the ledger is complete, call leveret_submit_phase without further investigation.`;
+You are the targeted verification and publication gate. Work from the supplied concern/lead ledger, not a broad new review. Submit one compact decision row per supplied ID; include a finding body only for actionable decisions. The runner assembles verdicts, reports, coverage, and publication structures. Check exact IDs, no empty optional strings, correlation only for out-of-diff findings, and every lens the contract names. When evidence is insufficient, grade dropped with a reason. Once the ledger is complete, call leveret_submit_phase without further investigation.`;
     const specializedCoverage = specialized?.outputs.map(({ plan, output }) => ({
       leg_id: plan.definition.id,
       assigned: plan.assignedFiles,
@@ -1005,7 +1005,7 @@ You are the targeted verification and publication gate. Work from the supplied c
       disclosure: output.coverage,
     }));
     const verifyPrompt = [
-      piContract(await loadContract("verify", { repo, base: pinnedBase, rulingsRepo: trusted.root })),
+      piContract(await loadContract("verify", { repo, base: pinnedBase, policyRoot: trusted.root })),
       ...(specialized ? ["\n## Specialized accounting override\nConcern IDs are host-namespaced (for example `correctness:R1`), not bare `R` IDs. Preserve every supplied concern and post-walk lead ID exactly and emit one verdict for each.\n"] : []),
       specialized ? "\n## Normalized discovery concerns to verify\n" : "\n## The review agent's concerns to verify\n",
       concerns,

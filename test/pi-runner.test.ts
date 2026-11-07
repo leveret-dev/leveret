@@ -24,7 +24,7 @@ import {
   startupIndexProblem,
   withDeadline,
 } from "../src/runner/pi.js";
-import { assembleVerifierOutput, completeVerificationCoverage, mergeVerificationCoverage, normalizeVerifyOutput, verifySchemaGaps } from "../src/runner/verify-output.js";
+import { assembleVerifierOutput, completeVerificationCoverage, mergeVerificationCoverage, normalizeVerifyOutput, REVIEW_LENSES, reviewModelSubmissionSchema, verifySchemaGaps } from "../src/runner/verify-output.js";
 import {
   buildSerenaArgs,
   createSerenaRuntimeHome,
@@ -522,13 +522,22 @@ describe("Pi runtime isolation", () => {
   });
 });
 
-const lenses = [
-  { lens: "correctness-hostile-inputs", outcome: "clean" },
-  { lens: "contract-conformance", outcome: "clean" },
-  { lens: "test-honesty", outcome: "clean" },
-  { lens: "blast-radius", outcome: "clean" },
-  { lens: "leads-triage", outcome: "clean" },
-];
+const lenses = REVIEW_LENSES.map((lens) => ({ lens, outcome: "clean" }));
+
+describe("review lenses and coverage", () => {
+  it("requires the verifier to account for every review lens, including the security, failure, and maintainability lenses", () => {
+    for (const missing of ["security", "error-handling-data-loss", "concurrency-scale", "performance", "compatibility-migration", "maintainability"]) {
+      expect(verifySchemaGaps({ ...validVerification(), coverage: { ...validVerification().coverage, lenses: lenses.filter((lens) => lens.lens !== missing) } }, expectations))
+        .toContain(`coverage.lenses:missing:${missing}`);
+    }
+  });
+
+  it("rejects a discovery file marked considered-fine without saying what was checked", () => {
+    const base = { concerns: [], coverage: { lenses, files: [{ file: "a.ts", verdict: "considered-fine" }] } };
+    expect(() => reviewModelSubmissionSchema.parse(base)).toThrow(/what was checked/);
+    expect(reviewModelSubmissionSchema.parse({ ...base, coverage: { lenses, files: [{ file: "a.ts", verdict: "considered-fine", note: "empty input and missing key both return early" }] } }).coverage.files).toHaveLength(1);
+  });
+});
 
 const expectations = {
   concerns: [{ id: "R1", file: "a.ts" }],
