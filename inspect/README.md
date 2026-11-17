@@ -50,7 +50,7 @@ From `inspect/`:
 ```
 
 On Windows, use `gradlew.bat` for build tasks that do not require the Linux-only oracle tests.
-Git hooks and development tooling are configured only from the monorepo root with
+Development tooling is configured only from the monorepo root with
 `sh scripts/setup-hooks.sh`.
 
 ## Run the runtime

@@ -10,7 +10,7 @@
 #               with '/' replaced by '-'>; a relative --path anchors below that sibling
 #               root, while an absolute --path stays exact). An existing branch or path
 #               gets a `-<epoch>` suffix (collision rule). Every created worktree
-#               initializes CodeGraph, Graphify, and enabled Serena tools.
+#               initializes CodeGraph and enabled Serena tools.
 #               Prints `BRANCH<TAB>PATH` instead.
 #   --base REF  worktree base (default origin/HEAD, else HEAD)
 #   --claim     with `issue … --worktree`: assign an UNCLAIMED issue to the caller
@@ -318,8 +318,7 @@ main() {
 	initializer=${PFB_INIT_WORKTREE_TOOLS:-$(dirname "$0")/init-worktree-tools.sh}
 	# A `wt` cut already ran the initializer through `.config/wt.toml`'s pre-start hook,
 	# and the CodeGraph index it leaves is the marker that the tools are in place. Only
-	# the fallback route (and a pre-start that did not run) still needs the direct call;
-	# a second `graphify update` here is pure duplicated work.
+	# the fallback route (and a pre-start that did not run) still needs the direct call.
 	initializer_status=0
 	if [ ! -f "$path/.codegraph/codegraph.db" ]; then
 		sh "$initializer" "$path"

@@ -185,8 +185,8 @@ JDK 21, and network access for cold fixture caches. See
 [Inspect build prerequisites](inspect/README.md#build-and-test). Inspect can also be built from
 `inspect/` with `./gradlew build`.
 
-Once per clone, run `sh scripts/setup-hooks.sh` from the repository root to activate the
-tracked Git hooks. Inspect has no separate hook setup.
+Once per clone, run `sh scripts/setup-hooks.sh` from the repository root to bootstrap
+CodeGraph and configure Worktrunk. Inspect has no separate setup.
 
 ## Design and status
 
