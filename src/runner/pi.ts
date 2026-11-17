@@ -121,7 +121,6 @@ export function piRuntimeConfig(params: PiRunnerParams, env: Record<string, stri
 export interface StartupIndexState {
   required: boolean;
   codegraph: boolean;
-  graphify: boolean;
   serenaTools: number;
   lspError?: string;
 }
@@ -130,7 +129,6 @@ export interface StartupIndexState {
 export function startupIndexProblem(state: StartupIndexState): string | null {
   if (!state.required) return null;
   if (!state.codegraph) return "CodeGraph was not pre-indexed";
-  if (!state.graphify) return "Graphify code-only graph was not pre-indexed";
   if (state.serenaTools < 1) return `Serena indexing unavailable${state.lspError ? `: ${state.lspError}` : ""}`;
   return null;
 }
@@ -219,7 +217,7 @@ export interface ToolMetric {
   output_bytes: number;
   output_tokens_estimate: number;
   args_sha256: string;
-  server: "leveret" | "codegraph" | "graphify" | "serena" | "probe";
+  server: "leveret" | "codegraph" | "serena" | "probe";
   cache: "unknown" | "n/a";
 }
 
@@ -428,13 +426,11 @@ export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
         const output = JSON.stringify(event.result ?? {});
         const server = event.toolName.startsWith("codegraph_")
           ? "codegraph"
-          : event.toolName.startsWith("graphify_")
-            ? "graphify"
-            : event.toolName.startsWith("lsp_")
-              ? "serena"
-              : event.toolName === "leveret_probe"
-                ? "probe"
-                : "leveret";
+          : event.toolName.startsWith("lsp_")
+            ? "serena"
+            : event.toolName === "leveret_probe"
+              ? "probe"
+              : "leveret";
         const endedAt = Date.now();
         const toolOutcome = options.toolOutcomes.get(event.toolCallId);
         const timedOut = toolOutcome?.timedOut === true;
@@ -453,7 +449,7 @@ export async function runPhase(options: RunPhaseOptions): Promise<unknown> {
           output_tokens_estimate: Math.ceil(Buffer.byteLength(output) / 4),
           args_sha256: start?.argsSha256 ?? createHash("sha256").update("{}").digest("hex"),
           server,
-          cache: server === "serena" || server === "codegraph" || server === "graphify" ? "unknown" : "n/a",
+          cache: server === "serena" || server === "codegraph" ? "unknown" : "n/a",
         });
         backgroundAudit(options.audit?.record("tools", "execution_end", { tool: event.toolName, result: event.result, is_error: event.isError, timed_out: timedOut }, { phase: options.phase, attempt, sessionId: session.sessionId, turn, toolCallId: event.toolCallId, evidenceId: event.toolCallId }));
       } else if (event.type === "message_end" && event.message.role === "assistant") {
@@ -705,23 +701,9 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
     const serenaBundleSha256 = serenaManifest && existsSync(serenaManifest)
       ? createHash("sha256").update(await readFile(serenaManifest)).digest("hex")
       : undefined;
-    let graphify: { bin: string; graphPath: string; indexedNodes?: number; indexedEdges?: number } | undefined;
-    if (process.env.LEVERET_GRAPHIFY_GRAPH) {
-      const [canonicalRepo, graphPath] = await Promise.all([realpath(repo), realpath(process.env.LEVERET_GRAPHIFY_GRAPH)]);
-      if (pathIsInside(canonicalRepo, graphPath)) throw new Error("Graphify graph must remain outside the reviewed checkout");
-      const indexedNodes = Number(process.env.LEVERET_GRAPHIFY_NODES);
-      const indexedEdges = Number(process.env.LEVERET_GRAPHIFY_EDGES);
-      graphify = {
-        bin: process.env.LEVERET_GRAPHIFY_BIN ?? "graphify",
-        graphPath,
-        ...(Number.isSafeInteger(indexedNodes) && indexedNodes >= 0 ? { indexedNodes } : {}),
-        ...(Number.isSafeInteger(indexedEdges) && indexedEdges >= 0 ? { indexedEdges } : {}),
-      };
-    }
     const indexProblem = startupIndexProblem({
       required: process.env.LEVERET_REQUIRE_INDEXES === "1",
       codegraph: process.env.LEVERET_GRAPH === "1",
-      graphify: Boolean(graphify),
       serenaTools: serena?.tools.length ?? 0,
       ...(lspError ? { lspError } : {}),
     });
@@ -741,7 +723,6 @@ async function runMain(runtimeDir: string, audit?: AuditWriter): Promise<void> {
       repo,
       graphLive: process.env.LEVERET_GRAPH === "1",
       codegraphBin: process.env.LEVERET_CODEGRAPH_BIN ?? "codegraph",
-      graphify,
       sandboxed: process.env.LEVERET_SANDBOXED === "1",
       serena,
       inspectJava,

@@ -97,11 +97,10 @@ describe("Pi runtime isolation", () => {
   });
 
   it("fails closed before model work when required indexes are unavailable", () => {
-    expect(startupIndexProblem({ required: false, codegraph: false, graphify: false, serenaTools: 0 })).toBeNull();
-    expect(startupIndexProblem({ required: true, codegraph: false, graphify: true, serenaTools: 1 })).toMatch(/CodeGraph/);
-    expect(startupIndexProblem({ required: true, codegraph: true, graphify: false, serenaTools: 1 })).toMatch(/Graphify/);
-    expect(startupIndexProblem({ required: true, codegraph: true, graphify: true, serenaTools: 0, lspError: "bundle missing" })).toContain("bundle missing");
-    expect(startupIndexProblem({ required: true, codegraph: true, graphify: true, serenaTools: 6 })).toBeNull();
+    expect(startupIndexProblem({ required: false, codegraph: false, serenaTools: 0 })).toBeNull();
+    expect(startupIndexProblem({ required: true, codegraph: false, serenaTools: 1 })).toMatch(/CodeGraph/);
+    expect(startupIndexProblem({ required: true, codegraph: true, serenaTools: 0, lspError: "bundle missing" })).toContain("bundle missing");
+    expect(startupIndexProblem({ required: true, codegraph: true, serenaTools: 6 })).toBeNull();
   });
 
   it("loads trusted host resources without exposing project resources", async () => {
@@ -193,17 +192,6 @@ describe("Pi runtime isolation", () => {
       await bundle.close();
       rmSync(root, { recursive: true, force: true });
     }
-  });
-
-  it("registers pre-indexed Graphify tools and indexing capabilities", async () => {
-    const tools = await buildPiTools({
-      ...toolOptions("/tmp/repo"),
-      graphify: { bin: "graphify", graphPath: "/tmp/graph.json", indexedNodes: 12, indexedEdges: 20 },
-    });
-    const names = tools.tools.map((tool) => tool.name);
-    expect(names).toEqual(expect.arrayContaining(["graphify_query", "graphify_path", "graphify_explain"]));
-    expect(tools.capabilities).toMatchObject({ graphify: true, graphify_indexed_nodes: 12, graphify_indexed_edges: 20 });
-    await tools.close();
   });
 
   it("jails direct reads and symlinks to the reviewed checkout", async () => {

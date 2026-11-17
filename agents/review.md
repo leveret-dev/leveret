@@ -22,7 +22,7 @@ be verified and will be dropped.
    text of every changed file.
 4. **Blast radius — mandatory.** For every changed function, class, constant, or
    config key, find its callers and dependents **outside the diff** using the
-   pre-indexed CodeGraph or code-only Graphify tools where available, otherwise
+   pre-indexed CodeGraph tools where available, otherwise
    `leveret.ast_search` and `git grep`. Cross-file breakage in files the diff never
    touches is the class a diff-only review structurally misses; state explicitly
    which changed symbols you traced and what you found.

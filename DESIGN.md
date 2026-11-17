@@ -23,7 +23,7 @@ leveret replicates each pillar with local, inspectable pieces:
 | Pillar | leveret component |
 | --- | --- |
 | Deterministic first pass | engine registry behind the `scan` MCP tool |
-| Code graph | Leveret-owned exact-checkout CodeGraph plus a host-owned code-only Graphify graph; both are built and validated before model work and exposed through fixed Pi tools. |
+| Code graph | Leveret-owned exact-checkout CodeGraph, built and validated before model work and exposed through fixed Pi tools. |
 | AST grounding | `ast_search` (ast-grep) + custom rule packs; Serena starts from a staged bundle and warms one symbol query per detected packaged language before model work. |
 | Verification filter | three-layer filter pipeline (below) ending in a verification agent |
 | Memory | in-repo, versioned finding-verdict store + `remember` tool |
@@ -308,12 +308,11 @@ rulings from the trusted base commit outside the checkout; PR-head policy cannot
 disable review, add an engine, or suppress its own findings.
 
 Leveret registers its scan/context/AST/memory functions directly, invokes
-pre-indexed CodeGraph and code-only Graphify through fixed adapters, and proxies a
+pre-indexed CodeGraph through a fixed adapter, and proxies a
 small read-only Serena MCP toolset. Those adapters are the compatibility path when
 a tool has no native Pi integration. Native Pi resources remain usable; OMP package
 extensions such as `omp-hooks-plus` can adapt host Claude hooks. CodeGraph must
-report a complete non-empty exact-checkout index. Graphify writes its derived graph
-outside the checkout and must report a non-empty node set.
+report a complete non-empty exact-checkout index.
 
 Serena reads a disposable shadow tree of file symlinks and writes
 configuration/cache only outside the checkout. It starts only from a pre-staged

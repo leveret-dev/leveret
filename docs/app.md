@@ -55,13 +55,11 @@ prefetch fails instead of advertising a language backed only by a host toolchain
 or uvx cache. Python, C/C++, Go, Rust, and Java remain explicitly unavailable
 until packaged.
 
-Install `codegraph` and `graphify` on the App host too. By default autonomous
+Install `codegraph` on the App host too. By default autonomous
 reviews set `LEVERET_REQUIRE_INDEXES=1` and fail before model work unless:
 
 - CodeGraph completes `init` + `index` and `status --json` proves a non-empty,
   complete exact-checkout index;
-- Graphify completes `extract --code-only --no-cluster` into host-owned temporary
-  storage and its graph validates non-empty;
 - Serena starts from the staged bundle and successfully queries one representative
   source file for every detected packaged language.
 
@@ -334,12 +332,11 @@ phase. Its dashboard, HTTP stats endpoint, GUI, tray process, and anonymous usag
 reporting are disabled. Metrics and seed-file/language readiness are captured
 durably by the Pi adapter.
 
-CodeGraph and Graphify are also prebuilt before the runner starts and registered
-through fixed Pi adapters. Serena is connected through its read-only MCP adapter.
+CodeGraph is also prebuilt before the runner starts and registered
+through a fixed Pi adapter. Serena is connected through its read-only MCP adapter.
 These adapters cover tools without native Pi integration, while tool-provided host
 skills and hooks remain available through Pi's resource loader. Checkout-provided
-resources remain untrusted. Override binaries with `LEVERET_CODEGRAPH_BIN` and
-`LEVERET_GRAPHIFY_BIN`.
+resources remain untrusted. Override the binary with `LEVERET_CODEGRAPH_BIN`.
 
 Without any runner configured, reviews are deterministic-only: engine findings
 post directly and the walkthrough says the agent lenses did not run.
@@ -433,8 +430,7 @@ Stable categories are `app`, `repository`, `prompts`, `assistant`, `tools`,
 `subprocess`, `provider`, `lifecycle`, `operational`, and `result`. Narrowing any of
 the Pi transcript categories disables unfiltered native session JSONL and retains
 only policy-filtered normalized events; the manifest records that distinction.
-The capability ledger records CodeGraph version/hash/index counts, Graphify
-version/hash/code-only node and edge counts, Serena server/bundle/index-seed
+The capability ledger records CodeGraph version/hash/index counts, Serena server/bundle/index-seed
 identity, and the effective Pi tool-schema and source hashes. Its provider-keyed
 visibility matrix states which prompt, response, reasoning, and assembled-request
 surfaces were captured or unavailable.

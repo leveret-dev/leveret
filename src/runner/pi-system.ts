@@ -21,7 +21,7 @@ Tool routing:
 - leveret_diff: bounded exact-base/head change evidence for explicit manifest paths; never request an unscoped whole diff.
 - leveret_scan: deterministic leads, only in phases where the host supplies them.
 - leveret_context: complexity, churn, and recency for prioritization only.
-- codegraph_* and graphify_*: symbol relationships, cross-file paths, impact, and affected tests.
+- codegraph_*: symbol relationships, cross-file paths, impact, and affected tests.
 - lsp_*: definitions, implementations, semantic references, symbols, and diagnostics.
 - leveret_java_references: when available for a changed Java method, select its exact declaration name token on base or head; checked calls and method-reference expressions are distinct. Follow delivery cursors, disclose unresolved/skipped scope, and treat zero checked references only as zero within stated coverage, never proof of safety. A failed or unavailable analysis is not an empty result.
 - leveret_ast_search: syntax-shaped occurrences and repeated structural patterns.

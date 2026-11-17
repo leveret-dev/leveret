@@ -44,22 +44,6 @@ async function codegraph(bin: string, repo: string, args: string[]) {
   return text(result.stdout, { command: args[0] });
 }
 
-async function graphify(bin: string, repo: string, graphPath: string, args: string[]) {
-  const result = await run(bin, [...args, "--graph", graphPath], repo, {
-    timeoutMs: 120_000,
-    env: safeChildEnvironment(),
-    maxBuffer: 8 * 1024 * 1024,
-  });
-  if (result.code !== 0) throw new ToolExecutionError(`${bin} ${args[0]} rc=${result.code}: ${result.stderr.slice(0, 500)}`, result.timedOut);
-  const bytes = Buffer.from(result.stdout);
-  const limit = 128 * 1024;
-  return text(bytes.subarray(0, limit).toString("utf8"), {
-    command: args[0],
-    bytes: bytes.length,
-    truncated: bytes.length > limit,
-  });
-}
-
 async function jailedPath(root: string, requested = "."): Promise<string> {
   if (isAbsolute(requested)) throw new Error("tool paths must be relative to the reviewed checkout");
   const canonicalRoot = await realpath(root);
@@ -142,7 +126,6 @@ export interface PiToolsOptions {
   repo: string;
   graphLive: boolean;
   codegraphBin?: string;
-  graphify?: { bin: string; graphPath: string; indexedNodes?: number; indexedEdges?: number };
   sandboxed: boolean;
   serena?: SerenaBridge;
   inspectJava?: InspectJavaBridge;
@@ -163,7 +146,6 @@ export interface PiToolsBundle {
     graph: boolean;
     lsp: boolean;
     probe: boolean;
-    graphify: boolean;
     java_references:
       | { availability: "unavailable"; reason: string }
       | {
@@ -176,8 +158,6 @@ export interface PiToolsBundle {
         };
     serena_indexed_languages?: string[];
     serena_seed_files?: Record<string, string>;
-    graphify_indexed_nodes?: number;
-    graphify_indexed_edges?: number;
     serena_version?: string;
     serena_bundle_sha256?: string;
     tool_schema_sha256: string;
@@ -452,39 +432,6 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
     );
   }
 
-  if (options.graphify) {
-    const { bin, graphPath } = options.graphify;
-    tools.push(
-      defineTool({
-        name: "graphify_query",
-        label: "Graphify code query",
-        description: "Traverse the prebuilt code-only Graphify graph for a bounded architectural question.",
-        parameters: Type.Object({ question: Type.String(), budget: Type.Optional(Type.Number({ minimum: 100, maximum: 3000 })) }),
-        async execute(_id, params) {
-          return graphify(bin, repo, graphPath, ["query", params.question, "--budget", String(params.budget ?? 1500)]);
-        },
-      }),
-      defineTool({
-        name: "graphify_path",
-        label: "Graphify shortest path",
-        description: "Find the shortest code-graph path between two named nodes.",
-        parameters: Type.Object({ from: Type.String(), to: Type.String() }),
-        async execute(_id, params) {
-          return graphify(bin, repo, graphPath, ["path", params.from, params.to]);
-        },
-      }),
-      defineTool({
-        name: "graphify_explain",
-        label: "Graphify node explanation",
-        description: "Explain one code node and its indexed neighbors.",
-        parameters: Type.Object({ node: Type.String() }),
-        async execute(_id, params) {
-          return graphify(bin, repo, graphPath, ["explain", params.node]);
-        },
-      }),
-    );
-  }
-
   if (options.serena) tools.push(...options.serena.tools);
 
   if (options.sandboxed) {
@@ -546,7 +493,6 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
     capabilities: {
       graph: options.graphLive,
       lsp: Boolean(options.serena?.tools.length),
-      graphify: Boolean(options.graphify),
       probe: options.sandboxed,
       java_references: options.inspectJava
         ? {
@@ -563,8 +509,6 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
         serena_indexed_languages: options.serena.indexing.languages,
         serena_seed_files: options.serena.indexing.seedFiles,
       } : {}),
-      ...(options.graphify?.indexedNodes !== undefined ? { graphify_indexed_nodes: options.graphify.indexedNodes } : {}),
-      ...(options.graphify?.indexedEdges !== undefined ? { graphify_indexed_edges: options.graphify.indexedEdges } : {}),
       ...(options.serenaBundleSha256 ? { serena_bundle_sha256: options.serenaBundleSha256 } : {}),
       tool_schema_sha256: toolSchemaSha256,
       tool_source_sha256: toolSourceSha256,
