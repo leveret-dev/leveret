@@ -7,5 +7,4 @@ build/
 *.class
 
 # The repository-root indexes are canonical; nested indexes are local scratch.
-/graphify-out/
 /.codegraph/

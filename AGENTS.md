@@ -7,11 +7,11 @@ Every review bot (Codex reads this section natively) applies these rules to a pu
 - **Do not review:** `**/*.md` (including `docs/**` and `DESIGN.md`), `.serena/**`,
   benchmark fixtures and results (`bench/results/**`, `bench/work-items/**`, `bench/*.json`),
   `package-lock.json`, `inspect/gradle/wrapper/**`, and generated output (`dist/**`,
-  `**/build/**`, `graphify-out/**`, `.codegraph/**`).
+  `**/build/**`, `.codegraph/**`).
 - **Read docs on demand only:** open `README.md` or `DESIGN.md` only when a changed line
   depends on a documented contract; never comment on documentation outside the diff.
 - **Focus** on `src/**`, `test/**`, `tests/shell/**`, `inspect/**` (Kotlin), `bench/*.mts`,
-  `scripts/**`, and `.githooks/**`:
+  and `scripts/**`:
   - **Correctness:** unhandled edge cases, null/type errors, off-by-one errors, races,
     resource leaks, unhandled promise rejections, and broken control flow.
   - **Security:** the reviewed checkout is hostile input. Flag path traversal, command
